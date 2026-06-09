@@ -78,7 +78,7 @@ app_server.R
 
 ```r
 # Install from GitHub
-remotes::install_github("amelia-m/table_explorer")
+remotes::install_github("amelia-m/table-explorer")
 ```
 
 **Optional packages** (installed on demand for specific formats/databases):
