@@ -45,7 +45,7 @@ mod_erd_ui <- function(id) {
                     min = 80, max = 600, value = 220, step = 20)
       ),
       div(class = "erd-container",
-          visNetworkOutput(ns("erd_plot"), height = "540px")),
+          visNetwork::visNetworkOutput(ns("erd_plot"), height = "540px")),
       div(class = "erd-hint",
           "drag nodes \u00b7 scroll to zoom \u00b7 hover for details \u00b7 click to highlight connections")
     ),
@@ -94,7 +94,7 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
   moduleServer(id, function(input, output, session) {
     selected_node_rv <- reactiveVal(NULL)
 
-    output$erd_plot <- renderVisNetwork({
+    output$erd_plot <- visNetwork::renderVisNetwork({
       tbls <- all_tables_rv()
       req(length(tbls) > 0)
       tryCatch(
@@ -103,15 +103,15 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
           layout_mode <- input$erd_layout %||% "force"
           spring_len  <- input$spring_length %||% 220
 
-          vis <- visNetwork(net$nodes, net$edges, background = "#0f172a") |>
-            visOptions(
+          vis <- visNetwork::visNetwork(net$nodes, net$edges, background = "#0f172a") |>
+            visNetwork::visOptions(
               highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
               nodesIdSelection = FALSE
             ) |>
-            visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
-            visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
-            visInteraction(navigationButtons = TRUE, tooltipDelay = 80, hover = TRUE) |>
-            visEvents(
+            visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
+            visNetwork::visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
+            visNetwork::visInteraction(navigationButtons = TRUE, tooltipDelay = 80, hover = TRUE) |>
+            visNetwork::visEvents(
               click = sprintf(
                 "function(params) {
                   if (params.nodes.length > 0) {
@@ -125,8 +125,8 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
 
           if (layout_mode == "hierarchical") {
             vis <- vis |>
-              visHierarchicalLayout(direction = "UD", sortMethod = "directed") |>
-              visPhysics(enabled = FALSE)
+              visNetwork::visHierarchicalLayout(direction = "UD", sortMethod = "directed") |>
+              visNetwork::visPhysics(enabled = FALSE)
           } else if (layout_mode == "circular") {
             n_nodes <- nrow(net$nodes)
             if (n_nodes > 0) {
@@ -135,16 +135,16 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
               net$nodes$x <- cos(angles) * radius
               net$nodes$y <- sin(angles) * radius
             }
-            vis <- visNetwork(net$nodes, net$edges, background = "#0f172a") |>
-              visOptions(
+            vis <- visNetwork::visNetwork(net$nodes, net$edges, background = "#0f172a") |>
+              visNetwork::visOptions(
                 highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
                 nodesIdSelection = FALSE
               ) |>
-              visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
-              visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
-              visInteraction(navigationButtons = TRUE, tooltipDelay = 80, hover = TRUE) |>
-              visPhysics(enabled = FALSE) |>
-              visEvents(
+              visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
+              visNetwork::visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
+              visNetwork::visInteraction(navigationButtons = TRUE, tooltipDelay = 80, hover = TRUE) |>
+              visNetwork::visPhysics(enabled = FALSE) |>
+              visNetwork::visEvents(
                 click = sprintf(
                   "function(params) {
                     if (params.nodes.length > 0) {
@@ -157,8 +157,8 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
               )
           } else {
             vis <- vis |>
-              visLayout(randomSeed = 42) |>
-              visPhysics(
+              visNetwork::visLayout(randomSeed = 42) |>
+              visNetwork::visPhysics(
                 solver = "forceAtlas2Based",
                 forceAtlas2Based = list(
                   gravitationalConstant = -80,
@@ -173,7 +173,7 @@ mod_erd_server <- function(id, all_tables_rv, all_rels_rv,
         },
         error = function(e) {
           showNotification(paste0("ERD error: ", conditionMessage(e)), type = "error", duration = 10)
-          visNetwork(
+          visNetwork::visNetwork(
             data.frame(id = 1, label = paste("Error:", conditionMessage(e)),
                        color = "#7f1d1d", font.color = "white"),
             data.frame(),

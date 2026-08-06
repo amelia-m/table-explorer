@@ -5,7 +5,7 @@
 #' @noRd
 app_ui <- function(request) {
   fluidPage(
-    theme = shinytheme("flatly"),
+    theme = shinythemes::shinytheme("flatly"),
 
     tags$head(
       # Static CSS

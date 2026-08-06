@@ -95,7 +95,7 @@ mod_table_details_server <- function(id, all_tables_rv, pk_map_rv,
                              style = "padding:4px 10px; font-size:11px;")
             ),
             div(style = "margin-bottom: 12px;", pills),
-            DTOutput(session$ns(paste0("dt_col_", make.names(t))))
+            DT::DTOutput(session$ns(paste0("dt_col_", make.names(t))))
           )
         })
       )
@@ -113,7 +113,7 @@ mod_table_details_server <- function(id, all_tables_rv, pk_map_rv,
         local({
           tname <- t
           output_id <- paste0("dt_col_", make.names(tname))
-          output[[output_id]] <- renderDT(
+          output[[output_id]] <- DT::renderDT(
             {
               df <- tbls[[tname]]
               pk_v <- pks[[tname]]
@@ -139,7 +139,7 @@ mod_table_details_server <- function(id, all_tables_rv, pk_map_rv,
                 stringsAsFactors = FALSE
               )
 
-              datatable(
+              DT::datatable(
                 smry,
                 options = list(
                   pageLength = 10, dom = "tp", scrollX = TRUE,
@@ -147,12 +147,12 @@ mod_table_details_server <- function(id, all_tables_rv, pk_map_rv,
                 ),
                 rownames = FALSE, selection = "none"
               ) |>
-                formatStyle("PK",
-                             color = styleEqual(c("\u2713", "CPK"), c("#fbbf24", "#fbbf24")),
-                             backgroundColor = styleEqual(c("\u2713", "CPK"), c("#1a1000", "#1a1000"))) |>
-                formatStyle("FK",
-                             color = styleEqual("\u2713", "#c084fc"),
-                             backgroundColor = styleEqual("\u2713", "#140a2e"))
+                DT::formatStyle("PK",
+                                color = DT::styleEqual(c("\u2713", "CPK"), c("#fbbf24", "#fbbf24")),
+                                backgroundColor = DT::styleEqual(c("\u2713", "CPK"), c("#1a1000", "#1a1000"))) |>
+                DT::formatStyle("FK",
+                                color = DT::styleEqual("\u2713", "#c084fc"),
+                                backgroundColor = DT::styleEqual("\u2713", "#140a2e"))
             },
             server = FALSE
           )
