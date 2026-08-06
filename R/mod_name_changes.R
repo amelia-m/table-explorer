@@ -49,17 +49,17 @@ mod_name_changes_server <- function(id, rename_log_rv) {
           ". ",
           "Amber = PK-related, purple = FK-related columns."
         ),
-        DTOutput(session$ns("dt_rename_log")),
+        DT::DTOutput(session$ns("dt_rename_log")),
         br(),
         downloadButton(session$ns("dl_rename_log"), "\u2b07  Export CSV", class = "dl-btn")
       )
     })
 
-    output$dt_rename_log <- renderDT(
+    output$dt_rename_log <- DT::renderDT(
       {
         log <- rename_log_rv()
         req(nrow(log) > 0)
-        datatable(
+        DT::datatable(
           log,
           colnames = c("Type", "Table", "Original Name", "Cleaned Name"),
           options  = list(pageLength = 20, dom = "ftp", scrollX = TRUE),
