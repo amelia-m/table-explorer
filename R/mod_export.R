@@ -112,17 +112,17 @@ mod_export_server <- function(id, all_tables_rv, all_rels_rv,
       )
       if (is.null(result)) return()
 
-      if (length(result$tables) > 0) {
-        all_tables_rv(result$tables)
-      }
-      if (length(result$manual_relationships) > 0) {
-        manual_rels_rv(result$manual_relationships)
-      }
-      if (length(result$schema_relationships) > 0) {
-        schema_rels_rv(result$schema_relationships)
-      }
+      all_tables_rv(result$tables %||% list())
+      manual_rels_rv(result$manual_relationships %||% list())
+      schema_rels_rv(result$schema_relationships %||% list())
       showNotification(
-        paste0("Session restored: ", length(result$tables), " table(s)"),
+        paste0(
+          "Session restored: ",
+          length(result$tables %||% list()), " table(s), ",
+          length(result$manual_relationships %||% list()) +
+            length(result$schema_relationships %||% list()),
+          " relationship(s)"
+        ),
         type = "message", duration = 5
       )
     })

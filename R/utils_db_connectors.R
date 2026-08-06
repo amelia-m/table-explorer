@@ -101,10 +101,24 @@ db_connect <- function(type, host = "", port = NULL, dbname = "",
   )
 }
 
+# ── SQL quoting helper ──────────────────────────────────────────
+
+sql_quote_string <- function(conn, value) {
+  as.character(DBI::dbQuoteString(conn, value %||% ""))
+}
+
 # ── Introspect database metadata ──────────────────────────────
 
 db_introspect <- function(conn, type, schema = "public") {
   result <- list(tables = character(0), pks = list(), fks = list())
+  schema_sql <- tryCatch(
+    sql_quote_string(conn, schema),
+    error = function(e) "'public'"
+  )
+  schema_upper_sql <- tryCatch(
+    sql_quote_string(conn, toupper(schema %||% "public")),
+    error = function(e) "'PUBLIC'"
+  )
 
   # Get table list
   result$tables <- tryCatch(
@@ -113,7 +127,7 @@ db_introspect <- function(conn, type, schema = "public") {
         q <- switch(type,
           postgres = , redshift = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", schema, "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ", schema_sql, " AND table_type = 'BASE TABLE'"
           ),
           mysql = paste0(
             "SELECT table_name FROM information_schema.tables ",
@@ -121,11 +135,11 @@ db_introspect <- function(conn, type, schema = "public") {
           ),
           sqlserver = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", schema, "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ", schema_sql, " AND table_type = 'BASE TABLE'"
           ),
           snowflake = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", toupper(schema), "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ", schema_upper_sql, " AND table_type = 'BASE TABLE'"
           )
         )
         res <- DBI::dbGetQuery(conn, q)
@@ -151,7 +165,7 @@ db_introspect <- function(conn, type, schema = "public") {
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '", schema, "'"
+            "AND tc.table_schema = ", schema_sql
           ),
           mysql = paste0(
             "SELECT tc.table_name, kcu.column_name ",
@@ -169,7 +183,7 @@ db_introspect <- function(conn, type, schema = "public") {
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '", schema, "'"
+            "AND tc.table_schema = ", schema_sql
           )
         )
         pk_df <- DBI::dbGetQuery(conn, q)
@@ -203,7 +217,7 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.constraint_column_usage ccu ",
             "  ON rc.unique_constraint_name = ccu.constraint_name ",
             "  AND rc.unique_constraint_schema = ccu.constraint_schema ",
-            "WHERE rc.constraint_schema = '", schema, "'"
+            "WHERE rc.constraint_schema = ", schema_sql
           ),
           mysql = paste0(
             "SELECT ",
@@ -261,17 +275,20 @@ db_introspect <- function(conn, type, schema = "public") {
 # ── Load a single table from the database ─────────────────────
 
 db_load_table <- function(conn, table_name, schema = "", limit = 10000) {
-  q <- if (nzchar(schema)) {
-    paste0("SELECT * FROM \"", schema, "\".\"", table_name, "\" LIMIT ", limit)
+  limit <- suppressWarnings(as.integer(limit))
+  if (is.na(limit) || limit < 1L) limit <- 10000L
+  tbl_ref <- if (nzchar(schema)) {
+    DBI::Id(schema = schema, table = table_name)
   } else {
-    paste0("SELECT * FROM \"", table_name, "\" LIMIT ", limit)
+    DBI::Id(table = table_name)
   }
+  q <- paste0("SELECT * FROM ", as.character(DBI::dbQuoteIdentifier(conn, tbl_ref)), " LIMIT ", limit)
   tryCatch(
     DBI::dbGetQuery(conn, q),
     error = function(e) {
-      # Fallback: try without schema quoting (for MySQL, SQLite, etc.)
+      # Fallback: try dbReadTable for drivers with restrictive SQL dialects.
       tryCatch(
-        DBI::dbGetQuery(conn, paste0("SELECT * FROM `", table_name, "` LIMIT ", limit)),
+        utils::head(DBI::dbReadTable(conn, tbl_ref), limit),
         error = function(e2) NULL
       )
     }

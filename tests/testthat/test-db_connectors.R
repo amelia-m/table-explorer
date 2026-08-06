@@ -129,6 +129,42 @@ test_that("db_load_table respects limit parameter", {
   db_close(conn)
 })
 
+test_that("db_load_table handles quoted table identifiers", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(
+    conn,
+    DBI::Id(table = "weird table-name"),
+    data.frame(id = 1:3, value = letters[1:3])
+  )
+
+  df <- db_load_table(conn, "weird table-name")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), 3)
+
+  db_close(conn)
+})
+
+test_that("db_load_table sanitizes invalid limits", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:8))
+
+  df <- db_load_table(conn, "items", limit = 0)
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), 8)
+
+  db_close(conn)
+})
+
 # ── db_close ─────────────────────────────────────────────────
 
 test_that("db_close handles NULL connection", {

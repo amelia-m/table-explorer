@@ -85,7 +85,13 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
       type <- input$db_type
 
       port_val <- NULL
-      if (nzchar(input$db_port %||% "")) port_val <- as.integer(input$db_port)
+      if (nzchar(input$db_port %||% "")) {
+        port_val <- suppressWarnings(as.integer(input$db_port))
+        if (is.na(port_val) || port_val < 1L) {
+          showNotification("Port must be a positive integer.", type = "error", duration = 6)
+          return()
+        }
+      }
 
       path_val <- ""
       if (type == "sqlite" && !is.null(input$db_sqlite_file))

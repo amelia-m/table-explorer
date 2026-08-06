@@ -385,15 +385,16 @@ mod_upload_server <- function(id, all_tables_rv, rename_log_rv,
         }
       }
 
-      if (length(result$relationships) > 0) {
-        clean_rels <- lapply(result$relationships, function(r) {
-          r$from_table <- janitor::make_clean_names(r$from_table)
-          r$to_table <- janitor::make_clean_names(r$to_table)
-          r
-        })
-        schema_rels_rv(clean_rels)
+      clean_rels <- lapply(result$relationships %||% list(), function(r) {
+        r$from_table <- janitor::make_clean_names(r$from_table)
+        r$to_table <- janitor::make_clean_names(r$to_table)
+        r
+      })
+      schema_rels_rv(clean_rels)
+
+      if (length(clean_rels) > 0) {
         showNotification(
-          paste0("Schema imported: ", length(result$relationships),
+          paste0("Schema imported: ", length(clean_rels),
                  " relationship(s), ", length(result$tables), " table(s)"),
           type = "message", duration = 5
         )
