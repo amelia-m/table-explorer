@@ -8,54 +8,57 @@
 
 # ── Confidence thresholds ────────────────────────────────────
 
-overlap_high   <- 0.98
+overlap_high <- 0.98
 overlap_medium <- 0.80
-name_sim_high  <- 0.85
-name_sim_med   <- 0.72
-dist_sim_high  <- 0.90
-dist_sim_med   <- 0.75
+name_sim_high <- 0.85
+name_sim_med <- 0.72
+dist_sim_high <- 0.90
+dist_sim_med <- 0.75
 
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
 weight_map <- c(
-  naming_exact     = 1.00,
+  naming_exact = 1.00,
   cardinality_match = 0.95,
-  overlap_high     = 0.90,
-  name_sim         = 0.60,
-  overlap_medium   = 0.55,
-  dist_high        = 0.50,
-  format_match     = 0.40,
-  dist_med         = 0.30,
-  name_sim_weak    = 0.25,
-  null_corr        = 0.20
+  overlap_high = 0.90,
+  name_sim = 0.60,
+  overlap_medium = 0.55,
+  dist_high = 0.50,
+  format_match = 0.40,
+  dist_med = 0.30,
+  name_sim_weak = 0.25,
+  null_corr = 0.20
 )
 
 # ── Signal -> human-readable label map ───────────────────────
 
 label_map <- c(
-  naming_exact     = "naming",
-  name_sim         = "name_similarity",
-  name_sim_weak    = "name_similarity",
-  overlap_high     = "value_overlap",
-  overlap_medium   = "value_overlap",
+  naming_exact = "naming",
+  name_sim = "name_similarity",
+  name_sim_weak = "name_similarity",
+  overlap_high = "value_overlap",
+  overlap_medium = "value_overlap",
   cardinality_match = "cardinality",
-  format_match     = "format",
-  dist_high        = "distribution",
-  dist_med         = "distribution",
-  null_corr        = "null_pattern"
+  format_match = "format",
+  dist_high = "distribution",
+  dist_med = "distribution",
+  null_corr = "null_pattern"
 )
 
 # ── Format fingerprint patterns ──────────────────────────────
 
 format_patterns <- list(
-  list(name = "uuid",       pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
-  list(name = "email",      pattern = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"),
-  list(name = "iso_ts",     pattern = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}"),
-  list(name = "iso_date",   pattern = "^\\d{4}-\\d{2}-\\d{2}$"),
-  list(name = "zip_us",     pattern = "^\\d{5}(-\\d{4})?$"),
-  list(name = "phone",      pattern = "^\\+?[\\d\\s\\-().]{7,15}$"),
-  list(name = "hex_color",  pattern = "^#[0-9a-fA-F]{3,6}$"),
-  list(name = "int_code",   pattern = "^\\d{1,6}$"),
+  list(
+    name = "uuid",
+    pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+  ),
+  list(name = "email", pattern = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"),
+  list(name = "iso_ts", pattern = "^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}"),
+  list(name = "iso_date", pattern = "^\\d{4}-\\d{2}-\\d{2}$"),
+  list(name = "zip_us", pattern = "^\\d{5}(-\\d{4})?$"),
+  list(name = "phone", pattern = "^\\+?[\\d\\s\\-().]{7,15}$"),
+  list(name = "hex_color", pattern = "^#[0-9a-fA-F]{3,6}$"),
+  list(name = "int_code", pattern = "^\\d{1,6}$"),
   list(name = "alpha_code", pattern = "^[A-Z]{2,4}$")
 )
 
@@ -79,8 +82,12 @@ is_fk_for <- function(col_clean, t2clean) {
 # ── Type classification ──────────────────────────────────────
 
 col_dtype_class <- function(x) {
-  if (is.numeric(x)) return("numeric")
-  if (inherits(x, c("Date", "POSIXt", "POSIXct", "POSIXlt"))) return("datetime")
+  if (is.numeric(x)) {
+    return("numeric")
+  }
+  if (inherits(x, c("Date", "POSIXt", "POSIXct", "POSIXlt"))) {
+    return("datetime")
+  }
   "string"
 }
 
@@ -97,7 +104,9 @@ jaro_winkler_sim <- function(s1, s2) {
 
 format_fingerprint <- function(col, sample_size = 200) {
   vals <- na.omit(col)
-  if (length(vals) == 0) return(NULL)
+  if (length(vals) == 0) {
+    return(NULL)
+  }
   vals <- as.character(vals)
   if (length(vals) > sample_size) {
     set.seed(42)
@@ -124,12 +133,18 @@ value_overlap <- function(v1, v2, sample_cap = 5000) {
   }
   if (length(s2) > sample_cap * 2) {
     s2_set <- new.env(parent = emptyenv())
-    for (v in s2[seq_len(min(length(s2), sample_cap * 2))]) assign(v, TRUE, envir = s2_set)
-    if (length(s1) == 0) return(0.0)
+    for (v in s2[seq_len(min(length(s2), sample_cap * 2))]) {
+      assign(v, TRUE, envir = s2_set)
+    }
+    if (length(s1) == 0) {
+      return(0.0)
+    }
     hits <- sum(vapply(s1, function(v) exists(v, envir = s2_set), logical(1)))
     return(hits / length(s1))
   }
-  if (length(s1) == 0) return(0.0)
+  if (length(s1) == 0) {
+    return(0.0)
+  }
   length(intersect(s1, s2)) / length(s1)
 }
 
@@ -139,16 +154,26 @@ distribution_similarity <- function(v1, v2, sample_cap = 5000) {
   c1 <- as.character(na.omit(v1))
   c2 <- as.character(na.omit(v2))
   # Sample down for large columns
-  if (length(c1) > sample_cap) { set.seed(42); c1 <- c1[sample(length(c1), sample_cap)] }
-  if (length(c2) > sample_cap) { set.seed(43); c2 <- c2[sample(length(c2), sample_cap)] }
+  if (length(c1) > sample_cap) {
+    set.seed(42)
+    c1 <- c1[sample(length(c1), sample_cap)]
+  }
+  if (length(c2) > sample_cap) {
+    set.seed(43)
+    c2 <- c2[sample(length(c2), sample_cap)]
+  }
 
   t1 <- table(c1)
   t2 <- table(c2)
-  if (length(t1) == 0 || length(t2) == 0) return(0.0)
+  if (length(t1) == 0 || length(t2) == 0) {
+    return(0.0)
+  }
 
   # Use only shared vocabulary for cosine — much cheaper than full union
   shared <- intersect(names(t1), names(t2))
-  if (length(shared) == 0) return(0.0)
+  if (length(shared) == 0) {
+    return(0.0)
+  }
 
   a <- as.numeric(t1[shared])
   b <- as.numeric(t2[shared])
@@ -156,17 +181,23 @@ distribution_similarity <- function(v1, v2, sample_cap = 5000) {
   dot <- sum(a * b)
   norm_a <- sqrt(sum(as.numeric(t1)^2))
   norm_b <- sqrt(sum(as.numeric(t2)^2))
-  if (norm_a == 0 || norm_b == 0) return(0.0)
+  if (norm_a == 0 || norm_b == 0) {
+    return(0.0)
+  }
   dot / (norm_a * norm_b)
 }
 
 # ── Null pattern correlation ─────────────────────────────────
 
 null_pattern_correlation <- function(df1, col1, df2, col2) {
-  if (nrow(df1) != nrow(df2)) return(0.0)
+  if (nrow(df1) != nrow(df2)) {
+    return(0.0)
+  }
   mask1 <- as.numeric(is.na(df1[[col1]]))
   mask2 <- as.numeric(is.na(df2[[col2]]))
-  if (sd(mask1) == 0 || sd(mask2) == 0) return(0.0)
+  if (sd(mask1) == 0 || sd(mask2) == 0) {
+    return(0.0)
+  }
   tryCatch(
     cor(mask1, mask2),
     error = function(e) 0.0
@@ -237,7 +268,9 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
   # 2. Type compatibility guard
   dtype1 <- col_dtype_class(df1[[col1]])
   dtype2 <- col_dtype_class(df2[[col2]])
-  if (dtype1 != dtype2) return(NULL)
+  if (dtype1 != dtype2) {
+    return(NULL)
+  }
 
   n1 <- nrow(df1)
   n2 <- nrow(df2)
@@ -282,7 +315,10 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
       reasons <- c(reasons, sprintf("distribution similarity %.2f", dist_sim))
     } else if (dist_sim >= dist_sim_med) {
       signals[["dist_med"]] <- dist_sim
-      reasons <- c(reasons, sprintf("weak distribution similarity %.2f", dist_sim))
+      reasons <- c(
+        reasons,
+        sprintf("weak distribution similarity %.2f", dist_sim)
+      )
     }
   }
 
@@ -295,7 +331,9 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
     }
   }
 
-  if (length(signals) == 0) return(NULL)
+  if (length(signals) == 0) {
+    return(NULL)
+  }
 
   # Composite confidence score (noisy-OR)
   weights <- vapply(
@@ -308,16 +346,26 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
 
   # Primary detected_by label (highest-weight signal)
   top_signal <- names(signals)[which.max(weights)]
-  detected_by <- if (top_signal %in% names(label_map)) label_map[[top_signal]] else "content"
+  detected_by <- if (top_signal %in% names(label_map)) {
+    label_map[[top_signal]]
+  } else {
+    "content"
+  }
 
   # Confidence tier
-  confidence <- if (score >= 0.85) "high" else if (score >= 0.55) "medium" else "low"
+  confidence <- if (score >= 0.85) {
+    "high"
+  } else if (score >= 0.55) {
+    "medium"
+  } else {
+    "low"
+  }
 
   list(
-    signals     = signals,
-    reasons     = reasons,
-    score       = score,
-    confidence  = confidence,
+    signals = signals,
+    reasons = reasons,
+    score = score,
+    confidence = confidence,
     detected_by = detected_by
   )
 }
@@ -338,7 +386,13 @@ estimate_scan_complexity <- function(tables) {
 
   # Cost per pair: ~1ms for naming-only, ~5ms for content signals on small data,
   # ~20ms if rows are large
-  cost_per_pair_ms <- if (max_rows > 5000) 20 else if (max_rows > 500) 5 else 1
+  cost_per_pair_ms <- if (max_rows > 5000) {
+    20
+  } else if (max_rows > 500) {
+    5
+  } else {
+    1
+  }
   est_time_sec <- (est_pairs * cost_per_pair_ms) / 1000
 
   tier <- if (est_pairs < 2000 || est_time_sec < 5) {
@@ -350,13 +404,13 @@ estimate_scan_complexity <- function(tables) {
   }
 
   list(
-    n_tables    = n_tables,
-    total_cols  = total_cols,
-    total_rows  = total_rows,
-    max_rows    = max_rows,
-    est_pairs   = round(est_pairs),
+    n_tables = n_tables,
+    total_cols = total_cols,
+    total_rows = total_rows,
+    max_rows = max_rows,
+    est_pairs = round(est_pairs),
     est_time_sec = round(est_time_sec, 1),
-    tier        = tier
+    tier = tier
   )
 }
 
@@ -367,14 +421,20 @@ estimate_scan_complexity <- function(tables) {
 is_fk_candidate <- function(col, col_name) {
   # Fast heuristic checks — reject columns that almost never form relationships
   n <- length(col)
-  if (n == 0) return(FALSE)
+  if (n == 0) {
+    return(FALSE)
+  }
 
   # Boolean / low-cardinality columns are not FKs
   n_unique <- length(unique(na.omit(col)))
-  if (n_unique <= 2 && n > 10) return(FALSE)
+  if (n_unique <= 2 && n > 10) {
+    return(FALSE)
+  }
 
   # All-NA columns
-  if (n_unique == 0) return(FALSE)
+  if (n_unique == 0) {
+    return(FALSE)
+  }
 
   # Very high cardinality text (long free-text, descriptions, notes)
   if (is.character(col)) {
@@ -393,31 +453,50 @@ is_fk_candidate <- function(col, col_name) {
 # group whose combined values are unique across all rows.
 # Only runs when no single-column PK is found via detect_pks().
 
-detect_composite_pks <- function(df, table_name,
-                                 max_combo_size  = 3L,
-                                 max_candidates  = 20L) {
+detect_composite_pks <- function(
+  df,
+  table_name,
+  max_combo_size = 3L,
+  max_candidates = 20L
+) {
   n <- nrow(df)
-  if (n < 2L) return(list())
+  if (n < 2L) {
+    return(list())
+  }
 
   # Skip if a single-column PK already exists
-  if (length(detect_pks(df, table_name, method = "both")) > 0L) return(list())
+  if (length(detect_pks(df, table_name, method = "both")) > 0L) {
+    return(list())
+  }
 
   cols <- names(df)
 
   # Collect candidate columns: skip logicals, all-NA, and long free-text
-  candidates <- cols[vapply(cols, function(col) {
-    v <- df[[col]]
-    if (is.logical(v)) return(FALSE)
-    v_clean <- na.omit(v)
-    if (length(v_clean) == 0L) return(FALSE)
-    if (is.character(v) &&
-        median(nchar(head(as.character(v_clean), 50L))) > 80) {
-      return(FALSE)
-    }
-    TRUE
-  }, logical(1L))]
+  candidates <- cols[vapply(
+    cols,
+    function(col) {
+      v <- df[[col]]
+      if (is.logical(v)) {
+        return(FALSE)
+      }
+      v_clean <- na.omit(v)
+      if (length(v_clean) == 0L) {
+        return(FALSE)
+      }
+      if (
+        is.character(v) &&
+          median(nchar(head(as.character(v_clean), 50L))) > 80
+      ) {
+        return(FALSE)
+      }
+      TRUE
+    },
+    logical(1L)
+  )]
 
-  if (length(candidates) < 2L) return(list())
+  if (length(candidates) < 2L) {
+    return(list())
+  }
 
   # Sort: id-like columns first for faster discovery
   id_like <- grepl(
@@ -433,7 +512,9 @@ detect_composite_pks <- function(df, table_name,
     for (j in seq.int(i + 1L, n_cand)) {
       c1 <- candidates[[i]]
       c2 <- candidates[[j]]
-      if (anyNA(df[[c1]]) || anyNA(df[[c2]])) next
+      if (anyNA(df[[c1]]) || anyNA(df[[c2]])) {
+        next
+      }
       if (length(unique(paste(df[[c1]], df[[c2]], sep = "\x01"))) == n) {
         return(list(c(c1, c2)))
       }
@@ -448,10 +529,15 @@ detect_composite_pks <- function(df, table_name,
           c1 <- candidates[[i]]
           c2 <- candidates[[j]]
           c3 <- candidates[[k]]
-          if (anyNA(df[[c1]]) || anyNA(df[[c2]]) || anyNA(df[[c3]])) next
-          if (length(unique(
-            paste(df[[c1]], df[[c2]], df[[c3]], sep = "\x01")
-          )) == n) {
+          if (anyNA(df[[c1]]) || anyNA(df[[c2]]) || anyNA(df[[c3]])) {
+            next
+          }
+          if (
+            length(unique(
+              paste(df[[c1]], df[[c2]], df[[c3]], sep = "\x01")
+            )) ==
+              n
+          ) {
             return(list(c(c1, c2, c3)))
           }
         }
@@ -464,22 +550,28 @@ detect_composite_pks <- function(df, table_name,
 
 # ── Foreign key detection (multi-signal) ─────────────────────
 
-detect_fks <- function(tables, method = "both", min_confidence = "medium",
-                       enable_flags = NULL) {
-  if (method == "manual" || length(tables) < 2) return(list())
+detect_fks <- function(
+  tables,
+  method = "both",
+  min_confidence = "medium",
+  enable_flags = NULL
+) {
+  if (method == "manual" || length(tables) < 2) {
+    return(list())
+  }
 
   conf_rank <- c(low = 0L, medium = 1L, high = 2L)
   min_rank <- conf_rank[[min_confidence]]
 
   # Build enable_flags from method if not provided
   if (is.null(enable_flags)) {
-    use_naming  <- method %in% c("naming", "both", "all")
+    use_naming <- method %in% c("naming", "both", "all")
     use_content <- method %in% c("content", "both", "all", "uniqueness")
     enable_flags <- list(
-      naming       = use_naming,
+      naming = use_naming,
       value_overlap = use_content,
-      cardinality  = use_content,
-      format       = use_content,
+      cardinality = use_content,
+      format = use_content,
       distribution = use_content,
       null_pattern = use_content
     )
@@ -491,13 +583,23 @@ detect_fks <- function(tables, method = "both", min_confidence = "medium",
   pk_map <- lapply(tnames, function(t) {
     df <- tables[[t]]
     n <- nrow(df)
-    if (n == 0) return(character(0))
+    if (n == 0) {
+      return(character(0))
+    }
     pks <- character(0)
     for (c in names(df)) {
       v <- df[[c]]
       # Quick reject: skip long-text, logical, Date columns as PK candidates
-      if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) next
-      if (is.character(v) && length(v) > 0 && median(nchar(head(na.omit(v), 20))) > 60) next
+      if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
+        next
+      }
+      if (
+        is.character(v) &&
+          length(v) > 0 &&
+          median(nchar(head(na.omit(v), 20))) > 60
+      ) {
+        next
+      }
       if (!anyNA(v) && length(unique(v)) == n) {
         pks <- c(pks, c)
       }
@@ -528,7 +630,7 @@ detect_fks <- function(tables, method = "both", min_confidence = "medium",
   }
 
   results <- list()
-  seen <- new.env(parent = emptyenv())  # O(1) lookup vs character vector
+  seen <- new.env(parent = emptyenv()) # O(1) lookup vs character vector
   best_scores <- new.env(parent = emptyenv())
 
   # Cap total pair evaluations to prevent runaway on huge schemas
@@ -537,39 +639,61 @@ detect_fks <- function(tables, method = "both", min_confidence = "medium",
 
   for (t1 in tnames) {
     df1 <- tables[[t1]]
-    if (nrow(df1) == 0 && !isTRUE(enable_flags[["naming"]])) next
+    if (nrow(df1) == 0 && !isTRUE(enable_flags[["naming"]])) {
+      next
+    }
 
     source_cols <- fk_candidates[[t1]]
 
     for (col1 in source_cols) {
       for (t2 in tnames) {
-        if (t2 == t1) next
+        if (t2 == t1) {
+          next
+        }
 
         rel_key <- paste(t1, col1, t2, sep = "|")
-        if (exists(rel_key, envir = seen)) next
+        if (exists(rel_key, envir = seen)) {
+          next
+        }
 
         df2 <- tables[[t2]]
-        target_cols <- if (length(pk_map[[t2]]) > 0) pk_map[[t2]] else fk_candidates[[t2]]
-        if (length(target_cols) == 0) next
+        target_cols <- if (length(pk_map[[t2]]) > 0) {
+          pk_map[[t2]]
+        } else {
+          fk_candidates[[t2]]
+        }
+        if (length(target_cols) == 0) {
+          next
+        }
 
         best_result <- NULL
         best_to_col <- NULL
 
         for (col2 in target_cols) {
           pair_count <- pair_count + 1L
-          if (pair_count > max_pairs) break
+          if (pair_count > max_pairs) {
+            break
+          }
 
           result <- score_candidate(t1, col1, df1, t2, col2, df2, enable_flags)
-          if (is.null(result)) next
+          if (is.null(result)) {
+            next
+          }
           if (is.null(best_result) || result$score > best_result$score) {
             best_result <- result
             best_to_col <- col2
           }
         }
 
-        if (pair_count > max_pairs) break
-        if (is.null(best_result)) next
-        if (conf_rank[[best_result$confidence]] < min_rank) next
+        if (pair_count > max_pairs) {
+          break
+        }
+        if (is.null(best_result)) {
+          next
+        }
+        if (conf_rank[[best_result$confidence]] < min_rank) {
+          next
+        }
 
         # Deduplicate: keep best target per source column
         col_key <- paste(t1, col1, sep = "|")
@@ -578,20 +702,22 @@ detect_fks <- function(tables, method = "both", min_confidence = "medium",
         } else {
           NULL
         }
-        if (!is.null(prev_score) && prev_score > best_result$score + 0.05) next
+        if (!is.null(prev_score) && prev_score > best_result$score + 0.05) {
+          next
+        }
         assign(col_key, best_result$score, envir = best_scores)
 
         assign(rel_key, TRUE, envir = seen)
         results[[length(results) + 1]] <- list(
-          from_table  = t1,
-          from_col    = col1,
-          to_table    = t2,
-          to_col      = best_to_col,
+          from_table = t1,
+          from_col = col1,
+          to_table = t2,
+          to_col = best_to_col,
           detected_by = best_result$detected_by,
-          confidence  = best_result$confidence,
-          score       = best_result$score,
-          reasons     = best_result$reasons,
-          signals     = best_result$signals
+          confidence = best_result$confidence,
+          score = best_result$score,
+          reasons = best_result$reasons,
+          signals = best_result$signals
         )
       }
       if (pair_count > max_pairs) break

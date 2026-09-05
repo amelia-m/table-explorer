@@ -15,7 +15,11 @@ generate_dbt_yaml <- function(tables, rels, pks, composite_pks = NULL) {
     lines <- c(lines, "    columns:")
 
     pk_cols <- pks[[tname]]
-    cpk_groups <- if (!is.null(composite_pks)) composite_pks[[tname]] else list()
+    cpk_groups <- if (!is.null(composite_pks)) {
+      composite_pks[[tname]]
+    } else {
+      list()
+    }
     cpk_cols <- unique(unlist(cpk_groups))
     t_rels <- Filter(function(r) r$from_table == tname, rels)
     fk_map <- setNames(
@@ -35,11 +39,17 @@ generate_dbt_yaml <- function(tables, rels, pks, composite_pks = NULL) {
       if (col %in% names(fk_map)) {
         r <- fk_map[[col]]
         to_col <- if (!is.null(r$to_col) && !is.na(r$to_col)) r$to_col else col
-        tests <- c(tests, paste0(
-          "          - relationships:\n",
-          "              to: ref('", r$to_table, "')\n",
-          "              field: ", to_col
-        ))
+        tests <- c(
+          tests,
+          paste0(
+            "          - relationships:\n",
+            "              to: ref('",
+            r$to_table,
+            "')\n",
+            "              field: ",
+            to_col
+          )
+        )
       }
       if (length(tests) > 0) {
         lines <- c(lines, "        tests:", tests)
@@ -50,7 +60,11 @@ generate_dbt_yaml <- function(tables, rels, pks, composite_pks = NULL) {
     if (length(cpk_groups) > 0) {
       lines <- c(lines, "    tests:")
       for (g in cpk_groups) {
-        col_entries <- vapply(g, function(col) paste0("          - ", col), character(1L))
+        col_entries <- vapply(
+          g,
+          function(col) paste0("          - ", col),
+          character(1L)
+        )
         lines <- c(
           lines,
           "      - dbt_utils.unique_combination_of_columns:",
@@ -73,7 +87,9 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
   for (tname in names(tables)) {
     df <- tables[[tname]]
     pk_cols <- pks[[tname]]
-    cpk_cols <- unique(unlist(if (!is.null(composite_pks)) composite_pks[[tname]] else list()))
+    cpk_cols <- unique(unlist(
+      if (!is.null(composite_pks)) composite_pks[[tname]] else list()
+    ))
     lines <- c(lines, paste0("    ", tname, " {"))
     for (col in names(df)) {
       dtype <- if (is.numeric(df[[col]])) {
@@ -83,7 +99,13 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
       } else {
         "string"
       }
-      pk_marker <- if (col %in% pk_cols) " PK" else if (col %in% cpk_cols) " PK" else ""
+      pk_marker <- if (col %in% pk_cols) {
+        " PK"
+      } else if (col %in% cpk_cols) {
+        " PK"
+      } else {
+        ""
+      }
       lines <- c(lines, paste0("        ", dtype, " ", col, pk_marker))
     }
     lines <- c(lines, "    }")
@@ -92,9 +114,18 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
   # Relationships
   for (r in rels) {
     label <- r$from_col
-    lines <- c(lines, paste0(
-      "    ", r$to_table, " ||--o{ ", r$from_table, " : \"", label, "\""
-    ))
+    lines <- c(
+      lines,
+      paste0(
+        "    ",
+        r$to_table,
+        " ||--o{ ",
+        r$from_table,
+        " : \"",
+        label,
+        "\""
+      )
+    )
   }
 
   paste(lines, collapse = "\n")
@@ -102,8 +133,13 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
 
 # ── Session save/restore ──────────────────────────────────────
 
-save_session_json <- function(tables, rels, manual_rels, schema_rels,
-                              settings = list()) {
+save_session_json <- function(
+  tables,
+  rels,
+  manual_rels,
+  schema_rels,
+  settings = list()
+) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
   }
@@ -111,8 +147,11 @@ save_session_json <- function(tables, rels, manual_rels, schema_rels,
   # Convert data frames to serializable format
   tables_ser <- lapply(tables, function(df) {
     lapply(df, function(col) {
-      if (inherits(col, c("Date", "POSIXt"))) as.character(col)
-      else col
+      if (inherits(col, c("Date", "POSIXt"))) {
+        as.character(col)
+      } else {
+        col
+      }
     })
   })
 
@@ -131,9 +170,13 @@ save_session_json <- function(tables, rels, manual_rels, schema_rels,
 
 restore_session_json <- function(json_text) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    return(list(tables = list(), relationships = list(),
-                manual_relationships = list(), schema_relationships = list(),
-                settings = list()))
+    return(list(
+      tables = list(),
+      relationships = list(),
+      manual_relationships = list(),
+      schema_relationships = list(),
+      settings = list()
+    ))
   }
 
   session <- jsonlite::fromJSON(json_text, simplifyVector = FALSE)

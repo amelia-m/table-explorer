@@ -322,7 +322,7 @@ access_jar_dir <- function() {
   if (dir.exists(app_jars) || dir.create(app_jars, showWarnings = FALSE)) {
     return(app_jars)
   }
-  tools::R_user_dir("table_explorer_access_jars", "cache")
+  tools::R_user_dir("table-explorer-access-jars", "cache")
 }
 
 ucanaccess_jars <- list(
@@ -381,7 +381,7 @@ read_access_db <- function(path, notify_fn = message) {
   if (requireNamespace("RJDBC", quietly = TRUE)) {
     jar_dir <- tryCatch(
       file.path(dirname(normalizePath(path, mustWork = FALSE)), "access_jars"),
-      error = function(e) tools::R_user_dir("table_explorer", "cache")
+      error = function(e) tools::R_user_dir("table-explorer", "cache")
     )
     jars_ok <- tryCatch(
       ensure_ucanaccess_jars(jar_dir, notify_fn),

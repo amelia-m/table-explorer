@@ -29,7 +29,11 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
       function(t) {
         df <- tables[[t]]
         pks <- pk_map[[t]]
-        cpk_groups <- if (!is.null(composite_pk_map)) composite_pk_map[[t]] else list()
+        cpk_groups <- if (!is.null(composite_pk_map)) {
+          composite_pk_map[[t]]
+        } else {
+          list()
+        }
         cpk_cols <- unique(unlist(cpk_groups))
         fkr <- Filter(function(r) r$from_table == t, rels)
         fk_s <- if (length(fkr) > 0) {
@@ -48,7 +52,11 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
           paste(pks, collapse = ", ")
         } else if (length(cpk_groups) > 0) {
           paste(
-            vapply(cpk_groups, function(g) paste0("(", paste(g, collapse = " + "), ")"), character(1)),
+            vapply(
+              cpk_groups,
+              function(g) paste0("(", paste(g, collapse = " + "), ")"),
+              character(1)
+            ),
             collapse = " | "
           )
         } else {
@@ -57,7 +65,11 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
         col_names <- names(df)
         show_cols <- if (length(col_names) > 12) col_names[1:12] else col_names
         overflow <- if (length(col_names) > 12) {
-          paste0("<span style='color:#64748b;font-size:9px;'> +", length(col_names) - 12, " more</span>")
+          paste0(
+            "<span style='color:#64748b;font-size:9px;'> +",
+            length(col_names) - 12,
+            " more</span>"
+          )
         } else {
           ""
         }
@@ -146,16 +158,16 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   )
 
   edge_method_color <- c(
-    naming          = "#4ADE80",
+    naming = "#4ADE80",
     name_similarity = "#2DD4BF",
-    value_overlap   = "#FB923C",
-    cardinality     = "#FACC15",
-    format          = "#60A5FA",
-    distribution    = "#A78BFA",
-    null_pattern    = "#F0ABFC",
-    content         = "#FB923C",
-    manual          = "#F87171",
-    schema          = "#67E8F9"
+    value_overlap = "#FB923C",
+    cardinality = "#FACC15",
+    format = "#60A5FA",
+    distribution = "#A78BFA",
+    null_pattern = "#F0ABFC",
+    content = "#FB923C",
+    manual = "#F87171",
+    schema = "#67E8F9"
   )
 
   if (length(rels) == 0) {
@@ -173,19 +185,39 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
       lapply(rels, function(r) {
         to_col <- if (!is.na(r$to_col) && !is.null(r$to_col)) r$to_col else "?"
         ecol <- edge_method_color[r$detected_by]
-        if (is.na(ecol)) ecol <- "#FB923C"
+        if (is.na(ecol)) {
+          ecol <- "#FB923C"
+        }
 
         conf <- if (!is.null(r$confidence)) r$confidence else "medium"
         score_val <- if (!is.null(r$score)) r$score else NA
-        conf_opacity <- switch(conf, high = 0.95, medium = 0.60, low = 0.28, 0.60)
+        conf_opacity <- switch(
+          conf,
+          high = 0.95,
+          medium = 0.60,
+          low = 0.28,
+          0.60
+        )
         conf_width <- switch(conf, high = 2.5, medium = 1.5, low = 0.8, 1.5)
 
         conf_html <- ""
         if (!is.na(score_val)) {
-          conf_color <- switch(conf, high = "#4ade80", medium = "#facc15", low = "#f87171", "#94a3b8")
+          conf_color <- switch(
+            conf,
+            high = "#4ade80",
+            medium = "#facc15",
+            low = "#f87171",
+            "#94a3b8"
+          )
           conf_html <- paste0(
-            "<br><span style='color:", conf_color, ";font-size:10px;'>",
-            "&#9679; ", conf, " (", round(score_val * 100), "%)</span>"
+            "<br><span style='color:",
+            conf_color,
+            ";font-size:10px;'>",
+            "&#9679; ",
+            conf,
+            " (",
+            round(score_val * 100),
+            "%)</span>"
           )
         }
 
@@ -210,12 +242,22 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
             "border-radius:6px;line-height:1.8;",
             "box-shadow:0 4px 16px rgba(0,0,0,0.6);",
             "'>",
-            "<span style='color:#94a3b8;'>", r$from_table, ".</span>",
-            "<span style='color:#fbbf24;font-weight:700;'>", r$from_col, "</span>",
+            "<span style='color:#94a3b8;'>",
+            r$from_table,
+            ".</span>",
+            "<span style='color:#fbbf24;font-weight:700;'>",
+            r$from_col,
+            "</span>",
             "<span style='color:#475569;'> &#8594; </span>",
-            "<span style='color:#94a3b8;'>", r$to_table, ".</span>",
-            "<span style='color:#fbbf24;font-weight:700;'>", to_col, "</span><br>",
-            "<span style='color:", ecol, ";font-size:10px;letter-spacing:0.5px;'>&#9632; ",
+            "<span style='color:#94a3b8;'>",
+            r$to_table,
+            ".</span>",
+            "<span style='color:#fbbf24;font-weight:700;'>",
+            to_col,
+            "</span><br>",
+            "<span style='color:",
+            ecol,
+            ";font-size:10px;letter-spacing:0.5px;'>&#9632; ",
             toupper(r$detected_by),
             "</span>",
             conf_html,

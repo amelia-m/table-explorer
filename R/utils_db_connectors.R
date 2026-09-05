@@ -7,31 +7,45 @@
 # ── Supported database types ───────────────────────────────────
 
 db_types <- c(
-  "PostgreSQL"     = "postgres",
+  "PostgreSQL" = "postgres",
   "MySQL / MariaDB" = "mysql",
-  "SQL Server"     = "sqlserver",
-  "Snowflake"      = "snowflake",
-  "BigQuery"       = "bigquery",
-  "Redshift"       = "redshift",
-  "SQLite"         = "sqlite"
+  "SQL Server" = "sqlserver",
+  "Snowflake" = "snowflake",
+  "BigQuery" = "bigquery",
+  "Redshift" = "redshift",
+  "SQLite" = "sqlite"
 )
 
 # ── Connect to a database ─────────────────────────────────────
 
-db_connect <- function(type, host = "", port = NULL, dbname = "",
-                       user = "", password = "", schema = "",
-                       driver = "", project = "", dataset = "",
-                       path = "", notify_fn = message) {
+db_connect <- function(
+  type,
+  host = "",
+  port = NULL,
+  dbname = "",
+  user = "",
+  password = "",
+  schema = "",
+  driver = "",
+  project = "",
+  dataset = "",
+  path = "",
+  notify_fn = message
+) {
   tryCatch(
-    switch(type,
+    switch(
+      type,
       postgres = {
         if (!requireNamespace("RPostgres", quietly = TRUE)) {
           stop("Install 'RPostgres': install.packages('RPostgres')")
         }
         DBI::dbConnect(
           RPostgres::Postgres(),
-          host = host, port = port %||% 5432L,
-          dbname = dbname, user = user, password = password
+          host = host,
+          port = port %||% 5432L,
+          dbname = dbname,
+          user = user,
+          password = password
         )
       },
       mysql = {
@@ -40,20 +54,30 @@ db_connect <- function(type, host = "", port = NULL, dbname = "",
         }
         DBI::dbConnect(
           RMariaDB::MariaDB(),
-          host = host, port = port %||% 3306L,
-          dbname = dbname, user = user, password = password
+          host = host,
+          port = port %||% 3306L,
+          dbname = dbname,
+          user = user,
+          password = password
         )
       },
       sqlserver = {
         if (!requireNamespace("odbc", quietly = TRUE)) {
           stop("Install 'odbc': install.packages('odbc')")
         }
-        drv_name <- if (nzchar(driver)) driver else "ODBC Driver 17 for SQL Server"
+        drv_name <- if (nzchar(driver)) {
+          driver
+        } else {
+          "ODBC Driver 17 for SQL Server"
+        }
         DBI::dbConnect(
           odbc::odbc(),
           Driver = drv_name,
-          Server = host, Port = port %||% 1433L,
-          Database = dbname, UID = user, PWD = password
+          Server = host,
+          Port = port %||% 1433L,
+          Database = dbname,
+          UID = user,
+          PWD = password
         )
       },
       snowflake = {
@@ -65,8 +89,10 @@ db_connect <- function(type, host = "", port = NULL, dbname = "",
           odbc::odbc(),
           Driver = drv_name,
           Server = host,
-          Database = dbname, Schema = schema,
-          UID = user, PWD = password
+          Database = dbname,
+          Schema = schema,
+          UID = user,
+          PWD = password
         )
       },
       bigquery = {
@@ -85,8 +111,11 @@ db_connect <- function(type, host = "", port = NULL, dbname = "",
         }
         DBI::dbConnect(
           RPostgres::Redshift(),
-          host = host, port = port %||% 5439L,
-          dbname = dbname, user = user, password = password
+          host = host,
+          port = port %||% 5439L,
+          dbname = dbname,
+          user = user,
+          password = password
         )
       },
       sqlite = {
@@ -109,11 +138,17 @@ db_introspect <- function(conn, type, schema = "public") {
   # Get table list
   result$tables <- tryCatch(
     {
-      if (type %in% c("postgres", "redshift", "mysql", "sqlserver", "snowflake")) {
-        q <- switch(type,
-          postgres = , redshift = paste0(
+      if (
+        type %in% c("postgres", "redshift", "mysql", "sqlserver", "snowflake")
+      ) {
+        q <- switch(
+          type,
+          postgres = ,
+          redshift = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", schema, "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = '",
+            schema,
+            "' AND table_type = 'BASE TABLE'"
           ),
           mysql = paste0(
             "SELECT table_name FROM information_schema.tables ",
@@ -121,11 +156,15 @@ db_introspect <- function(conn, type, schema = "public") {
           ),
           sqlserver = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", schema, "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = '",
+            schema,
+            "' AND table_type = 'BASE TABLE'"
           ),
           snowflake = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '", toupper(schema), "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = '",
+            toupper(schema),
+            "' AND table_type = 'BASE TABLE'"
           )
         )
         res <- DBI::dbGetQuery(conn, q)
@@ -143,15 +182,19 @@ db_introspect <- function(conn, type, schema = "public") {
   result$pks <- tryCatch(
     {
       if (type %in% c("postgres", "redshift", "mysql", "sqlserver")) {
-        q <- switch(type,
-          postgres = , redshift = paste0(
+        q <- switch(
+          type,
+          postgres = ,
+          redshift = paste0(
             "SELECT tc.table_name, kcu.column_name ",
             "FROM information_schema.table_constraints tc ",
             "JOIN information_schema.key_column_usage kcu ",
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '", schema, "'"
+            "AND tc.table_schema = '",
+            schema,
+            "'"
           ),
           mysql = paste0(
             "SELECT tc.table_name, kcu.column_name ",
@@ -169,7 +212,9 @@ db_introspect <- function(conn, type, schema = "public") {
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '", schema, "'"
+            "AND tc.table_schema = '",
+            schema,
+            "'"
           )
         )
         pk_df <- DBI::dbGetQuery(conn, q)
@@ -189,8 +234,10 @@ db_introspect <- function(conn, type, schema = "public") {
   result$fks <- tryCatch(
     {
       if (type %in% c("postgres", "redshift", "mysql", "sqlserver")) {
-        q <- switch(type,
-          postgres = , redshift = paste0(
+        q <- switch(
+          type,
+          postgres = ,
+          redshift = paste0(
             "SELECT ",
             "  kcu.table_name AS from_table, ",
             "  kcu.column_name AS from_col, ",
@@ -203,7 +250,9 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.constraint_column_usage ccu ",
             "  ON rc.unique_constraint_name = ccu.constraint_name ",
             "  AND rc.unique_constraint_schema = ccu.constraint_schema ",
-            "WHERE rc.constraint_schema = '", schema, "'"
+            "WHERE rc.constraint_schema = '",
+            schema,
+            "'"
           ),
           mysql = paste0(
             "SELECT ",
@@ -234,15 +283,15 @@ db_introspect <- function(conn, type, schema = "public") {
         if (nrow(fk_df) > 0) {
           lapply(seq_len(nrow(fk_df)), function(i) {
             list(
-              from_table  = fk_df$from_table[i],
-              from_col    = fk_df$from_col[i],
-              to_table    = fk_df$to_table[i],
-              to_col      = fk_df$to_col[i],
+              from_table = fk_df$from_table[i],
+              from_col = fk_df$from_col[i],
+              to_table = fk_df$to_table[i],
+              to_col = fk_df$to_col[i],
               detected_by = "schema",
-              confidence  = "high",
-              score       = 1.0,
-              signals     = list(schema = 1.0),
-              reasons     = "database constraint"
+              confidence = "high",
+              score = 1.0,
+              signals = list(schema = 1.0),
+              reasons = "database constraint"
             )
           })
         } else {
@@ -271,7 +320,10 @@ db_load_table <- function(conn, table_name, schema = "", limit = 10000) {
     error = function(e) {
       # Fallback: try without schema quoting (for MySQL, SQLite, etc.)
       tryCatch(
-        DBI::dbGetQuery(conn, paste0("SELECT * FROM `", table_name, "` LIMIT ", limit)),
+        DBI::dbGetQuery(
+          conn,
+          paste0("SELECT * FROM `", table_name, "` LIMIT ", limit)
+        ),
         error = function(e2) NULL
       )
     }
