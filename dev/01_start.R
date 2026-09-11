@@ -8,10 +8,10 @@
 #   pkg_name       = "tableexplorer",
 #   pkg_title      = "Table Relationship Explorer",
 #   pkg_description = "Interactive Shiny app for exploring table relationships.",
-#   author_first   = "Your",
-#   author_last    = "Name",
-#   author_email   = "you@example.com",
-#   repo_url       = NULL
+#   author_first   = "amelia-m",
+#   author_last    = "",
+#   author_email   = "22108551+amelia-m@users.noreply.github.com",
+#   repo_url       = "https://github.com/amelia-m/table-explorer"
 # )
 
 # 2. Set a licence
