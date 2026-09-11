@@ -194,9 +194,11 @@ GitHub Actions now runs the same R test suite on pushes and pull requests via `.
 - Database import via SQLAlchemy URLs (SQLite plus other backends with the appropriate driver installed)
 - 7-signal FK inference engine with confidence scoring
 - JSON/YAML schema input
+- Run Detection button for applying detection-setting changes
 - Interactive ERD via PyVis
 - Dark/light mode toggle
 - Manual relationship overrides
+- Automatic table and column name cleaning with a rename log
 - Relationship suppress/restore controls
 - Relationships CSV export with table-size metadata
 - dbt schema.yml export
@@ -207,8 +209,6 @@ GitHub Actions now runs the same R test suite on pushes and pull requests via `.
 ### Still behind R/Shiny
 
 - Scan triage for large schemas
-- Run Detection button (settings changes trigger immediately)
-- Table name cleaning
 
 ### Python setup
 

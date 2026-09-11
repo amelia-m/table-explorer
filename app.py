@@ -474,7 +474,104 @@ def clean_name(name: str) -> str:
     """Normalize a column/table name: lowercase, non-alnum → underscore, collapse."""
     n = re.sub(r"[^a-z0-9]", "_", name.lower())
     n = re.sub(r"_+", "_", n).strip("_")
-    return n
+    return n or "unnamed"
+
+
+def make_unique_clean_names(names: list[str]) -> list[str]:
+    seen: dict[str, int] = {}
+    cleaned: list[str] = []
+    for raw in names:
+        base = clean_name(str(raw))
+        idx = seen.get(base, 0)
+        candidate = base if idx == 0 else f"{base}_{idx + 1}"
+        while candidate in seen:
+            idx += 1
+            candidate = f"{base}_{idx + 1}"
+        seen[base] = idx + 1
+        seen[candidate] = 1
+        cleaned.append(candidate)
+    return cleaned
+
+
+def clean_loaded_table(table_name: str, df: pd.DataFrame) -> tuple[str, pd.DataFrame, list[dict], dict[str, str]]:
+    original_table = str(table_name)
+    clean_table = make_unique_clean_names([original_table])[0]
+    original_cols = [str(c) for c in df.columns]
+    clean_cols = make_unique_clean_names(original_cols)
+    col_map = dict(zip(original_cols, clean_cols))
+
+    clean_df = df.copy()
+    clean_df.columns = clean_cols
+    clean_df.attrs = dict(df.attrs)
+
+    log_rows: list[dict] = []
+    if original_table != clean_table:
+        log_rows.append({
+            "object_type": "table",
+            "source": clean_table,
+            "original_name": original_table,
+            "cleaned_name": clean_table,
+        })
+    for old, new in zip(original_cols, clean_cols):
+        if old != new:
+            log_rows.append({
+                "object_type": "column",
+                "source": clean_table,
+                "original_name": old,
+                "cleaned_name": new,
+            })
+
+    meta = clean_df.attrs.get("columns_meta")
+    if meta:
+        updated_meta = []
+        for entry in meta:
+            item = dict(entry)
+            item["name"] = col_map.get(str(item.get("name", "")), clean_name(str(item.get("name", ""))))
+            fk = item.get("foreign_key")
+            if isinstance(fk, dict) and fk.get("column"):
+                fk = dict(fk)
+                fk["column"] = col_map.get(str(fk["column"]), clean_name(str(fk["column"])))
+                item["foreign_key"] = fk
+            updated_meta.append(item)
+        clean_df.attrs["columns_meta"] = updated_meta
+
+    existing_log = clean_df.attrs.get("rename_log", [])
+    clean_df.attrs["rename_log"] = existing_log + log_rows
+    clean_df.attrs.setdefault("rows_loaded", len(clean_df))
+    clean_df.attrs.setdefault("source_row_count", len(clean_df))
+    return clean_table, clean_df, log_rows, col_map
+
+
+def clean_relationship_names(
+    rels: list[dict],
+    table_map: dict[str, str],
+    column_maps: dict[str, dict[str, str]],
+) -> list[dict]:
+    cleaned_rels = []
+    for rel in rels:
+        from_table_raw = str(rel.get("from_table", ""))
+        to_table_raw = str(rel.get("to_table", ""))
+        from_table = table_map.get(from_table_raw, clean_name(from_table_raw))
+        to_table = table_map.get(to_table_raw, clean_name(to_table_raw))
+        from_col_map = column_maps.get(from_table_raw, {})
+        to_col_map = column_maps.get(to_table_raw, {})
+        cleaned = dict(rel)
+        cleaned["from_table"] = from_table
+        cleaned["to_table"] = to_table
+        if rel.get("from_col") is not None:
+            cleaned["from_col"] = from_col_map.get(str(rel["from_col"]), clean_name(str(rel["from_col"])))
+        if rel.get("to_col") is not None:
+            cleaned["to_col"] = to_col_map.get(str(rel["to_col"]), clean_name(str(rel["to_col"])))
+        cleaned_rels.append(cleaned)
+    return cleaned_rels
+
+
+def collect_rename_log(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    rows = []
+    for df in tables.values():
+        rows.extend(df.attrs.get("rename_log", []))
+    columns = ["object_type", "source", "original_name", "cleaned_name"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def id_stem(col_clean: str) -> str:
@@ -1170,7 +1267,7 @@ def dataframe_to_payload(df: pd.DataFrame) -> dict:
             serializable.loc[serializable[col] == "NaT", col] = None
 
     attrs = {}
-    for key in ("source", "columns_meta", "source_row_count", "rows_loaded", "database_type", "database_schema"):
+    for key in ("source", "columns_meta", "source_row_count", "rows_loaded", "database_type", "database_schema", "rename_log"):
         if key in df.attrs:
             attrs[key] = df.attrs[key]
 
@@ -1763,6 +1860,17 @@ if "detect_method" not in st.session_state:
     st.session_state.detect_method = "both"
 if "min_confidence" not in st.session_state:
     st.session_state.min_confidence = "medium"
+if "applied_detection_settings" not in st.session_state:
+    st.session_state.applied_detection_settings = {
+        "detect_method": st.session_state.detect_method,
+        "min_confidence": st.session_state.min_confidence,
+        "fl_overlap": st.session_state.get("fl_overlap", True),
+        "fl_card": st.session_state.get("fl_card", True),
+        "fl_fmt": st.session_state.get("fl_fmt", True),
+        "fl_dist": st.session_state.get("fl_dist", True),
+        "fl_null": st.session_state.get("fl_null", False),
+        "enable_composite_pk": st.session_state.get("enable_composite_pk", False),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1826,11 +1934,13 @@ with st.sidebar:
                         # Multi-sheet: load each sheet as its own table
                         for sheet in sheets:
                             sdf = xl.parse(sheet)
-                            sdf.columns = [re.sub(r"[^a-zA-Z0-9_]", "_", c) for c in sdf.columns]
                             sname = f"{tname}_{sheet}"
-                            existed = sname in st.session_state.tables
                             sdf.attrs["source"] = "xlsx"
-                            st.session_state.tables[sname] = sdf
+                            sdf.attrs["rows_loaded"] = len(sdf)
+                            sdf.attrs["source_row_count"] = len(sdf)
+                            clean_sname, clean_sdf, _, _ = clean_loaded_table(sname, sdf)
+                            existed = clean_sname in st.session_state.tables
+                            st.session_state.tables[clean_sname] = clean_sdf
                             replaced += existed; added += not existed
                         continue
                 elif ext == "xls":
@@ -1852,10 +1962,12 @@ with st.sidebar:
                     st.error(f"Unsupported format: {f.name}")
                     continue
 
-                df.columns = [re.sub(r"[^a-zA-Z0-9_]", "_", str(c)) for c in df.columns]
-                existed = tname in st.session_state.tables
                 df.attrs["source"] = fmt
-                st.session_state.tables[tname] = df
+                df.attrs["rows_loaded"] = len(df)
+                df.attrs["source_row_count"] = len(df)
+                clean_tname, clean_df, _, _ = clean_loaded_table(tname, df)
+                existed = clean_tname in st.session_state.tables
+                st.session_state.tables[clean_tname] = clean_df
                 replaced += existed; added += not existed
 
             except Exception as e:
@@ -1932,7 +2044,8 @@ with st.sidebar:
                     source_label=db_type,
                 )
                 for tname, df in loaded_tables.items():
-                    st.session_state.tables[tname] = df
+                    clean_tname, clean_df, _, _ = clean_loaded_table(tname, df)
+                    st.session_state.tables[clean_tname] = clean_df
                 if loaded_tables:
                     st.session_state.fk_cache = {}
                     st.session_state.last_digest = ""
@@ -1959,9 +2072,14 @@ with st.sidebar:
                 tbls, srels = parse_schema_json(raw)
             else:
                 tbls, srels = parse_schema_yaml(raw)
+            table_map = {}
+            column_maps = {}
             for tname, df in tbls.items():
-                st.session_state.tables[tname] = df
-            st.session_state.schema_rels = srels
+                clean_tname, clean_df, _, col_map = clean_loaded_table(tname, df)
+                table_map[tname] = clean_tname
+                column_maps[tname] = col_map
+                st.session_state.tables[clean_tname] = clean_df
+            st.session_state.schema_rels = clean_relationship_names(srels, table_map, column_maps)
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
             st.session_state.suppressed_rels = []
@@ -1975,12 +2093,38 @@ with st.sidebar:
     if session_file and st.button("Restore Session", key="restore_session_btn", width='stretch'):
         try:
             restored = restore_session_json(session_file.read().decode("utf-8"))
-            st.session_state.tables = restored["tables"]
-            st.session_state.schema_rels = restored["schema_relationships"]
-            st.session_state.manual_rels = restored["manual_relationships"]
-            st.session_state.suppressed_rels = restored["suppressed_relationships"]
+            cleaned_tables = {}
+            table_map = {}
+            column_maps = {}
+            for tname, df in restored["tables"].items():
+                clean_tname, clean_df, _, col_map = clean_loaded_table(tname, df)
+                cleaned_tables[clean_tname] = clean_df
+                table_map[tname] = clean_tname
+                column_maps[tname] = col_map
+            st.session_state.tables = cleaned_tables
+            st.session_state.schema_rels = clean_relationship_names(restored["schema_relationships"], table_map, column_maps)
+            st.session_state.manual_rels = clean_relationship_names(restored["manual_relationships"], table_map, column_maps)
+            st.session_state.suppressed_rels = [
+                relation_key(rel)
+                for rel in clean_relationship_names(
+                    restored.get("relationships", []),
+                    table_map,
+                    column_maps,
+                )
+                if relation_key(rel) in set(restored["suppressed_relationships"])
+            ]
             for key, value in restored.get("settings", {}).items():
                 st.session_state[key] = value
+            st.session_state.applied_detection_settings = {
+                "detect_method": st.session_state.get("detect_method", "both"),
+                "min_confidence": st.session_state.get("min_confidence", "medium"),
+                "fl_overlap": st.session_state.get("fl_overlap", True),
+                "fl_card": st.session_state.get("fl_card", True),
+                "fl_fmt": st.session_state.get("fl_fmt", True),
+                "fl_dist": st.session_state.get("fl_dist", True),
+                "fl_null": st.session_state.get("fl_null", False),
+                "enable_composite_pk": st.session_state.get("enable_composite_pk", False),
+            }
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
             st.success(f"Restored session with {len(st.session_state.tables)} table(s).")
@@ -2119,6 +2263,29 @@ with st.sidebar:
         ),
     )
 
+    current_detection_settings = {
+        "detect_method": detect_method,
+        "min_confidence": min_confidence,
+        "fl_overlap": st.session_state.get("fl_overlap", True),
+        "fl_card": st.session_state.get("fl_card", True),
+        "fl_fmt": st.session_state.get("fl_fmt", True),
+        "fl_dist": st.session_state.get("fl_dist", True),
+        "fl_null": st.session_state.get("fl_null", False),
+        "enable_composite_pk": enable_composite_pk,
+    }
+    applied_detection_settings = st.session_state.get("applied_detection_settings", current_detection_settings)
+    if current_detection_settings != applied_detection_settings:
+        st.caption("Pending detection changes. Press Run Detection to apply them.")
+    if st.button("▶ Run Detection", key="run_detection_btn", type="primary", width='stretch'):
+        st.session_state.applied_detection_settings = current_detection_settings
+        st.session_state.fk_cache = {}
+        st.session_state.last_digest = ""
+        if detect_method == "manual":
+            st.success("Manual-only mode applied.")
+        else:
+            st.success("Running detection with current settings...")
+        st.rerun()
+
     # ── 06 Manual Override ───────────────────────────────────────────────
     st.markdown('<div class="sidebar-section">06 // Manual Override</div>', unsafe_allow_html=True)
     tnames = list(st.session_state.tables.keys())
@@ -2164,26 +2331,46 @@ if not tables:
     </div>
     """, unsafe_allow_html=True)
 else:
+    applied_detection_settings = st.session_state.get("applied_detection_settings", {
+        "detect_method": detect_method,
+        "min_confidence": min_confidence,
+        "fl_overlap": st.session_state.get("fl_overlap", True),
+        "fl_card": st.session_state.get("fl_card", True),
+        "fl_fmt": st.session_state.get("fl_fmt", True),
+        "fl_dist": st.session_state.get("fl_dist", True),
+        "fl_null": st.session_state.get("fl_null", False),
+        "enable_composite_pk": enable_composite_pk,
+    })
     # Compute PKs
-    method = detect_method
+    method = applied_detection_settings["detect_method"]
+    min_confidence_applied = applied_detection_settings["min_confidence"]
+    enable_composite_pk_applied = applied_detection_settings["enable_composite_pk"]
     pk_method = "both" if method == "manual" else method
     pk_map = {t: detect_pks(df, t, pk_method) for t, df in tables.items()}
 
     # Compute composite PKs (optional, off by default)
     cpk_map: dict[str, list[list[str]]] = {}
-    if enable_composite_pk:
+    if enable_composite_pk_applied:
         cpk_map = {t: detect_composite_pks(df, t) for t, df in tables.items()}
 
     # Compute FK rels (cached by digest that includes all detection params)
-    flags_key = json.dumps(enable_flags, sort_keys=True)
-    digest = table_digest(tables, f"{method}/{min_confidence}/{flags_key}/{st.session_state.get('dark_mode', True)}")
+    enable_flags_applied = {
+        "naming": method in ("naming", "both"),
+        "value_overlap": False if method in ("manual", "naming") else applied_detection_settings["fl_overlap"],
+        "cardinality": False if method in ("manual", "naming") else applied_detection_settings["fl_card"],
+        "format": False if method in ("manual", "naming") else applied_detection_settings["fl_fmt"],
+        "distribution": False if method in ("manual", "naming") else applied_detection_settings["fl_dist"],
+        "null_pattern": False if method in ("manual", "naming") else applied_detection_settings["fl_null"],
+    }
+    flags_key = json.dumps(enable_flags_applied, sort_keys=True)
+    digest = table_digest(tables, f"{method}/{min_confidence_applied}/{flags_key}/{enable_composite_pk_applied}/{st.session_state.get('dark_mode', True)}")
     if digest not in st.session_state.fk_cache:
         with st.spinner("Analysing tables…"):
             auto_rels = detect_fks(
                 tables,
                 method=method,
-                min_confidence=min_confidence,
-                enable_flags=enable_flags,
+                min_confidence=min_confidence_applied,
+                enable_flags=enable_flags_applied,
             )
         st.session_state.fk_cache[digest] = auto_rels
         st.session_state.last_digest = digest
@@ -2197,7 +2384,9 @@ else:
     visible_rels = [r for r in all_rels if relation_key(r) not in set(st.session_state.suppressed_rels)]
 
     # ── Tabs ─────────────────────────────────────────────────────────────
-    tab_erd, tab_details, tab_rels, tab_exports = st.tabs(["ERD Diagram", "Table Details", "Relationships", "Exports"])
+    tab_erd, tab_details, tab_rels, tab_names, tab_exports = st.tabs(
+        ["ERD Diagram", "Table Details", "Relationships", "Name Changes", "Exports"]
+    )
 
     # ─── ERD ─────────────────────────────────────────────────────────────
     with tab_erd:
@@ -2413,17 +2602,42 @@ else:
 
         st.markdown('<div style="height:16px;"></div>', unsafe_allow_html=True)
 
+    with tab_names:
+        rename_log_df = collect_rename_log(tables)
+        if rename_log_df.empty:
+            st.info("No name changes detected. All current table and column names are already clean.")
+        else:
+            st.caption(
+                f"{len(rename_log_df)} rename(s) across {rename_log_df['source'].nunique()} table(s)."
+            )
+            st.dataframe(
+                rename_log_df.rename(columns={
+                    "object_type": "Type",
+                    "source": "Table",
+                    "original_name": "Original Name",
+                    "cleaned_name": "Cleaned Name",
+                }),
+                width='stretch',
+                hide_index=True,
+            )
+            st.download_button(
+                label="⬇  Export Name Changes CSV",
+                data=rename_log_df.to_csv(index=False).encode(),
+                file_name="name_changes.csv",
+                mime="text/csv",
+            )
+
     with tab_exports:
         settings_payload = {
             "dark_mode": st.session_state.get("dark_mode", True),
-            "detect_method": detect_method,
-            "min_confidence": min_confidence,
-            "fl_overlap": st.session_state.get("fl_overlap", True),
-            "fl_card": st.session_state.get("fl_card", True),
-            "fl_fmt": st.session_state.get("fl_fmt", True),
-            "fl_dist": st.session_state.get("fl_dist", True),
-            "fl_null": st.session_state.get("fl_null", False),
-            "enable_composite_pk": enable_composite_pk,
+            "detect_method": applied_detection_settings["detect_method"],
+            "min_confidence": min_confidence_applied,
+            "fl_overlap": applied_detection_settings["fl_overlap"],
+            "fl_card": applied_detection_settings["fl_card"],
+            "fl_fmt": applied_detection_settings["fl_fmt"],
+            "fl_dist": applied_detection_settings["fl_dist"],
+            "fl_null": applied_detection_settings["fl_null"],
+            "enable_composite_pk": enable_composite_pk_applied,
         }
         export_df = build_relationship_export_df(visible_rels, tables)
         csv_bytes = export_df.to_csv(index=False).encode()
