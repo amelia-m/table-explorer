@@ -3,8 +3,8 @@ Type: Package
 Title: Table Relationship Explorer
 Version: 0.2.0
 Authors@R:
-    person("amelia-m", role = c("aut", "cre"),
-           email = "22108551+amelia-m@users.noreply.github.com")
+    person("Amelia", "Miramonti", role = c("aut", "cre"),
+           email = "amelia.miramonti@gmail.com")
 Description: Interactive Shiny app for exploring table relationships with
     multi-signal FK detection, ERD visualization, and multi-format file
     support.
