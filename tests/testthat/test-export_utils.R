@@ -79,6 +79,28 @@ test_that("generate_dbt_yaml handles empty tables", {
   expect_true(grepl("models:", yaml_str))
 })
 
+test_that("generate_dbt_yaml emits composite key tests", {
+  tables <- list(
+    line_items = data.frame(
+      order_id = c(1, 1, 2),
+      line_no = c(1, 2, 1),
+      sku = c("A", "B", "C"),
+      stringsAsFactors = FALSE
+    )
+  )
+  yaml_str <- generate_dbt_yaml(
+    tables = tables,
+    rels = list(),
+    pks = list(line_items = character(0)),
+    composite_pks = list(line_items = list(c("order_id", "line_no")))
+  )
+
+  expect_true(grepl("dbt_utils.unique_combination_of_columns", yaml_str))
+  expect_true(grepl("combination_of_columns:", yaml_str))
+  expect_true(grepl("- order_id", yaml_str))
+  expect_true(grepl("- line_no", yaml_str))
+})
+
 # ── Mermaid ERD generator ────────────────────────────────────
 
 test_that("generate_mermaid_erd starts with erDiagram", {
@@ -132,6 +154,26 @@ test_that("generate_mermaid_erd handles Date columns", {
 test_that("generate_mermaid_erd handles empty input", {
   mmd <- generate_mermaid_erd(list(), list(), list())
   expect_equal(trimws(mmd), "erDiagram")
+})
+
+test_that("generate_mermaid_erd marks composite key columns as PK", {
+  tables <- list(
+    line_items = data.frame(
+      order_id = c(1, 1, 2),
+      line_no = c(1, 2, 1),
+      sku = c("A", "B", "C"),
+      stringsAsFactors = FALSE
+    )
+  )
+  mmd <- generate_mermaid_erd(
+    tables = tables,
+    rels = list(),
+    pks = list(line_items = character(0)),
+    composite_pks = list(line_items = list(c("order_id", "line_no")))
+  )
+
+  expect_true(grepl("order_id PK", mmd))
+  expect_true(grepl("line_no PK", mmd))
 })
 
 # ── Session save/restore ─────────────────────────────────────
@@ -202,6 +244,22 @@ test_that("restore_session_json round-trips manual relationships", {
 
   expect_equal(length(restored$manual_relationships), 1)
   expect_equal(restored$manual_relationships[[1]]$from_table, "a")
+})
+
+test_that("restore_session_json round-trips schema relationships", {
+  skip_if_not_installed("jsonlite")
+
+  schema_rels <- list(list(
+    from_table = "orders", from_col = "customer_id",
+    to_table = "customers", to_col = "customer_id",
+    detected_by = "schema"
+  ))
+  json_str <- save_session_json(list(), list(), list(), schema_rels)
+  restored <- restore_session_json(json_str)
+
+  expect_equal(length(restored$schema_relationships), 1)
+  expect_equal(restored$schema_relationships[[1]]$detected_by, "schema")
+  expect_equal(restored$schema_relationships[[1]]$to_table, "customers")
 })
 
 test_that("save_session_json handles Date columns", {

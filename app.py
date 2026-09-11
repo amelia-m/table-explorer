@@ -574,6 +574,42 @@ def collect_rename_log(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def estimate_scan_complexity(tables: dict[str, pd.DataFrame]) -> dict:
+    n_tables = len(tables)
+    total_cols = sum(len(df.columns) for df in tables.values())
+    total_rows = sum(table_row_count(df) for df in tables.values())
+    max_rows = max((table_row_count(df) for df in tables.values()), default=0)
+
+    est_source_cols = total_cols * 0.40
+    est_target_cols_per_table = max((total_cols / max(n_tables, 1)) * 0.15, 1)
+    est_pairs = est_source_cols * max(n_tables - 1, 0) * est_target_cols_per_table
+
+    if max_rows > 5000:
+        cost_per_pair_ms = 20
+    elif max_rows > 500:
+        cost_per_pair_ms = 5
+    else:
+        cost_per_pair_ms = 1
+    est_time_sec = (est_pairs * cost_per_pair_ms) / 1000
+
+    if est_pairs < 2000 or est_time_sec < 5:
+        tier = "fast"
+    elif est_pairs < 15000 or est_time_sec < 30:
+        tier = "moderate"
+    else:
+        tier = "slow"
+
+    return {
+        "n_tables": n_tables,
+        "total_cols": total_cols,
+        "total_rows": round(total_rows),
+        "max_rows": round(max_rows),
+        "est_pairs": round(est_pairs),
+        "est_time_sec": round(est_time_sec, 1),
+        "tier": tier,
+    }
+
+
 def id_stem(col_clean: str) -> str:
     """'document_id' → 'document'"""
     return re.sub(r"_id$", "", col_clean)
@@ -1871,6 +1907,10 @@ if "applied_detection_settings" not in st.session_state:
         "fl_null": st.session_state.get("fl_null", False),
         "enable_composite_pk": st.session_state.get("enable_composite_pk", False),
     }
+if "scan_strategy" not in st.session_state:
+    st.session_state.scan_strategy = "auto"
+if "last_triage_key" not in st.session_state:
+    st.session_state.last_triage_key = ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1979,6 +2019,8 @@ with st.sidebar:
         if parts:
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
+            st.session_state.last_triage_key = ""
+            st.session_state.scan_strategy = "auto"
             st.session_state.suppressed_rels = []
             table_names = set(st.session_state.tables.keys())
             st.session_state.schema_rels = prune_relationships(st.session_state.schema_rels, table_names)
@@ -2049,6 +2091,8 @@ with st.sidebar:
                 if loaded_tables:
                     st.session_state.fk_cache = {}
                     st.session_state.last_digest = ""
+                    st.session_state.last_triage_key = ""
+                    st.session_state.scan_strategy = "auto"
                     st.session_state.suppressed_rels = []
                     table_names = set(st.session_state.tables.keys())
                     st.session_state.schema_rels = prune_relationships(st.session_state.schema_rels, table_names)
@@ -2082,6 +2126,8 @@ with st.sidebar:
             st.session_state.schema_rels = clean_relationship_names(srels, table_map, column_maps)
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
+            st.session_state.last_triage_key = ""
+            st.session_state.scan_strategy = "auto"
             st.session_state.suppressed_rels = []
             st.success(f"Schema loaded: {len(tbls)} table(s), {len(srels)} relationship(s)")
         except Exception as e:
@@ -2127,6 +2173,8 @@ with st.sidebar:
             }
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
+            st.session_state.last_triage_key = ""
+            st.session_state.scan_strategy = restored.get("settings", {}).get("scan_strategy", "auto")
             st.success(f"Restored session with {len(st.session_state.tables)} table(s).")
             st.rerun()
         except Exception as e:
@@ -2189,6 +2237,8 @@ with st.sidebar:
             st.session_state.suppressed_rels = []
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
+            st.session_state.last_triage_key = ""
+            st.session_state.scan_strategy = "auto"
             st.rerun()
 
         if st.button("✕  Remove All", type="secondary", width='stretch'):
@@ -2198,10 +2248,28 @@ with st.sidebar:
             st.session_state.suppressed_rels = []
             st.session_state.fk_cache = {}
             st.session_state.last_digest = ""
+            st.session_state.last_triage_key = ""
+            st.session_state.scan_strategy = "auto"
             st.rerun()
 
     # ── 05 Detection Method ──────────────────────────────────────────────
     st.markdown('<div class="sidebar-section">05 // Detection Method</div>', unsafe_allow_html=True)
+    triage_tables = st.session_state.tables
+    triage_est = estimate_scan_complexity(triage_tables)
+    triage_key = json.dumps(
+        {
+            name: [table_row_count(df), len(df.columns)]
+            for name, df in sorted(triage_tables.items())
+        },
+        sort_keys=True,
+    )
+    if len(triage_tables) < 2:
+        st.session_state.scan_strategy = "auto"
+        st.session_state.last_triage_key = triage_key
+    elif triage_key != st.session_state.last_triage_key:
+        st.session_state.last_triage_key = triage_key
+        st.session_state.scan_strategy = "auto" if triage_est["tier"] == "fast" else "pending"
+
     detect_method = st.selectbox(
         "Signal family",
         options=["both", "naming", "content", "manual"],
@@ -2263,6 +2331,35 @@ with st.sidebar:
         ),
     )
 
+    if len(triage_tables) >= 2 and detect_method != "manual" and triage_est["tier"] != "fast":
+        tier_label = "Moderate schema size" if triage_est["tier"] == "moderate" else "Large schema detected"
+        st.warning(
+            f"{tier_label}: ~{triage_est['est_pairs']:,} candidate comparisons, "
+            f"~{triage_est['est_time_sec']}s full scan."
+        )
+        triage_cols = st.columns(3)
+        with triage_cols[0]:
+            if st.button("Full scan", key="triage_full", width='stretch'):
+                st.session_state.scan_strategy = "full"
+                st.rerun()
+        with triage_cols[1]:
+            if st.button("Quick scan", key="triage_naming", width='stretch'):
+                st.session_state.scan_strategy = "naming_only"
+                st.rerun()
+        with triage_cols[2]:
+            if st.button("Skip auto", key="triage_skip", width='stretch'):
+                st.session_state.scan_strategy = "skip"
+                st.rerun()
+
+        if st.session_state.scan_strategy == "full":
+            st.caption("Full scan selected: Run Detection will use the chosen signal settings.")
+        elif st.session_state.scan_strategy == "naming_only":
+            st.caption("Quick scan selected: Run Detection will temporarily use naming-only auto-detection.")
+        elif st.session_state.scan_strategy == "skip":
+            st.caption("Skip selected: Run Detection will skip auto-detection until the schema changes.")
+        else:
+            st.caption("Choose a scan strategy before applying detection changes.")
+
     current_detection_settings = {
         "detect_method": detect_method,
         "min_confidence": min_confidence,
@@ -2277,14 +2374,21 @@ with st.sidebar:
     if current_detection_settings != applied_detection_settings:
         st.caption("Pending detection changes. Press Run Detection to apply them.")
     if st.button("▶ Run Detection", key="run_detection_btn", type="primary", width='stretch'):
-        st.session_state.applied_detection_settings = current_detection_settings
-        st.session_state.fk_cache = {}
-        st.session_state.last_digest = ""
-        if detect_method == "manual":
-            st.success("Manual-only mode applied.")
+        if len(triage_tables) >= 2 and detect_method != "manual" and triage_est["tier"] != "fast" and st.session_state.scan_strategy == "pending":
+            st.warning("Choose Full scan, Quick scan, or Skip auto before running detection.")
         else:
-            st.success("Running detection with current settings...")
-        st.rerun()
+            st.session_state.applied_detection_settings = current_detection_settings
+            st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
+            if detect_method == "manual":
+                st.success("Manual-only mode applied.")
+            elif st.session_state.scan_strategy == "naming_only":
+                st.success("Running quick scan with naming-only auto-detection...")
+            elif st.session_state.scan_strategy == "skip":
+                st.success("Auto-detection skipped. Manual and schema relationships remain available.")
+            else:
+                st.success("Running detection with current settings...")
+            st.rerun()
 
     # ── 06 Manual Override ───────────────────────────────────────────────
     st.markdown('<div class="sidebar-section">06 // Manual Override</div>', unsafe_allow_html=True)
@@ -2341,8 +2445,14 @@ else:
         "fl_null": st.session_state.get("fl_null", False),
         "enable_composite_pk": enable_composite_pk,
     })
+    scan_strategy = st.session_state.get("scan_strategy", "auto")
     # Compute PKs
     method = applied_detection_settings["detect_method"]
+    if method != "manual":
+        if scan_strategy == "naming_only":
+            method = "naming"
+        elif scan_strategy == "skip":
+            method = "manual"
     min_confidence_applied = applied_detection_settings["min_confidence"]
     enable_composite_pk_applied = applied_detection_settings["enable_composite_pk"]
     pk_method = "both" if method == "manual" else method
@@ -2638,6 +2748,7 @@ else:
             "fl_dist": applied_detection_settings["fl_dist"],
             "fl_null": applied_detection_settings["fl_null"],
             "enable_composite_pk": enable_composite_pk_applied,
+            "scan_strategy": scan_strategy,
         }
         export_df = build_relationship_export_df(visible_rels, tables)
         csv_bytes = export_df.to_csv(index=False).encode()

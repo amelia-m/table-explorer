@@ -195,6 +195,7 @@ GitHub Actions now runs the same R test suite on pushes and pull requests via `.
 - 7-signal FK inference engine with confidence scoring
 - JSON/YAML schema input
 - Run Detection button for applying detection-setting changes
+- Scan triage for large schemas (full scan / naming-only / skip)
 - Interactive ERD via PyVis
 - Dark/light mode toggle
 - Manual relationship overrides
@@ -208,7 +209,7 @@ GitHub Actions now runs the same R test suite on pushes and pull requests via `.
 
 ### Still behind R/Shiny
 
-- Scan triage for large schemas
+The Python version now covers the main parity checklist above, but it remains the slower-moving secondary implementation.
 
 ### Python setup
 
