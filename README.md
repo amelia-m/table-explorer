@@ -2,7 +2,7 @@
 
 An interactive tool for mapping primary keys, foreign keys, and inter-table relationships across tabular data. Upload files or connect to a database, get an interactive ERD, column-level metadata, and exportable reports.
 
-The primary implementation is **R/Shiny**. A **Python/Streamlit** version also exists but has fewer features and is not actively maintained at this time.
+The primary implementation is **R/Shiny**. A **Python/Streamlit** version is also supported as a secondary implementation and may be updated more slowly than the R version.
 
 ---
 
@@ -186,27 +186,29 @@ GitHub Actions now runs the same R test suite on pushes and pull requests via `.
 
 ## Python/Streamlit Version
 
-> **Note:** The Python version is in an earlier development phase and has fewer features than the R/Shiny version. It will be updated over time but is not the current development focus.
+> **Note:** The Python version is supported, but it remains the secondary implementation. Feature parity work may land later here than in the R/Shiny version.
 
 ### Current Python features
 
 - Multi-format file upload (CSV, TSV, Excel, ODS, Parquet, JSON, NDJSON)
+- Database import via SQLAlchemy URLs (SQLite plus other backends with the appropriate driver installed)
 - 7-signal FK inference engine with confidence scoring
 - JSON/YAML schema input
 - Interactive ERD via PyVis
 - Dark/light mode toggle
 - Manual relationship overrides
+- Relationship suppress/restore controls
+- Relationships CSV export with table-size metadata
+- dbt schema.yml export
+- Mermaid ERD export
+- Session save/restore (JSON)
 - Relationship caching (MD5-digested)
 
-### Not yet in Python
+### Still behind R/Shiny
 
-- Database connectors
 - Scan triage for large schemas
 - Run Detection button (settings changes trigger immediately)
 - Table name cleaning
-- dbt YAML / Mermaid ERD / session save-restore exports
-- Table size in exports
-- Relationship suppress/restore UI
 
 ### Python setup
 
@@ -216,6 +218,35 @@ streamlit run app.py
 ```
 
 Opens at `http://localhost:8501`.
+
+### Python database connectors
+
+The Streamlit app accepts SQLAlchemy database URLs. SQLite works with the base requirements; other backends need their matching driver package installed in the Python environment.
+
+Examples:
+
+```bash
+# PostgreSQL
+pip install psycopg
+
+# MySQL
+pip install pymysql
+
+# SQL Server
+pip install pyodbc
+
+# Snowflake
+pip install snowflake-sqlalchemy
+
+# BigQuery
+pip install sqlalchemy-bigquery
+
+# Redshift
+pip install sqlalchemy-redshift redshift_connector
+
+# Oracle
+pip install oracledb
+```
 
 ### Python deployment
 

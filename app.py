@@ -1,6 +1,6 @@
 """
 Table Relationship Explorer — Streamlit App
-Supports CSV uploads and JSON/YAML schema definitions.
+Supports file uploads, database imports, and JSON/YAML schema definitions.
 """
 
 import streamlit as st
@@ -1080,6 +1080,387 @@ def table_digest(tables: dict, method: str) -> str:
     return hashlib.md5(f"{parts}//{method}".encode()).hexdigest()
 
 
+DB_TYPE_CONFIG = {
+    "sqlite": {
+        "label": "SQLite",
+        "example": "sqlite:////absolute/path/to/database.sqlite",
+        "driver_note": "SQLite works with the base requirements.",
+    },
+    "postgresql": {
+        "label": "PostgreSQL",
+        "example": "postgresql+psycopg://HOST:5432/DBNAME",
+        "driver_note": "Install psycopg for PostgreSQL URLs.",
+    },
+    "mysql": {
+        "label": "MySQL",
+        "example": "mysql+pymysql://HOST:3306/DBNAME",
+        "driver_note": "Install PyMySQL for MySQL URLs.",
+    },
+    "sqlserver": {
+        "label": "SQL Server",
+        "example": "mssql+pyodbc://HOST:1433/DBNAME?driver=ODBC+Driver+18+for+SQL+Server",
+        "driver_note": "Install pyodbc plus a system ODBC driver for SQL Server URLs.",
+    },
+    "snowflake": {
+        "label": "Snowflake",
+        "example": "snowflake://ACCOUNT/DBNAME/SCHEMA?warehouse=WH&role=ROLE",
+        "driver_note": "Install snowflake-sqlalchemy for Snowflake URLs.",
+    },
+    "bigquery": {
+        "label": "BigQuery",
+        "example": "bigquery://project_id/dataset_name",
+        "driver_note": "Install sqlalchemy-bigquery for BigQuery URLs.",
+    },
+    "redshift": {
+        "label": "Redshift",
+        "example": "redshift+redshift_connector://HOST:5439/DBNAME",
+        "driver_note": "Install sqlalchemy-redshift or redshift_connector for Redshift URLs.",
+    },
+    "oracle": {
+        "label": "Oracle",
+        "example": "oracle+oracledb://HOST:1521/?service_name=SERVICE",
+        "driver_note": "Install oracledb for Oracle URLs.",
+    },
+    "custom": {
+        "label": "Custom SQLAlchemy URL",
+        "example": "dialect+driver://HOST:PORT/DBNAME",
+        "driver_note": "Any SQLAlchemy-compatible URL can be used here.",
+    },
+}
+
+
+def relation_key(rel: dict) -> str:
+    return json.dumps(
+        {
+            "from_table": rel.get("from_table"),
+            "from_col": rel.get("from_col"),
+            "to_table": rel.get("to_table"),
+            "to_col": rel.get("to_col"),
+            "detected_by": rel.get("detected_by"),
+        },
+        sort_keys=True,
+    )
+
+
+def relation_widget_key(prefix: str, rel: dict) -> str:
+    digest = hashlib.md5(relation_key(rel).encode()).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def prune_relationships(rels: list[dict], table_names: set[str]) -> list[dict]:
+    return [
+        r for r in rels
+        if r.get("from_table") in table_names and r.get("to_table") in table_names
+    ]
+
+
+def table_row_count(df: pd.DataFrame) -> int:
+    return int(df.attrs.get("source_row_count", len(df)))
+
+
+def table_rows_loaded(df: pd.DataFrame) -> int:
+    return int(df.attrs.get("rows_loaded", len(df)))
+
+
+def dataframe_to_payload(df: pd.DataFrame) -> dict:
+    serializable = df.copy()
+    for col in serializable.columns:
+        if pd.api.types.is_datetime64_any_dtype(serializable[col]):
+            serializable[col] = serializable[col].astype(str)
+            serializable.loc[serializable[col] == "NaT", col] = None
+
+    attrs = {}
+    for key in ("source", "columns_meta", "source_row_count", "rows_loaded", "database_type", "database_schema"):
+        if key in df.attrs:
+            attrs[key] = df.attrs[key]
+
+    return {
+        "columns": [str(c) for c in df.columns],
+        "records": json.loads(serializable.to_json(orient="records", date_format="iso")),
+        "attrs": attrs,
+    }
+
+
+def payload_to_dataframe(payload: dict) -> pd.DataFrame:
+    columns = payload.get("columns", [])
+    records = payload.get("records", [])
+    df = pd.DataFrame(records, columns=columns)
+    df.attrs.update(payload.get("attrs", {}))
+    if "rows_loaded" not in df.attrs:
+        df.attrs["rows_loaded"] = len(df)
+    return df
+
+
+def save_session_json(
+    tables: dict[str, pd.DataFrame],
+    rels: list[dict],
+    manual_rels: list[dict],
+    schema_rels: list[dict],
+    suppressed_rels: list[str],
+    settings: dict,
+) -> str:
+    session = {
+        "version": 1,
+        "tables": {name: dataframe_to_payload(df) for name, df in tables.items()},
+        "relationships": rels,
+        "manual_relationships": manual_rels,
+        "schema_relationships": schema_rels,
+        "suppressed_relationships": suppressed_rels,
+        "settings": settings,
+    }
+    return json.dumps(session, indent=2)
+
+
+def restore_session_json(raw: str) -> dict:
+    session = json.loads(raw or "{}")
+    tables = {
+        name: payload_to_dataframe(payload)
+        for name, payload in session.get("tables", {}).items()
+    }
+    return {
+        "tables": tables,
+        "relationships": session.get("relationships", []),
+        "manual_relationships": session.get("manual_relationships", []),
+        "schema_relationships": session.get("schema_relationships", []),
+        "suppressed_relationships": session.get("suppressed_relationships", []),
+        "settings": session.get("settings", {}),
+    }
+
+
+def _column_declared_types(df: pd.DataFrame) -> dict[str, str]:
+    meta = df.attrs.get("columns_meta", []) or []
+    declared = {}
+    for item in meta:
+        if isinstance(item, dict) and item.get("name"):
+            declared[item["name"]] = str(item.get("type", ""))
+    return declared
+
+
+def _dbt_type_hint(col: str, df: pd.DataFrame, declared: dict[str, str]) -> str:
+    hint = declared.get(col, "").strip()
+    if hint:
+        return hint
+    series = df[col] if col in df.columns else None
+    if series is None:
+        return "string"
+    if pd.api.types.is_integer_dtype(series):
+        return "integer"
+    if pd.api.types.is_numeric_dtype(series):
+        return "numeric"
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return "timestamp"
+    if pd.api.types.is_bool_dtype(series):
+        return "boolean"
+    return "string"
+
+
+def _mermaid_type(col: str, df: pd.DataFrame, declared: dict[str, str]) -> str:
+    hint = declared.get(col, "").lower()
+    if hint:
+        if any(token in hint for token in ("int", "number", "numeric", "decimal", "float", "double")):
+            return "int"
+        if any(token in hint for token in ("date", "time")):
+            return "date"
+        if "bool" in hint:
+            return "boolean"
+    series = df[col] if col in df.columns else None
+    if series is None:
+        return "string"
+    if pd.api.types.is_numeric_dtype(series):
+        return "int"
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return "date"
+    if pd.api.types.is_bool_dtype(series):
+        return "boolean"
+    return "string"
+
+
+def generate_dbt_yaml(
+    tables: dict[str, pd.DataFrame],
+    rels: list[dict],
+    pk_map: dict[str, list[str]],
+    cpk_map: dict[str, list[list[str]]] | None = None,
+) -> str:
+    models = []
+    cpk_map = cpk_map or {}
+
+    for tname, df in tables.items():
+        declared = _column_declared_types(df)
+        table_rels = {r["from_col"]: r for r in rels if r.get("from_table") == tname}
+        cpk_groups = cpk_map.get(tname, [])
+        cpk_cols = {col for group in cpk_groups for col in group}
+
+        model = {"name": tname, "columns": []}
+        for col in df.columns:
+            column_entry = {"name": col}
+            description = f"type: {_dbt_type_hint(col, df, declared)}"
+            if description:
+                column_entry["description"] = description
+
+            tests = []
+            if col in pk_map.get(tname, []):
+                tests.extend(["unique", "not_null"])
+            elif col in cpk_cols:
+                tests.append("not_null")
+
+            if col in table_rels:
+                rel = table_rels[col]
+                tests.append({
+                    "relationships": {
+                        "to": f"ref('{rel['to_table']}')",
+                        "field": rel.get("to_col") or col,
+                    }
+                })
+
+            if tests:
+                column_entry["tests"] = tests
+            model["columns"].append(column_entry)
+
+        if cpk_groups:
+            model["tests"] = [
+                {
+                    "dbt_utils.unique_combination_of_columns": {
+                        "combination_of_columns": group
+                    }
+                }
+                for group in cpk_groups
+            ]
+
+        models.append(model)
+
+    return yaml.safe_dump({"version": 2, "models": models}, sort_keys=False, allow_unicode=True)
+
+
+def generate_mermaid_erd(
+    tables: dict[str, pd.DataFrame],
+    rels: list[dict],
+    pk_map: dict[str, list[str]],
+    cpk_map: dict[str, list[list[str]]] | None = None,
+) -> str:
+    lines = ["erDiagram"]
+    cpk_map = cpk_map or {}
+
+    for tname, df in tables.items():
+        declared = _column_declared_types(df)
+        cpk_cols = {col for group in cpk_map.get(tname, []) for col in group}
+        lines.append(f"    {tname} {{")
+        for col in df.columns:
+            marker = " PK" if col in pk_map.get(tname, []) or col in cpk_cols else ""
+            lines.append(f"        {_mermaid_type(col, df, declared)} {col}{marker}")
+        lines.append("    }")
+
+    for rel in rels:
+        lines.append(
+            f'    {rel["to_table"]} ||--o{{ {rel["from_table"]} : "{rel["from_col"]}"'
+        )
+
+    return "\n".join(lines)
+
+
+def build_relationship_export_df(rels: list[dict], tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    columns = [
+        "from_table", "from_col", "to_table", "to_col", "detected_by",
+        "confidence", "score", "signals", "reasons",
+        "from_table_rows", "from_rows_loaded", "from_table_cols",
+        "to_table_rows", "to_rows_loaded", "to_table_cols",
+    ]
+    rows = []
+    for rel in rels:
+        from_df = tables.get(rel["from_table"])
+        to_df = tables.get(rel["to_table"])
+        rows.append({
+            "from_table": rel["from_table"],
+            "from_col": rel["from_col"],
+            "to_table": rel["to_table"],
+            "to_col": rel.get("to_col") or "",
+            "detected_by": rel["detected_by"],
+            "confidence": rel.get("confidence", ""),
+            "score": rel.get("score", ""),
+            "signals": ", ".join(rel.get("signals", {}).keys()),
+            "reasons": "; ".join(rel.get("reasons", [])),
+            "from_table_rows": table_row_count(from_df) if from_df is not None else "",
+            "from_rows_loaded": table_rows_loaded(from_df) if from_df is not None else "",
+            "from_table_cols": len(from_df.columns) if from_df is not None else "",
+            "to_table_rows": table_row_count(to_df) if to_df is not None else "",
+            "to_rows_loaded": table_rows_loaded(to_df) if to_df is not None else "",
+            "to_table_cols": len(to_df.columns) if to_df is not None else "",
+        })
+    return pd.DataFrame(rows, columns=columns)
+
+
+def discover_database_tables(db_url: str, schema_name: str = "") -> list[str]:
+    try:
+        import sqlalchemy as sa
+    except ImportError as exc:
+        raise RuntimeError("Install SQLAlchemy to use database connectors: pip install SQLAlchemy") from exc
+
+    engine = sa.create_engine(db_url)
+    try:
+        inspector = sa.inspect(engine)
+        schema_arg = schema_name or None
+        table_names = inspector.get_table_names(schema=schema_arg)
+        try:
+            table_names += inspector.get_view_names(schema=schema_arg)
+        except Exception:
+            pass
+        return sorted(set(table_names))
+    finally:
+        engine.dispose()
+
+
+def load_database_tables(
+    db_url: str,
+    table_names: list[str],
+    schema_name: str = "",
+    row_limit: int = 5000,
+    source_label: str = "database",
+) -> tuple[dict[str, pd.DataFrame], list[str]]:
+    try:
+        import sqlalchemy as sa
+    except ImportError as exc:
+        raise RuntimeError("Install SQLAlchemy to use database connectors: pip install SQLAlchemy") from exc
+
+    if not table_names:
+        return {}, []
+
+    engine = sa.create_engine(db_url)
+    loaded: dict[str, pd.DataFrame] = {}
+    errors: list[str] = []
+    schema_arg = schema_name or None
+
+    try:
+        with engine.connect() as conn:
+            for table_name in table_names:
+                display_name = f"{schema_name}.{table_name}" if schema_name else table_name
+                try:
+                    table = sa.Table(table_name, sa.MetaData(), schema=schema_arg, autoload_with=conn)
+                    stmt = sa.select(table)
+                    if row_limit and row_limit > 0:
+                        stmt = stmt.limit(int(row_limit))
+                    df = pd.read_sql(stmt, conn)
+                    df.columns = [re.sub(r"[^a-zA-Z0-9_]", "_", str(c)) for c in df.columns]
+                    df.attrs["source"] = f"db:{source_label}"
+                    df.attrs["database_type"] = source_label
+                    df.attrs["database_schema"] = schema_name or ""
+                    df.attrs["rows_loaded"] = len(df)
+                    df.attrs["columns_meta"] = [
+                        {"name": str(col.name), "type": str(col.type)}
+                        for col in table.columns
+                    ]
+                    try:
+                        count_stmt = sa.select(sa.func.count()).select_from(table)
+                        df.attrs["source_row_count"] = int(conn.execute(count_stmt).scalar_one())
+                    except Exception:
+                        df.attrs["source_row_count"] = len(df)
+                    loaded[display_name] = df
+                except Exception as exc:
+                    errors.append(f"{display_name}: {exc}")
+    finally:
+        engine.dispose()
+
+    return loaded, errors
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Network / Graph builder (pyvis via networkx)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1372,6 +1753,16 @@ if "show_schema_ref" not in st.session_state:
     st.session_state.show_schema_ref = False
 if "show_signal_toggles" not in st.session_state:
     st.session_state.show_signal_toggles = False
+if "suppressed_rels" not in st.session_state:
+    st.session_state.suppressed_rels = []
+if "db_discovered_tables" not in st.session_state:
+    st.session_state.db_discovered_tables = []
+if "db_discovery_key" not in st.session_state:
+    st.session_state.db_discovery_key = ""
+if "detect_method" not in st.session_state:
+    st.session_state.detect_method = "both"
+if "min_confidence" not in st.session_state:
+    st.session_state.min_confidence = "medium"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1399,7 +1790,7 @@ with st.sidebar:
   <div style="font-size:13px;font-weight:700;color:var(--text);letter-spacing:0.3px;margin-bottom:2px;">
     TABLE_RELATIONSHIP_EXPLORER</div>
   <div style="font-size:11px;color:var(--text3);font-family:'Inter',sans-serif;line-height:1.4;">
-    Detect PKs &amp; FKs across CSV tables</div>
+  Detect PKs &amp; FKs across uploaded files and database tables</div>
 </div>""", unsafe_allow_html=True)
 
     # ── Theme toggle ─────────────────────────────────────────────────────
@@ -1410,7 +1801,7 @@ with st.sidebar:
         st.rerun()
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
 
-    # ── 01 Upload CSVs ───────────────────────────────────────────────────
+    # ── 01 Upload Tables ─────────────────────────────────────────────────
     st.markdown('<div class="sidebar-section">01 // Upload Tables</div>', unsafe_allow_html=True)
     csv_files = st.file_uploader("Upload table files", type=["csv", "tsv", "xlsx", "xls", "xlsm", "ods", "parquet", "json", "ndjson"], accept_multiple_files=True, key="csv_upload", label_visibility="collapsed")
 
@@ -1474,10 +1865,90 @@ with st.sidebar:
         if added:    parts.append(f"{added} added")
         if replaced: parts.append(f"{replaced} replaced")
         if parts:
+            st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
+            st.session_state.suppressed_rels = []
+            table_names = set(st.session_state.tables.keys())
+            st.session_state.schema_rels = prune_relationships(st.session_state.schema_rels, table_names)
+            st.session_state.manual_rels = prune_relationships(st.session_state.manual_rels, table_names)
             st.success(f"{', '.join(parts)} — {len(st.session_state.tables)} table(s) total")
 
-    # ── 02 Schema Definition ─────────────────────────────────────────────
-    st.markdown('<div class="sidebar-section">02 // Schema Definition (JSON/YAML)</div>', unsafe_allow_html=True)
+    # ── 02 Database Connection ────────────────────────────────────────────
+    st.markdown('<div class="sidebar-section">02 // Database Connection</div>', unsafe_allow_html=True)
+    db_type = st.selectbox(
+        "Database type",
+        options=list(DB_TYPE_CONFIG.keys()),
+        format_func=lambda key: DB_TYPE_CONFIG[key]["label"],
+        key="db_type",
+    )
+    st.markdown(
+        f'<div class="sidebar-hint">{DB_TYPE_CONFIG[db_type]["driver_note"]}<br><code>{DB_TYPE_CONFIG[db_type]["example"]}</code></div>',
+        unsafe_allow_html=True,
+    )
+    db_url = st.text_input("SQLAlchemy URL", key="db_url")
+    db_schema = st.text_input("Schema / dataset (optional)", key="db_schema")
+    db_row_limit = st.number_input("Rows to load per table", min_value=0, value=5000, step=500, key="db_row_limit")
+    db_discovery_key = f"{db_type}|{db_url}|{db_schema}"
+
+    if st.button("Discover Tables", key="discover_db_tables", width='stretch'):
+        if not db_url.strip():
+            st.error("Enter a SQLAlchemy URL first.")
+        else:
+            try:
+                discovered = discover_database_tables(db_url.strip(), db_schema.strip())
+                st.session_state.db_discovered_tables = discovered
+                st.session_state.db_discovery_key = db_discovery_key
+                if discovered:
+                    st.success(f"Discovered {len(discovered)} table(s)/view(s).")
+                else:
+                    st.warning("Connected, but no tables or views were discovered.")
+            except Exception as e:
+                st.error(f"Database discovery failed: {e}")
+
+    discovered_tables = st.session_state.db_discovered_tables if st.session_state.db_discovery_key == db_discovery_key else []
+    manual_db_tables = st.text_input("Table names (comma-separated, optional)", key="manual_db_tables")
+    selected_db_tables = st.multiselect(
+        "Discovered tables",
+        options=discovered_tables,
+        default=discovered_tables[: min(8, len(discovered_tables))],
+        key="selected_db_tables",
+    ) if discovered_tables else []
+
+    if st.button("Load Database Tables", key="load_db_tables", type="primary", width='stretch'):
+        requested_tables = selected_db_tables or [
+            name.strip() for name in manual_db_tables.split(",") if name.strip()
+        ]
+        if not db_url.strip():
+            st.error("Enter a SQLAlchemy URL first.")
+        elif not requested_tables:
+            st.error("Select discovered tables or enter table names to load.")
+        else:
+            try:
+                loaded_tables, load_errors = load_database_tables(
+                    db_url.strip(),
+                    requested_tables,
+                    schema_name=db_schema.strip(),
+                    row_limit=int(db_row_limit),
+                    source_label=db_type,
+                )
+                for tname, df in loaded_tables.items():
+                    st.session_state.tables[tname] = df
+                if loaded_tables:
+                    st.session_state.fk_cache = {}
+                    st.session_state.last_digest = ""
+                    st.session_state.suppressed_rels = []
+                    table_names = set(st.session_state.tables.keys())
+                    st.session_state.schema_rels = prune_relationships(st.session_state.schema_rels, table_names)
+                    st.session_state.manual_rels = prune_relationships(st.session_state.manual_rels, table_names)
+                    st.success(f"Loaded {len(loaded_tables)} database table(s).")
+                if load_errors:
+                    for msg in load_errors:
+                        st.warning(msg)
+            except Exception as e:
+                st.error(f"Database load failed: {e}")
+
+    # ── 03 Schema Definition ─────────────────────────────────────────────
+    st.markdown('<div class="sidebar-section">03 // Schema Definition (JSON/YAML)</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-hint">Define exact relationships without data. Overrides auto-detection for named tables.</div>', unsafe_allow_html=True)
 
     schema_file = st.file_uploader("Upload schema file", type=["json", "yaml", "yml"], key="schema_upload", label_visibility="collapsed")
@@ -1491,9 +1962,31 @@ with st.sidebar:
             for tname, df in tbls.items():
                 st.session_state.tables[tname] = df
             st.session_state.schema_rels = srels
+            st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
+            st.session_state.suppressed_rels = []
             st.success(f"Schema loaded: {len(tbls)} table(s), {len(srels)} relationship(s)")
         except Exception as e:
             st.error(f"Schema parse error: {e}")
+
+    # ── 04 Session Restore ────────────────────────────────────────────────
+    st.markdown('<div class="sidebar-section">04 // Session Restore</div>', unsafe_allow_html=True)
+    session_file = st.file_uploader("Restore saved session", type=["json"], key="session_restore_upload", label_visibility="collapsed")
+    if session_file and st.button("Restore Session", key="restore_session_btn", width='stretch'):
+        try:
+            restored = restore_session_json(session_file.read().decode("utf-8"))
+            st.session_state.tables = restored["tables"]
+            st.session_state.schema_rels = restored["schema_relationships"]
+            st.session_state.manual_rels = restored["manual_relationships"]
+            st.session_state.suppressed_rels = restored["suppressed_relationships"]
+            for key, value in restored.get("settings", {}).items():
+                st.session_state[key] = value
+            st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
+            st.success(f"Restored session with {len(st.session_state.tables)} table(s).")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Session restore failed: {e}")
 
     _ref_label = "Hide schema reference" if st.session_state.show_schema_ref else "Show schema reference"
     if st.button(_ref_label, key="toggle_schema_ref", width='stretch'):
@@ -1527,7 +2020,14 @@ with st.sidebar:
         to_remove = []
         for tname, df in st.session_state.tables.items():
             src = df.attrs.get("source", "csv")
-            row_str = f"{len(df):,}r" if len(df) > 0 else "schema"
+            total_rows = table_row_count(df)
+            loaded_rows = table_rows_loaded(df)
+            if len(df) > 0 and loaded_rows != total_rows:
+                row_str = f"{loaded_rows:,}/{total_rows:,}r"
+            elif len(df) > 0:
+                row_str = f"{total_rows:,}r"
+            else:
+                row_str = "schema"
             col1, col2 = st.columns([4, 1])
             with col1:
                 st.markdown(f"""<div class="tbl-item">
@@ -1539,28 +2039,41 @@ with st.sidebar:
                     to_remove.append(tname)
         for t in to_remove:
             del st.session_state.tables[t]
+            table_names = set(st.session_state.tables.keys())
+            st.session_state.schema_rels = prune_relationships(st.session_state.schema_rels, table_names)
+            st.session_state.manual_rels = prune_relationships(st.session_state.manual_rels, table_names)
+            st.session_state.suppressed_rels = []
+            st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
             st.rerun()
 
         if st.button("✕  Remove All", type="secondary", width='stretch'):
             st.session_state.tables = {}
             st.session_state.schema_rels = []
             st.session_state.manual_rels = []
+            st.session_state.suppressed_rels = []
             st.session_state.fk_cache = {}
+            st.session_state.last_digest = ""
             st.rerun()
 
-    # ── 03 Detection Method ──────────────────────────────────────────────
-    st.markdown('<div class="sidebar-section">03 // Detection Method</div>', unsafe_allow_html=True)
-    detect_method = st.selectbox("Signal family", options=[
-        ("All signals (recommended)", "both"),
-        ("Naming conventions only",   "naming"),
-        ("Content analysis only",     "content"),
-        ("Manual only",               "manual"),
-    ], format_func=lambda x: x[0], index=0)[1]
+    # ── 05 Detection Method ──────────────────────────────────────────────
+    st.markdown('<div class="sidebar-section">05 // Detection Method</div>', unsafe_allow_html=True)
+    detect_method = st.selectbox(
+        "Signal family",
+        options=["both", "naming", "content", "manual"],
+        format_func=lambda x: {
+            "both": "All signals (recommended)",
+            "naming": "Naming conventions only",
+            "content": "Content analysis only",
+            "manual": "Manual only",
+        }[x],
+        key="detect_method",
+    )
 
     min_confidence = st.select_slider(
         "Min confidence to show",
         options=["low", "medium", "high"],
-        value="medium",
+        key="min_confidence",
     )
 
     if detect_method not in ("manual", "naming"):
@@ -1606,8 +2119,8 @@ with st.sidebar:
         ),
     )
 
-    # ── 04 Manual Override ───────────────────────────────────────────────
-    st.markdown('<div class="sidebar-section">04 // Manual Override</div>', unsafe_allow_html=True)
+    # ── 06 Manual Override ───────────────────────────────────────────────
+    st.markdown('<div class="sidebar-section">06 // Manual Override</div>', unsafe_allow_html=True)
     tnames = list(st.session_state.tables.keys())
 
     if len(tnames) >= 2:
@@ -1646,7 +2159,7 @@ if not tables:
       <div class="icon">◫</div>
       <h3>No tables loaded</h3>
       <p style="color:#5a7898;font-size:13px;font-family:'JetBrains Mono',monospace;">
-        Upload CSV files or a JSON/YAML schema using the sidebar to begin.
+        Upload files, load database tables, or restore a saved session from the sidebar to begin.
       </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1681,9 +2194,10 @@ else:
     schema_pairs = {(r["from_table"], r["to_table"]) for r in st.session_state.schema_rels}
     filtered_auto = [r for r in auto_rels if (r["from_table"], r["to_table"]) not in schema_pairs]
     all_rels = st.session_state.schema_rels + filtered_auto + st.session_state.manual_rels
+    visible_rels = [r for r in all_rels if relation_key(r) not in set(st.session_state.suppressed_rels)]
 
     # ── Tabs ─────────────────────────────────────────────────────────────
-    tab_erd, tab_details, tab_rels = st.tabs(["ERD Diagram", "Table Details", "Relationships"])
+    tab_erd, tab_details, tab_rels, tab_exports = st.tabs(["ERD Diagram", "Table Details", "Relationships", "Exports"])
 
     # ─── ERD ─────────────────────────────────────────────────────────────
     with tab_erd:
@@ -1705,7 +2219,7 @@ else:
             )
 
         try:
-            html = build_pyvis_html(tables, all_rels, pk_map, cpk_map=cpk_map, spring_length=spring_length, dark_mode=st.session_state.get('dark_mode', True))
+            html = build_pyvis_html(tables, visible_rels, pk_map, cpk_map=cpk_map, spring_length=spring_length, dark_mode=st.session_state.get('dark_mode', True))
             st.components.v1.html(html, height=580, scrolling=False)
             st.markdown('<div class="erd-hint">drag to move &amp; pin nodes · double-click to unpin · scroll to zoom · hover for details</div>', unsafe_allow_html=True)
         except Exception as e:
@@ -1724,7 +2238,7 @@ else:
         for tname, df in tables.items():
             pks = pk_map.get(tname, [])
             cpks = cpk_map.get(tname, [])   # list of column-name lists
-            fk_rels = [r for r in all_rels if r["from_table"] == tname]
+            fk_rels = [r for r in visible_rels if r["from_table"] == tname]
             fk_cols = [r["from_col"] for r in fk_rels]
             src = df.attrs.get("source", "csv")
 
@@ -1732,7 +2246,15 @@ else:
             cpk_cols: set[str] = {c for group in cpks for c in group}
 
             # Pills HTML
-            pills = f'<span class="pill p-rows">{len(df):,} rows</span>' if len(df) > 0 else f'<span class="pill p-schema">schema only</span>'
+            row_total = table_row_count(df)
+            loaded_rows = table_rows_loaded(df)
+            if len(df) > 0:
+                if loaded_rows != row_total:
+                    pills = f'<span class="pill p-rows">{loaded_rows:,} loaded / {row_total:,} rows</span>'
+                else:
+                    pills = f'<span class="pill p-rows">{row_total:,} rows</span>'
+            else:
+                pills = f'<span class="pill p-schema">schema only</span>'
             pills += f'<span class="pill p-cols">{len(df.columns)} cols</span>'
             pills += f'<span class="pill p-schema">{src}</span>'
             if pks:
@@ -1788,7 +2310,7 @@ else:
 
     # ─── Relationships ────────────────────────────────────────────────────
     with tab_rels:
-        if not all_rels:
+        if not visible_rels:
             st.markdown("""<div class="empty-state">
               <div class="icon">⇌</div>
               <h3>No relationships detected</h3>
@@ -1809,7 +2331,7 @@ else:
                 ("manual",          "Manual Override",         "m-manual"),
             ]
             for key, label, cls in ALL_SECTIONS:
-                sec_rels = [r for r in all_rels if r["detected_by"] == key]
+                sec_rels = [r for r in visible_rels if r["detected_by"] == key]
                 if not sec_rels:
                     continue
                 st.markdown(f'<div class="rel-section">{label} ({len(sec_rels)})</div>', unsafe_allow_html=True)
@@ -1837,39 +2359,108 @@ else:
                         conf_html = ""
                         chips_block = ""
 
-                    st.markdown(f"""<div class="rel-row" style="flex-wrap:wrap;">
-                      <span class="rt">{r["from_table"]}</span>
-                      <span class="rc">.{r["from_col"]}</span>
-                      <span class="ra">→</span>
-                      <span class="rt">{r["to_table"]}</span>
-                      <span class="rc">.{to_col}</span>
-                      <span class="rm {cls}">{key.replace("_"," ")}</span>
-                      {conf_html}
-                      {chips_block}
-                    </div>""", unsafe_allow_html=True)
+                    row_col, action_col = st.columns([10, 1])
+                    with row_col:
+                        st.markdown(f"""<div class="rel-row" style="flex-wrap:wrap;">
+                          <span class="rt">{r["from_table"]}</span>
+                          <span class="rc">.{r["from_col"]}</span>
+                          <span class="ra">→</span>
+                          <span class="rt">{r["to_table"]}</span>
+                          <span class="rc">.{to_col}</span>
+                          <span class="rm {cls}">{key.replace("_"," ")}</span>
+                          {conf_html}
+                          {chips_block}
+                        </div>""", unsafe_allow_html=True)
+                    with action_col:
+                        if st.button("✕", key=relation_widget_key("suppress", r), help="Suppress this relationship"):
+                            st.session_state.suppressed_rels.append(relation_key(r))
+                            st.rerun()
+
+        if st.session_state.suppressed_rels:
+            suppressed_lookup = {relation_key(r): r for r in all_rels}
+            suppressed_visible = [
+                suppressed_lookup[key]
+                for key in st.session_state.suppressed_rels
+                if key in suppressed_lookup
+            ]
+            if suppressed_visible:
+                st.markdown('<div class="rel-section">Suppressed Relationships</div>', unsafe_allow_html=True)
+                for r in suppressed_visible:
+                    to_col = r.get("to_col") or "?"
+                    row_col, action_col = st.columns([10, 1])
+                    with row_col:
+                        st.markdown(
+                            f"""<div class="rel-row">
+                              <span class="rt">{r["from_table"]}</span>
+                              <span class="rc">.{r["from_col"]}</span>
+                              <span class="ra">→</span>
+                              <span class="rt">{r["to_table"]}</span>
+                              <span class="rc">.{to_col}</span>
+                              <span class="rm m-manual">suppressed</span>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                    with action_col:
+                        if st.button("↺", key=relation_widget_key("restore", r), help="Restore this relationship"):
+                            st.session_state.suppressed_rels = [
+                                key for key in st.session_state.suppressed_rels
+                                if key != relation_key(r)
+                            ]
+                            st.rerun()
+                if st.button("Restore All Suppressed", key="restore_all_suppressed"):
+                    st.session_state.suppressed_rels = []
+                    st.rerun()
 
         st.markdown('<div style="height:16px;"></div>', unsafe_allow_html=True)
 
-        # Export (include confidence + signals)
-        if all_rels:
-            export_df = pd.DataFrame([{
-                "from_table":  r["from_table"],
-                "from_col":    r["from_col"],
-                "to_table":    r["to_table"],
-                "to_col":      r.get("to_col") or "",
-                "detected_by": r["detected_by"],
-                "confidence":  r.get("confidence", ""),
-                "score":       r.get("score", ""),
-                "signals":     ", ".join(r.get("signals", {}).keys()),
-                "reasons":     "; ".join(r.get("reasons", [])),
-            } for r in all_rels])
+    with tab_exports:
+        settings_payload = {
+            "dark_mode": st.session_state.get("dark_mode", True),
+            "detect_method": detect_method,
+            "min_confidence": min_confidence,
+            "fl_overlap": st.session_state.get("fl_overlap", True),
+            "fl_card": st.session_state.get("fl_card", True),
+            "fl_fmt": st.session_state.get("fl_fmt", True),
+            "fl_dist": st.session_state.get("fl_dist", True),
+            "fl_null": st.session_state.get("fl_null", False),
+            "enable_composite_pk": enable_composite_pk,
+        }
+        export_df = build_relationship_export_df(visible_rels, tables)
+        csv_bytes = export_df.to_csv(index=False).encode()
+        dbt_yaml = generate_dbt_yaml(tables, visible_rels, pk_map, cpk_map=cpk_map)
+        mermaid_erd = generate_mermaid_erd(tables, visible_rels, pk_map, cpk_map=cpk_map)
+        session_json = save_session_json(
+            tables,
+            visible_rels,
+            st.session_state.manual_rels,
+            st.session_state.schema_rels,
+            st.session_state.suppressed_rels,
+            settings_payload,
+        )
 
-            csv_bytes = export_df.to_csv(index=False).encode()
-            st.download_button(
-                label="⬇  Export Relationships CSV",
-                data=csv_bytes,
-                file_name="table_relationships.csv",
-                mime="text/csv",
-            )
+        st.download_button(
+            label="⬇  Export Relationships CSV",
+            data=csv_bytes,
+            file_name="table_relationships.csv",
+            mime="text/csv",
+        )
+        st.download_button(
+            label="⬇  Export dbt schema.yml",
+            data=dbt_yaml.encode("utf-8"),
+            file_name="schema.yml",
+            mime="text/yaml",
+        )
+        st.download_button(
+            label="⬇  Export Mermaid ERD",
+            data=mermaid_erd.encode("utf-8"),
+            file_name="erd.mmd",
+            mime="text/plain",
+        )
+        st.download_button(
+            label="⬇  Save Session JSON",
+            data=session_json.encode("utf-8"),
+            file_name="table-explorer-session.json",
+            mime="application/json",
+        )
 
 st.markdown('</div>', unsafe_allow_html=True)
