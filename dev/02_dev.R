@@ -3,6 +3,10 @@
 # Run interactively during development.
 # ============================================================
 
+# ── Bootstrap a fresh clone (run once per environment) ───────
+# install.packages(c("devtools", "pkgload", "testthat"))
+# devtools::install_deps(dependencies = TRUE)
+
 # ── Load the package for interactive use ─────────────────────
 pkgload::load_all(export_all = FALSE)
 

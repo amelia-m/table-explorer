@@ -2,7 +2,7 @@
 
 An interactive tool for mapping primary keys, foreign keys, and inter-table relationships across tabular data. Upload files or connect to a database, get an interactive ERD, column-level metadata, and exportable reports.
 
-The primary implementation is **R/Shiny**. A **Python/Streamlit** version also exists but has fewer features and is not actively maintained at this time.
+The primary implementation is **R/Shiny**. A **Python/Streamlit** version is also supported as a secondary implementation and may be updated more slowly than the R version.
 
 ---
 
@@ -81,6 +81,20 @@ app_server.R
 remotes::install_github("amelia-m/table-explorer")
 ```
 
+### Development setup
+
+For a fresh clone, use the standard R package workflow so the existing tests run in a normal development environment:
+
+```r
+# Install development tooling once
+install.packages(c("devtools", "pkgload", "testthat"))
+
+# From the repository root, install package dependencies including Suggests
+devtools::install_deps(dependencies = TRUE)
+```
+
+Installing `Suggests` is recommended for full test coverage, because some tests exercise optional file readers and database connectors.
+
 **Optional packages** (installed on demand for specific formats/databases):
 
 ```r
@@ -157,38 +171,45 @@ See `dev/03_deploy.R` for deployment helpers.
 ### Running tests
 
 ```r
-# Recommended: uses devtools and loads the package properly
+# From the repository root: loads the package and runs the full test suite
 devtools::test()
 
-# Or directly with testthat:
+# If you already installed the package and want to test the installed build:
 testthat::test_package("tableexplorer")
 ```
+
+If you only want to validate the package locally without installing it first, `devtools::test()` is the recommended entry point.
+
+GitHub Actions now runs the same R test suite on pushes and pull requests via `.github/workflows/r-ci.yml`.
 
 ---
 
 ## Python/Streamlit Version
 
-> **Note:** The Python version is in an earlier development phase and has fewer features than the R/Shiny version. It will be updated over time but is not the current development focus.
+> **Note:** The Python version is supported, but it remains the secondary implementation. Feature parity work may land later here than in the R/Shiny version.
 
 ### Current Python features
 
 - Multi-format file upload (CSV, TSV, Excel, ODS, Parquet, JSON, NDJSON)
+- Database import via SQLAlchemy URLs (SQLite plus other backends with the appropriate driver installed)
 - 7-signal FK inference engine with confidence scoring
 - JSON/YAML schema input
+- Run Detection button for applying detection-setting changes
+- Scan triage for large schemas (full scan / naming-only / skip)
 - Interactive ERD via PyVis
 - Dark/light mode toggle
 - Manual relationship overrides
+- Automatic table and column name cleaning with a rename log
+- Relationship suppress/restore controls
+- Relationships CSV export with table-size metadata
+- dbt schema.yml export
+- Mermaid ERD export
+- Session save/restore (JSON)
 - Relationship caching (MD5-digested)
 
-### Not yet in Python
+### Still behind R/Shiny
 
-- Database connectors
-- Scan triage for large schemas
-- Run Detection button (settings changes trigger immediately)
-- Table name cleaning
-- dbt YAML / Mermaid ERD / session save-restore exports
-- Table size in exports
-- Relationship suppress/restore UI
+The Python version now covers the main parity checklist above, but it remains the slower-moving secondary implementation.
 
 ### Python setup
 
@@ -198,6 +219,35 @@ streamlit run app.py
 ```
 
 Opens at `http://localhost:8501`.
+
+### Python database connectors
+
+The Streamlit app accepts SQLAlchemy database URLs. SQLite works with the base requirements; other backends need their matching driver package installed in the Python environment.
+
+Examples:
+
+```bash
+# PostgreSQL
+pip install psycopg
+
+# MySQL
+pip install pymysql
+
+# SQL Server
+pip install pyodbc
+
+# Snowflake
+pip install snowflake-sqlalchemy
+
+# BigQuery
+pip install sqlalchemy-bigquery
+
+# Redshift
+pip install sqlalchemy-redshift redshift_connector
+
+# Oracle
+pip install oracledb
+```
 
 ### Python deployment
 
