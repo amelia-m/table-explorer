@@ -81,6 +81,20 @@ app_server.R
 remotes::install_github("amelia-m/table-explorer")
 ```
 
+### Development setup
+
+For a fresh clone, use the standard R package workflow so the existing tests run in a normal development environment:
+
+```r
+# Install development tooling once
+install.packages(c("devtools", "pkgload", "testthat"))
+
+# From the repository root, install package dependencies including Suggests
+devtools::install_deps(dependencies = TRUE)
+```
+
+Installing `Suggests` is recommended for full test coverage, because some tests exercise optional file readers and database connectors.
+
 **Optional packages** (installed on demand for specific formats/databases):
 
 ```r
@@ -157,12 +171,14 @@ See `dev/03_deploy.R` for deployment helpers.
 ### Running tests
 
 ```r
-# Recommended: uses devtools and loads the package properly
+# From the repository root: loads the package and runs the full test suite
 devtools::test()
 
-# Or directly with testthat:
+# If you already installed the package and want to test the installed build:
 testthat::test_package("tableexplorer")
 ```
+
+If you only want to validate the package locally without installing it first, `devtools::test()` is the recommended entry point.
 
 ---
 
