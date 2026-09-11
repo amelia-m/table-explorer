@@ -180,6 +180,8 @@ testthat::test_package("tableexplorer")
 
 If you only want to validate the package locally without installing it first, `devtools::test()` is the recommended entry point.
 
+GitHub Actions now runs the same R test suite on pushes and pull requests via `.github/workflows/r-ci.yml`.
+
 ---
 
 ## Python/Streamlit Version
