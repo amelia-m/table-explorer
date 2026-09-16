@@ -262,7 +262,7 @@ mod_upload_server <- function(
       }
       n <- length(file_map)
       showNotification(
-        paste0(n, " table(s) added - ",length(merged), " total"),
+        paste0(n, " table(s) added - ", length(merged), " total"),
         type = "message",
         duration = 4
       )
