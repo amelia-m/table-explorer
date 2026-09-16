@@ -9,14 +9,17 @@ mod_db_connect_ui <- function(id) {
   tagList(
     div(class = "section-title", "03 // Database Connection"),
     selectInput(
-      ns("db_type"), NULL,
+      ns("db_type"),
+      NULL,
       choices = c("(select)" = "", db_types),
       selected = ""
     ),
     conditionalPanel(
       condition = sprintf(
         "input['%s'] != '' && input['%s'] != 'sqlite' && input['%s'] != 'bigquery'",
-        ns("db_type"), ns("db_type"), ns("db_type")
+        ns("db_type"),
+        ns("db_type"),
+        ns("db_type")
       ),
       textInput(ns("db_host"), "Host:", placeholder = "localhost"),
       textInput(ns("db_port"), "Port:", placeholder = "auto"),
@@ -27,9 +30,12 @@ mod_db_connect_ui <- function(id) {
     ),
     conditionalPanel(
       condition = sprintf("input['%s'] == 'sqlite'", ns("db_type")),
-      fileInput(ns("db_sqlite_file"), NULL,
-                accept = c(".db", ".sqlite", ".sqlite3"),
-                buttonLabel = "Select SQLite")
+      fileInput(
+        ns("db_sqlite_file"),
+        NULL,
+        accept = c(".db", ".sqlite", ".sqlite3"),
+        buttonLabel = "Select SQLite"
+      )
     ),
     conditionalPanel(
       condition = sprintf("input['%s'] == 'bigquery'", ns("db_type")),
@@ -39,7 +45,8 @@ mod_db_connect_ui <- function(id) {
     conditionalPanel(
       condition = sprintf(
         "input['%s'] == 'sqlserver' || input['%s'] == 'snowflake'",
-        ns("db_type"), ns("db_type")
+        ns("db_type"),
+        ns("db_type")
       ),
       textInput(ns("db_driver"), "ODBC Driver:", placeholder = "auto-detect")
     ),
@@ -48,7 +55,11 @@ mod_db_connect_ui <- function(id) {
       div(
         style = "display:flex;gap:6px;margin-bottom:8px;",
         actionButton(ns("btn_db_connect"), "Connect", class = "btn-add"),
-        actionButton(ns("btn_db_disconnect"), "Disconnect", class = "btn-danger-soft")
+        actionButton(
+          ns("btn_db_disconnect"),
+          "Disconnect",
+          class = "btn-danger-soft"
+        )
       ),
       uiOutput(ns("db_status_ui")),
       uiOutput(ns("db_tables_ui")),
@@ -65,8 +76,13 @@ mod_db_connect_ui <- function(id) {
 #' @param schema_rels_rv reactiveVal holding schema relationships
 #' @param table_meta_rv reactiveVal holding table metadata
 #' @noRd
-mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
-                                   schema_rels_rv, table_meta_rv) {
+mod_db_connect_server <- function(
+  id,
+  all_tables_rv,
+  rename_log_rv,
+  schema_rels_rv,
+  table_meta_rv
+) {
   moduleServer(id, function(input, output, session) {
     db_conn_rv <- reactiveVal(NULL)
     db_meta_rv <- reactiveVal(NULL)
@@ -74,9 +90,15 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
     output$db_status_ui <- renderUI({
       conn <- db_conn_rv()
       if (is.null(conn)) {
-        div(style = "font-size:10px;color:var(--text-faint);margin-bottom:6px;", "Not connected")
+        div(
+          style = "font-size:10px;color:var(--text-faint);margin-bottom:6px;",
+          "Not connected"
+        )
       } else {
-        div(style = "font-size:10px;color:#4ade80;margin-bottom:6px;", "\u2713 Connected")
+        div(
+          style = "font-size:10px;color:#4ade80;margin-bottom:6px;",
+          "\u2713 Connected"
+        )
       }
     })
 
@@ -85,14 +107,19 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
       type <- input$db_type
 
       port_val <- NULL
-      if (nzchar(input$db_port %||% "")) port_val <- as.integer(input$db_port)
+      if (nzchar(input$db_port %||% "")) {
+        port_val <- as.integer(input$db_port)
+      }
 
       path_val <- ""
-      if (type == "sqlite" && !is.null(input$db_sqlite_file))
+      if (type == "sqlite" && !is.null(input$db_sqlite_file)) {
         path_val <- input$db_sqlite_file$datapath
+      }
 
       errors <- character(0)
-      notify_fn <- function(msg) { errors <<- c(errors, msg) }
+      notify_fn <- function(msg) {
+        errors <<- c(errors, msg)
+      }
 
       conn <- withProgress(message = "Connecting...", value = 0.5, {
         db_connect(
@@ -111,7 +138,9 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
         )
       })
 
-      for (e in errors) showNotification(e, type = "error", duration = 10)
+      for (e in errors) {
+        showNotification(e, type = "error", duration = 10)
+      }
 
       if (!is.null(conn)) {
         db_conn_rv(conn)
@@ -119,10 +148,13 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
           db_introspect(conn, type, input$db_schema %||% "public")
         })
         db_meta_rv(meta)
-        if (length(meta$fks) > 0) schema_rels_rv(c(schema_rels_rv(), meta$fks))
+        if (length(meta$fks) > 0) {
+          schema_rels_rv(c(schema_rels_rv(), meta$fks))
+        }
         showNotification(
           paste0("Connected! Found ", length(meta$tables), " table(s)."),
-          type = "message", duration = 5
+          type = "message",
+          duration = 5
         )
       }
     })
@@ -139,9 +171,12 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
 
     output$db_tables_ui <- renderUI({
       meta <- db_meta_rv()
-      if (is.null(meta) || length(meta$tables) == 0) return(NULL)
+      if (is.null(meta) || length(meta$tables) == 0) {
+        return(NULL)
+      }
       checkboxGroupInput(
-        session$ns("db_selected_tables"), "Select tables:",
+        session$ns("db_selected_tables"),
+        "Select tables:",
         choices = meta$tables,
         selected = meta$tables[seq_len(min(10, length(meta$tables)))]
       )
@@ -173,17 +208,22 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
             )
             if (raw_tname != tname) {
               db_renames[[length(db_renames) + 1]] <- data.frame(
-                object_type = "table", source = tname,
-                original_name = raw_tname, cleaned_name = tname,
+                object_type = "table",
+                source = tname,
+                original_name = raw_tname,
+                cleaned_name = tname,
                 stringsAsFactors = FALSE
               )
             }
-            col_orig <- names(df); col_clean <- names(clean_df)
+            col_orig <- names(df)
+            col_clean <- names(clean_df)
             col_changed <- col_orig != col_clean
             if (any(col_changed)) {
               db_renames[[length(db_renames) + 1]] <- data.frame(
-                object_type = "column", source = tname,
-                original_name = col_orig[col_changed], cleaned_name = col_clean[col_changed],
+                object_type = "column",
+                source = tname,
+                original_name = col_orig[col_changed],
+                cleaned_name = col_clean[col_changed],
                 stringsAsFactors = FALSE
               )
             }
@@ -198,8 +238,13 @@ mod_db_connect_server <- function(id, all_tables_rv, rename_log_rv,
         rename_log_rv(rbind(prev, do.call(rbind, db_renames)))
       }
       showNotification(
-        paste0("Loaded ", length(input$db_selected_tables), " table(s) from database."),
-        type = "message", duration = 5
+        paste0(
+          "Loaded ",
+          length(input$db_selected_tables),
+          " table(s) from database."
+        ),
+        type = "message",
+        duration = 5
       )
     })
 

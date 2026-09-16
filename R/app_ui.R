@@ -22,7 +22,9 @@ app_ui <- function(request) {
       class = "app-header",
       div(
         h2("Table Relationship Explorer"),
-        p("Upload CSV files \u2192 detect FK relationships \u2192 visualise ERD")
+        p(
+          "Upload CSV files \u2192 detect FK relationships \u2192 visualise ERD"
+        )
       ),
       tags$button(
         id = "theme-toggle",
@@ -50,11 +52,11 @@ app_ui <- function(request) {
         9,
         tabsetPanel(
           id = "main_tabs",
-          tabPanel("ERD Diagram",       mod_erd_ui("erd")),
-          tabPanel("Table Details",     mod_table_details_ui("table_details")),
-          tabPanel("Relationships",     mod_relationships_ui("relationships")),
-          tabPanel("Name Changes",      mod_name_changes_ui("name_changes")),
-          tabPanel("Export",            mod_export_ui("export"))
+          tabPanel("ERD Diagram", mod_erd_ui("erd")),
+          tabPanel("Table Details", mod_table_details_ui("table_details")),
+          tabPanel("Relationships", mod_relationships_ui("relationships")),
+          tabPanel("Name Changes", mod_name_changes_ui("name_changes")),
+          tabPanel("Export", mod_export_ui("export"))
         )
       )
     ),

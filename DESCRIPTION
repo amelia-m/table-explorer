@@ -4,7 +4,7 @@ Title: Table Relationship Explorer
 Version: 0.2.0
 Authors@R:
     person("Table Explorer", role = c("aut", "cre"),
-           email = "author@example.com")
+           email = "amelia.miramonti@gmail.com")
 Description: Interactive Shiny app for exploring table relationships with
     multi-signal FK detection, ERD visualization, and multi-format file
     support.
