@@ -11,5 +11,7 @@
 #'   visOptions visEdges visNodes visInteraction visEvents
 #'   visHierarchicalLayout visPhysics visLayout
 #' @importFrom golem with_golem_options get_golem_options
+#' @importFrom stats cor median na.omit sd setNames
+#' @importFrom utils head object.size read.csv read.delim write.csv
 #' @keywords internal
 "_PACKAGE"

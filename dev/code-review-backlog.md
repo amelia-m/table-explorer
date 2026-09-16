@@ -157,7 +157,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   field, corroborating that `NAMESPACE` was hand-written.
   **Fix:** `devtools::document()`, commit `man/`.
 
-- [ ] **I8. `stats`, `utils` and `tools` are used but undeclared.**
+- [x] **I8. `stats`, `utils` and `tools` are used but undeclared.**
   13 `tools::` calls and 1 `utils::` in `R/utils_file_readers.R` with neither in `Imports`
   gives NOTE `'::' or ':::' import not declared`. Plus 43 unqualified calls to `setNames`,
   `head`, `median`, `sd`, `var`, `cor`, `na.omit`, `read.csv`, `write.csv` across 9 files
@@ -166,8 +166,10 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   `R/mod_name_changes.R`, `R/utils_export.R`, `R/utils_vis.R`), giving
   `no visible global function definition` NOTEs.
   **Fix:** add `stats`, `utils`, `tools` to `Imports` with matching `@importFrom` tags.
-  Partly done 2026-09-16: `tools` and `utils` added to `Imports`. Still open: `stats` in
-  `Imports`, and `@importFrom` tags for the unqualified calls.
+  Done 2026-09-16: `stats`, `tools` and `utils` added to `Imports`. `@importFrom` tags in
+  `R/tableexplorer-package.R` cover the 47 unqualified calls found by a parse-data scan
+  (stats: `cor`, `median`, `na.omit`, `sd`, `setNames`; utils: `head`, `object.size`,
+  `read.csv`, `read.delim`, `write.csv`). `NAMESPACE` regenerated with roxygen2 8.1.0.
 
 - [x] **I9. `pkgload` is used but declared nowhere in `DESCRIPTION`.**
   Referenced by `app.R:18` and `dev/02_dev.R:7`. Add to `Suggests`.
