@@ -109,11 +109,13 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   from `dragEnd`, read back into `net$nodes$x/y/fixed` in `build_network`), or move the
   mutable parts to `visNetworkProxy` so the network is never rebuilt. See D2.
 
-- [ ] **I3. `R/mod_erd.R:211-226` - double-click also fires `click`, so unpinning opens the detail panel.**
+- [x] **I3. `R/mod_erd.R:211-226` - double-click also fires `click`, so unpinning opens the detail panel.**
   vis-network emits `click` for each click of a double-click, and the `click` handler at
   `:190-197` calls `showNodePanel`. The new unpin gesture pops the node overlay as a side
   effect.
   **Fix:** short suppression timer in the click handler, or document the behaviour in the hint.
+  Done 2026-09-16: `click` now defers the panel by 250 ms, and `doubleClick` cancels the pending
+  timer. Single clicks open the panel 250 ms later than before.
 
 - [ ] **I4. `R/mod_erd.R:186-226` vs `:255-299` - visNetwork chain and both JS blobs duplicated for the circular branch.**
   The circular layout rebuilds `vis` from scratch, so the two ~25-line JS strings exist
