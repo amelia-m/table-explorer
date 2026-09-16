@@ -1,5 +1,5 @@
 # ============================================================
-# mod_detection.R — Detection Controls & Scan Triage
+# mod_detection.R - Detection Controls & Scan Triage
 # ============================================================
 
 #' Detection controls module UI
@@ -31,7 +31,7 @@ mod_detection_ui <- function(id) {
       tags$code("id"),
       ", ",
       tags$code("{table}_id"),
-      " \u2014 Content: uses value overlap, distribution similarity, format fingerprint, and more."
+      " - Content: uses value overlap, distribution similarity, format fingerprint, and more."
     ),
     conditionalPanel(
       condition = sprintf(

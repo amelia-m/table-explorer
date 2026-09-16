@@ -1,5 +1,5 @@
 """
-Table Relationship Explorer — Streamlit App
+Table Relationship Explorer - Streamlit App
 Supports CSV uploads and JSON/YAML schema definitions.
 """
 
@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Force sidebar open — clears any persisted collapsed state in browser localStorage
+# Force sidebar open - clears any persisted collapsed state in browser localStorage
 import streamlit.components.v1 as _components
 _components.html("""
 <script>
@@ -43,7 +43,7 @@ _components.html("""
 # ─── Inject CSS ──────────────────────────────────────────────────────────────
 # ── CSS: theme variables are generated from Python session state ─────────
 # This is the key insight: Streamlit re-runs this on every interaction,
-# so we just pick the right :root values directly — no JS needed at all.
+# so we just pick the right :root values directly - no JS needed at all.
 _DARK = dict(
     bg="#141e30", surface="#1a2640", card="#1e2d4a",
     border="#2a3f60", border2="#344f78",
@@ -503,7 +503,7 @@ def is_fk_for(col_clean: str, t2_clean: str) -> bool:
 def detect_pks(df: pd.DataFrame, table_name: str, method: str = "both") -> list[str]:
     """
     Return at most ONE primary key column, chosen by priority:
-      1. Naming match (id / {table}_id)   — highest confidence
+      1. Naming match (id / {table}_id)   - highest confidence
       2. First all-unique, non-null column whose name ends in _id / _key
       3. First all-unique, non-null column (any name)
     Returning a single PK avoids confusing unique-but-not-PK columns
@@ -807,7 +807,7 @@ def _score_candidate(
     if dtype1 != dtype2:
         return None  # incompatible types → not a candidate
 
-    # ── 3. Value overlap (unconstrained — no _id name required) ─────────
+    # ── 3. Value overlap (unconstrained - no _id name required) ─────────
     if enable_flags.get("value_overlap") and len(df1) > 0 and len(df2) > 0:
         overlap = _value_overlap(df1[col1], df2[col2])
         if overlap >= OVERLAP_HIGH:
@@ -918,7 +918,7 @@ def detect_fks(
       "content"    → all content-based signals (no naming)
       "both"/"all" → everything
       "manual"     → skip auto-detection entirely
-    min_confidence: "low" | "medium" | "high" — minimum tier to emit
+    min_confidence: "low" | "medium" | "high" - minimum tier to emit
     enable_flags: fine-grained per-signal overrides
     """
     if method == "manual" or len(tables) < 2:
@@ -951,7 +951,7 @@ def detect_fks(
                      if n > 0 and df[c].notna().all() and df[c].nunique() == n]
 
     results: list[dict] = []
-    seen: set[str] = set()     # "t1|col1|t2" — one rel per (table, col, target)
+    seen: set[str] = set()     # "t1|col1|t2" - one rel per (table, col, target)
     best: dict[str, float] = {}  # "t1|col1" → best score so far (pick best target)
 
     for t1 in tnames:
@@ -1124,7 +1124,7 @@ def build_pyvis_html(tables: dict, rels: list[dict], pk_map: dict,
         "content":         "#c084fc",
     }
 
-    # Build tooltip HTML strings stored in a JS dict — bypasses pyvis title escaping
+    # Build tooltip HTML strings stored in a JS dict - bypasses pyvis title escaping
     node_tooltips = {}
     edge_tooltips = {}
 
@@ -1157,7 +1157,7 @@ def build_pyvis_html(tables: dict, rels: list[dict], pk_map: dict,
         )
 
         label = f"{tname}\n{row_str} rows | {len(df.columns)} cols"
-        # title=" " — single space so pyvis doesn't strip the title attr,
+        # title=" " - single space so pyvis doesn't strip the title attr,
         # but blank enough that nothing shows if our overlay fails
         net.add_node(tname, label=label, title=" ",
                      color={"background": _node_bg, "border": _node_bd,
@@ -1290,7 +1290,7 @@ def build_pyvis_html(tables: dict, rels: list[dict], pk_map: dict,
       if (params.nodes.length > 0) {{
         var nodeId = params.nodes[0];
         var pos = net.getPositions([nodeId])[nodeId];
-        // Fix the node at its dropped position — physics won't move it again
+        // Fix the node at its dropped position - physics won't move it again
         net.body.data.nodes.update({{
           id: nodeId,
           x: pos.x,
@@ -1474,7 +1474,7 @@ with st.sidebar:
         if added:    parts.append(f"{added} added")
         if replaced: parts.append(f"{replaced} replaced")
         if parts:
-            st.success(f"{', '.join(parts)} — {len(st.session_state.tables)} table(s) total")
+            st.success(f"{', '.join(parts)} - {len(st.session_state.tables)} table(s) total")
 
     # ── 02 Schema Definition ─────────────────────────────────────────────
     st.markdown('<div class="sidebar-section">02 // Schema Definition (JSON/YAML)</div>', unsafe_allow_html=True)
@@ -1763,7 +1763,7 @@ else:
                     "FK": ["✓" if c in fk_cols else "" for c in df.columns],
                 })
             else:
-                # Schema-only table — use column metadata if available
+                # Schema-only table - use column metadata if available
                 meta = df.attrs.get("columns_meta", [])
                 if meta:
                     summary = pd.DataFrame({

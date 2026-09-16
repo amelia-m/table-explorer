@@ -1,5 +1,5 @@
 # ============================================================
-# mod_db_connect.R — Database Connection Panel
+# mod_db_connect.R - Database Connection Panel
 # ============================================================
 
 #' Database connection module UI

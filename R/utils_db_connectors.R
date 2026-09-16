@@ -1,5 +1,5 @@
 # ============================================================
-# utils_db_connectors.R — Database Connection Functions
+# utils_db_connectors.R - Database Connection Functions
 # ============================================================
 #
 # @noRd

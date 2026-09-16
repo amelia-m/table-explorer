@@ -1,5 +1,5 @@
 # ============================================================
-# Tests for db_connectors.R — Database Connection Functions
+# Tests for db_connectors.R - Database Connection Functions
 # ============================================================
 
 # ── db_types constant ────────────────────────────────────────

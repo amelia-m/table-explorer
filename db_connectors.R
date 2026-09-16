@@ -1,5 +1,5 @@
 # ============================================================
-# db_connectors.R — Database Connection Functions
+# db_connectors.R - Database Connection Functions
 # Table Relationship Explorer
 # ============================================================
 

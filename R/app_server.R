@@ -1,5 +1,5 @@
 # ============================================================
-# app_server.R — Main Application Server
+# app_server.R - Main Application Server
 # ============================================================
 
 #' @noRd

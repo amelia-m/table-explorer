@@ -1,5 +1,5 @@
 # ============================================================
-# mod_erd.R — ERD Visualization Panel
+# mod_erd.R - ERD Visualization Panel
 # ============================================================
 
 #' ERD module UI

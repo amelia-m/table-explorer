@@ -1,5 +1,5 @@
 # ============================================================
-# utils_helpers.R — Shared helper utilities
+# utils_helpers.R - Shared helper utilities
 # ============================================================
 
 #' @noRd

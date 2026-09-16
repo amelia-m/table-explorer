@@ -1,5 +1,5 @@
 # ============================================================
-# mod_upload.R — Upload, Schema Import, Manual Override
+# mod_upload.R - Upload, Schema Import, Manual Override
 # ============================================================
 
 #' Upload module UI
@@ -196,7 +196,7 @@ mod_upload_server <- function(
           paste0(
             "\u26a0 '",
             nm,
-            "': identical file already loaded \u2014 no changes made."
+            "': identical file already loaded - no changes made."
           ),
           type = "warning",
           duration = 6
@@ -262,7 +262,7 @@ mod_upload_server <- function(
       }
       n <- length(file_map)
       showNotification(
-        paste0(n, " table(s) added \u2014 ", length(merged), " total"),
+        paste0(n, " table(s) added - ",length(merged), " total"),
         type = "message",
         duration = 4
       )

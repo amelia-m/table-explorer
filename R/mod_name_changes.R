@@ -1,5 +1,5 @@
 # ============================================================
-# mod_name_changes.R — Name Changes Tab
+# mod_name_changes.R - Name Changes Tab
 # ============================================================
 
 #' Name changes module UI

@@ -1,5 +1,5 @@
 # ============================================================
-# mod_relationships.R — Relationships Tab
+# mod_relationships.R - Relationships Tab
 # ============================================================
 
 #' Relationships module UI

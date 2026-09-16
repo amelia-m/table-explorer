@@ -1,5 +1,5 @@
 # ============================================================
-# utils_inference.R — PK/FK Detection Engine (7-Signal)
+# utils_inference.R - PK/FK Detection Engine (7-Signal)
 # ============================================================
 #
 # @noRd
@@ -169,7 +169,7 @@ distribution_similarity <- function(v1, v2, sample_cap = 5000) {
     return(0.0)
   }
 
-  # Use only shared vocabulary for cosine — much cheaper than full union
+  # Use only shared vocabulary for cosine - much cheaper than full union
   shared <- intersect(names(t1), names(t2))
   if (length(shared) == 0) {
     return(0.0)
@@ -419,7 +419,7 @@ estimate_scan_complexity <- function(tables) {
 # to avoid the expensive score_candidate call entirely.
 
 is_fk_candidate <- function(col, col_name) {
-  # Fast heuristic checks — reject columns that almost never form relationships
+  # Fast heuristic checks - reject columns that almost never form relationships
   n <- length(col)
   if (n == 0) {
     return(FALSE)

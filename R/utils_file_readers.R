@@ -1,5 +1,5 @@
 # ============================================================
-# utils_file_readers.R — File Format Readers
+# utils_file_readers.R - File Format Readers
 # ============================================================
 #
 # @noRd
@@ -500,7 +500,7 @@ read_access_db <- function(path, notify_fn = message) {
           notify_fn(paste0(
             "RJDBC/UCanAccess error: ",
             conditionMessage(e),
-            " — is Java installed? Run `Sys.getenv('JAVA_HOME')` to check."
+            " - is Java installed? Run `Sys.getenv('JAVA_HOME')` to check."
           ))
           NULL
         }
@@ -509,7 +509,7 @@ read_access_db <- function(path, notify_fn = message) {
     }
   }
 
-  # Strategy 2: RODBC (Windows — needs Access Database Engine)
+  # Strategy 2: RODBC (Windows - needs Access Database Engine)
   if (
     requireNamespace("RODBC", quietly = TRUE) && .Platform$OS.type == "windows"
   ) {

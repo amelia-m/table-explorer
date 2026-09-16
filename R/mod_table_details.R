@@ -1,5 +1,5 @@
 # ============================================================
-# mod_table_details.R — Table Details Tab
+# mod_table_details.R - Table Details Tab
 # ============================================================
 
 #' Table details module UI
