@@ -187,11 +187,16 @@ mod_erd_server <- function(
               hover = TRUE
             ) |>
             visNetwork::visEvents(
+              # Delay the panel so a double-click (unpin) can cancel it
               click = sprintf(
                 "function(params) {
+                  clearTimeout(this._erdClickTimer);
                   if (params.nodes.length > 0) {
-                    Shiny.setInputValue('%s', {id: params.nodes[0], ts: Date.now()}, {priority: 'event'});
-                    showNodePanel(params.nodes[0]);
+                    var nodeId = params.nodes[0];
+                    this._erdClickTimer = setTimeout(function() {
+                      Shiny.setInputValue('%s', {id: nodeId, ts: Date.now()}, {priority: 'event'});
+                      showNodePanel(nodeId);
+                    }, 250);
                   }
                 }",
                 session$ns("vis_clicked_node")
@@ -208,21 +213,16 @@ mod_erd_server <- function(
                   });
                 }
               }",
-              doubleClick = sprintf(
-                "function(params) {
-                  if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    this.body.data.nodes.update({
-                      id: nodeId,
-                      fixed: {x: false, y: false}
-                    });
-                  } else {
-                    Shiny.setInputValue('%s', {id: params.nodes[0], ts: Date.now()}, {priority: 'event'});
-                    showNodePanel(params.nodes[0]);
-                  }
-                }",
-                session$ns("vis_clicked_node")
-              )
+              doubleClick = "function(params) {
+                clearTimeout(this._erdClickTimer);
+                if (params.nodes.length > 0) {
+                  var nodeId = params.nodes[0];
+                  this.body.data.nodes.update({
+                    id: nodeId,
+                    fixed: {x: false, y: false}
+                  });
+                }
+              }"
             )
 
           if (layout_mode == "hierarchical") {
@@ -262,9 +262,13 @@ mod_erd_server <- function(
               visNetwork::visEvents(
                 click = sprintf(
                   "function(params) {
+                    clearTimeout(this._erdClickTimer);
                     if (params.nodes.length > 0) {
-                      Shiny.setInputValue('%s', {id: params.nodes[0], ts: Date.now()}, {priority: 'event'});
-                      showNodePanel(params.nodes[0]);
+                      var nodeId = params.nodes[0];
+                      this._erdClickTimer = setTimeout(function() {
+                        Shiny.setInputValue('%s', {id: nodeId, ts: Date.now()}, {priority: 'event'});
+                        showNodePanel(nodeId);
+                      }, 250);
                     }
                   }",
                   session$ns("vis_clicked_node")
@@ -281,21 +285,16 @@ mod_erd_server <- function(
                     });
                   }
                 }",
-                doubleClick = sprintf(
-                  "function(params) {
-                    if (params.nodes.length > 0) {
-                      var nodeId = params.nodes[0];
-                      this.body.data.nodes.update({
-                        id: nodeId,
-                        fixed: {x: false, y: false}
-                      });
-                    } else {
-                      Shiny.setInputValue('%s', {id: params.nodes[0], ts: Date.now()}, {priority: 'event'});
-                      showNodePanel(params.nodes[0]);
-                    }
-                  }",
-                  session$ns("vis_clicked_node")
-                )
+                doubleClick = "function(params) {
+                  clearTimeout(this._erdClickTimer);
+                  if (params.nodes.length > 0) {
+                    var nodeId = params.nodes[0];
+                    this.body.data.nodes.update({
+                      id: nodeId,
+                      fixed: {x: false, y: false}
+                    });
+                  }
+                }"
               )
           } else {
             vis <- vis |>
