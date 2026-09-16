@@ -91,6 +91,8 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   for a `req()` that immediately stops it, and calls `showNodePanel(undefined)` which no-ops.
   Harmless today, but reads as intentional.
   **Fix:** delete the `else`, or make it close the panel via `vis_close_panel`.
+  Still present after the 2026-09-16 migration onto `main` (now `R/mod_erd.R:219-222`, plus the
+  circular-layout copy after `:284`).
 
 - [ ] **I2. `R/mod_erd.R:199-226` - pinned node positions do not survive any re-render.**
   `dragEnd` writes `fixed: {x: true, y: true}` into the client-side vis DataSet only.
@@ -164,9 +166,12 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   `R/mod_name_changes.R`, `R/utils_export.R`, `R/utils_vis.R`), giving
   `no visible global function definition` NOTEs.
   **Fix:** add `stats`, `utils`, `tools` to `Imports` with matching `@importFrom` tags.
+  Partly done 2026-09-16: `tools` and `utils` added to `Imports`. Still open: `stats` in
+  `Imports`, and `@importFrom` tags for the unqualified calls.
 
-- [ ] **I9. `pkgload` is used but declared nowhere in `DESCRIPTION`.**
+- [x] **I9. `pkgload` is used but declared nowhere in `DESCRIPTION`.**
   Referenced by `app.R:18` and `dev/02_dev.R:7`. Add to `Suggests`.
+  Done 2026-09-16: added to `Suggests`.
 
 - [ ] **I10. Legacy root files are dead duplicates and dual maintenance has already started.**
   `inference.R`, `file_readers.R`, `export_utils.R`, `db_connectors.R` are sourced by
