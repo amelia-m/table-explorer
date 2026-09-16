@@ -8,7 +8,7 @@
             document.getElementById("toggle-label").textContent = isLight ? "Dark mode" : "Light mode";
           });
         }
-        // Per-table remove buttons (delegated — buttons are rendered dynamically)
+        // Per-table remove buttons (delegated - buttons are rendered dynamically)
         document.body.addEventListener("click", function(e) {
           if (e.target.classList.contains("btn-remove")) {
             Shiny.setInputValue("remove_table_name", e.target.dataset.tname, {priority: "event"});

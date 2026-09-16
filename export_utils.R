@@ -1,5 +1,5 @@
 # ============================================================
-# export_utils.R — Export Format Generators
+# export_utils.R - Export Format Generators
 # Table Relationship Explorer
 # ============================================================
 

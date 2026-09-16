@@ -1,5 +1,5 @@
 # ============================================================
-# Tests for export_utils.R — Export Format Generators
+# Tests for export_utils.R - Export Format Generators
 # ============================================================
 
 # ── Test fixtures ────────────────────────────────────────────

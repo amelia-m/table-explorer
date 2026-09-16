@@ -33,7 +33,7 @@ The app is structured as an R package using the [golem](https://thinkr-open.gith
 
 ```
 R/
-  run_app.R              Entry point — tableexplorer::run_app()
+  run_app.R              Entry point - tableexplorer::run_app()
   app_ui.R               Top-level UI (assembles modules)
   app_server.R           Top-level server (wires module reactive values)
   mod_upload.R           Upload panel + manual override

@@ -1,5 +1,5 @@
 # ============================================================
-# dev/01_start.R — One-time project setup
+# dev/01_start.R - One-time project setup
 # Run these lines interactively in a fresh R session.
 # ============================================================
 

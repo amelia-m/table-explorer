@@ -1,5 +1,5 @@
 # ============================================================
-# dev/02_dev.R — Ongoing development helpers
+# dev/02_dev.R - Ongoing development helpers
 # Run interactively during development.
 # ============================================================
 

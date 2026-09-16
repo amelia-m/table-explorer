@@ -2,24 +2,46 @@
 
 export(run_app)
 import(shiny)
-importFrom(DT,DTOutput)
-importFrom(DT,datatable)
-importFrom(DT,formatStyle)
-importFrom(DT,renderDT)
-importFrom(DT,styleEqual)
-importFrom(golem,get_golem_options)
-importFrom(golem,with_golem_options)
-importFrom(janitor,clean_names)
-importFrom(janitor,make_clean_names)
+importFrom(DT,
+  DTOutput,
+  datatable,
+  formatStyle,
+  renderDT,
+  styleEqual
+)
+importFrom(golem,
+  get_golem_options,
+  with_golem_options
+)
+importFrom(janitor,
+  clean_names,
+  make_clean_names
+)
 importFrom(shinythemes,shinytheme)
-importFrom(visNetwork,renderVisNetwork)
-importFrom(visNetwork,visEdges)
-importFrom(visNetwork,visEvents)
-importFrom(visNetwork,visHierarchicalLayout)
-importFrom(visNetwork,visInteraction)
-importFrom(visNetwork,visLayout)
-importFrom(visNetwork,visNetwork)
-importFrom(visNetwork,visNetworkOutput)
-importFrom(visNetwork,visNodes)
-importFrom(visNetwork,visOptions)
-importFrom(visNetwork,visPhysics)
+importFrom(stats,
+  cor,
+  median,
+  na.omit,
+  sd,
+  setNames
+)
+importFrom(utils,
+  head,
+  object.size,
+  read.csv,
+  read.delim,
+  write.csv
+)
+importFrom(visNetwork,
+  renderVisNetwork,
+  visEdges,
+  visEvents,
+  visHierarchicalLayout,
+  visInteraction,
+  visLayout,
+  visNetwork,
+  visNetworkOutput,
+  visNodes,
+  visOptions,
+  visPhysics
+)

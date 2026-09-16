@@ -1,5 +1,5 @@
 # ============================================================
-# Tests for inference.R — PK/FK Detection Engine
+# Tests for inference.R - PK/FK Detection Engine
 # ============================================================
 
 # ── Name helpers ─────────────────────────────────────────────
