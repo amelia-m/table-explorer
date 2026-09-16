@@ -35,7 +35,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   because `devtools::test()` bypasses `testthat.R` entirely.
   **Fix:** `test_check("tableexplorer")`.
 
-- [ ] **C2. `R/utils_inference.R:468` makes composite-PK detection inert on exactly the tables it exists for.**
+- [x] **C2. `R/utils_inference.R:468` makes composite-PK detection inert on exactly the tables it exists for.**
   The guard calls `detect_pks(df, table_name, method = "both")`. The naming branch
   flags any `*_id` column as a PK with no uniqueness check, so a non-unique `order_id`
   short-circuits the guard. Repro on the test suite's own fixture:
@@ -49,6 +49,10 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Any junction table with an `_id` column never gets a composite PK detected.
   Root cause of the four failing tests - the fixtures are not at fault.
   **Fix:** `method = "uniqueness"` in the guard.
+  Done 2026-09-16, differently: `method = "uniqueness"` alone still skips both test fixtures,
+  because `quantity` and `d` are unique on their own. The guard now skips only when a column
+  is both PK-named and unique, and columns that are unique on their own are excluded from the
+  combo search (otherwise `a + d` is returned before `a + b + c`). All tests pass.
 
 - [ ] **C3. `options(shiny.maxRequestSize)` was dropped in the restructure.**
   `main`'s `app.R:14` set `shiny.maxRequestSize = Inf`. On this branch the value
@@ -82,7 +86,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
 
 ### ERD module (reviewer A)
 
-- [ ] **I1. `R/mod_erd.R:219-222` and `:292-295` - copy-pasted `else` branch that cannot work.**
+- [x] **I1. `R/mod_erd.R:219-222` and `:292-295` - copy-pasted `else` branch that cannot work.**
   The branch sets `Shiny.setInputValue` with `id: params.nodes[0]` and calls
   `showNodePanel(params.nodes[0])`, but it runs precisely when `params.nodes.length == 0`,
   so `params.nodes[0]` is `undefined`. Lifted verbatim from the `click` handler, where the
@@ -91,8 +95,8 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   for a `req()` that immediately stops it, and calls `showNodePanel(undefined)` which no-ops.
   Harmless today, but reads as intentional.
   **Fix:** delete the `else`, or make it close the panel via `vis_close_panel`.
-  Still present after the 2026-09-16 migration onto `main` (now `R/mod_erd.R:219-222`, plus the
-  circular-layout copy after `:284`).
+  Done 2026-09-16: `else` deleted from both `doubleClick` handlers, which no longer need
+  `sprintf`.
 
 - [ ] **I2. `R/mod_erd.R:199-226` - pinned node positions do not survive any re-render.**
   `dragEnd` writes `fixed: {x: true, y: true}` into the client-side vis DataSet only.

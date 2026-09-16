@@ -451,7 +451,8 @@ is_fk_candidate <- function(col, col_name) {
 # ── Composite primary key detection ──────────────────────────
 # Returns a list of character vectors, each representing one composite key
 # group whose combined values are unique across all rows.
-# Only runs when no single-column PK is found via detect_pks().
+# Only runs when no column is both PK-named and unique. A PK-named column that
+# repeats (order_id in order_items) is a composite key component, not a PK.
 
 detect_composite_pks <- function(
   df,
@@ -464,12 +465,17 @@ detect_composite_pks <- function(
     return(list())
   }
 
-  # Skip if a single-column PK already exists
-  if (length(detect_pks(df, table_name, method = "both")) > 0L) {
+  unique_cols <- detect_pks(df, table_name, method = "uniqueness")
+
+  # Skip if a genuine single-column PK already exists
+  named_cols <- detect_pks(df, table_name, method = "naming")
+  if (length(intersect(named_cols, unique_cols)) > 0L) {
     return(list())
   }
 
-  cols <- names(df)
+  # Columns unique on their own would make any combo containing them
+  # trivially unique, so they are not composite key components
+  cols <- setdiff(names(df), unique_cols)
 
   # Collect candidate columns: skip logicals, all-NA, and long free-text
   candidates <- cols[vapply(
