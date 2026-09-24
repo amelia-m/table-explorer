@@ -268,7 +268,7 @@ app_server <- function(input, output, session) {
   # views only; detection and export still use every table.
   visible_tables_rv <- reactive({
     tbls <- all_tables_rv()
-    if (isTRUE(input$hide_empty_tables)) {
+    if (upload_out$hide_empty_tables()) {
       tbls <- Filter(function(df) nrow(df) > 0, tbls)
     }
     tbls
