@@ -222,6 +222,25 @@ app_server <- function(input, output, session) {
     })
   })
 
+  # ── Visible tables/relationships (view-only filter) ─────────
+  # Hiding empty tables affects the ERD, Table Details and Relationships
+  # views only; detection and export still use every table.
+  visible_tables_rv <- reactive({
+    tbls <- all_tables_rv()
+    if (isTRUE(input$hide_empty_tables)) {
+      tbls <- Filter(function(df) nrow(df) > 0, tbls)
+    }
+    tbls
+  })
+
+  visible_rels_rv <- reactive({
+    keep <- names(visible_tables_rv())
+    Filter(
+      function(r) r$from_table %in% keep && r$to_table %in% keep,
+      all_rels_rv()
+    )
+  })
+
   # ── has_tables output (used by conditionalPanel in ERD tab) ──
   output$has_tables <- reactive({
     if (length(all_tables_rv()) > 0) "true" else "false"
@@ -231,24 +250,24 @@ app_server <- function(input, output, session) {
   # ── Module servers ────────────────────────────────────────────
   mod_erd_server(
     "erd",
-    all_tables_rv,
-    all_rels_rv,
+    visible_tables_rv,
+    visible_rels_rv,
     pk_map_rv,
     composite_pk_map_rv
   )
 
   mod_table_details_server(
     "table_details",
-    all_tables_rv,
+    visible_tables_rv,
     pk_map_rv,
     composite_pk_map_rv,
-    all_rels_rv
+    visible_rels_rv
   )
 
   mod_relationships_server(
     "relationships",
-    all_tables_rv,
-    all_rels_rv,
+    visible_tables_rv,
+    visible_rels_rv,
     false_positives_rv,
     conf_overrides_rv
   )
