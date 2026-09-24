@@ -382,12 +382,10 @@ parse_schema_file <- function(path, name, notify_fn = message) {
 
 # ── Access database support ──────────────────────────────────
 
+# Persistent per-user cache. Uploads land in a fresh temp dir each time, so
+# keeping the jars next to the uploaded file re-downloaded them on every upload.
 access_jar_dir <- function() {
-  app_jars <- file.path(dirname(sys.frame(1)$ofile %||% "."), "access_jars")
-  if (dir.exists(app_jars) || dir.create(app_jars, showWarnings = FALSE)) {
-    return(app_jars)
-  }
-  tools::R_user_dir("table-explorer-access-jars", "cache")
+  file.path(tools::R_user_dir("tableexplorer", "cache"), "access_jars")
 }
 
 ucanaccess_jars <- list(
@@ -444,10 +442,7 @@ ensure_ucanaccess_jars <- function(jar_dir, notify_fn) {
 read_access_db <- function(path, notify_fn = message) {
   # Strategy 1: RJDBC + UCanAccess (all platforms, needs Java)
   if (requireNamespace("RJDBC", quietly = TRUE)) {
-    jar_dir <- tryCatch(
-      file.path(dirname(normalizePath(path, mustWork = FALSE)), "access_jars"),
-      error = function(e) tools::R_user_dir("table-explorer", "cache")
-    )
+    jar_dir <- access_jar_dir()
     jars_ok <- tryCatch(
       ensure_ucanaccess_jars(jar_dir, notify_fn),
       error = function(e) FALSE
