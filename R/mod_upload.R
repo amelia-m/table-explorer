@@ -45,9 +45,18 @@ mod_upload_ui <- function(id) {
       ns("btn_clear_tables"),
       "\u2715  Remove All Tables",
       class = "btn-danger-soft"
-    ),
+    )
+  )
+}
 
-    tags$hr(),
+#' Manual override UI (served by mod_upload_server, same module id)
+#'
+#' Separate from mod_upload_ui so it can sit at the end of the sidebar,
+#' after sections 02 and 03, instead of under the loaded-tables list.
+#' @noRd
+mod_manual_override_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
     div(class = "section-title", "04 // Manual Override"),
     div(
       style = "font-size: 11px; color: #475569; margin-bottom: 8px;",
@@ -621,7 +630,17 @@ mod_upload_server <- function(
       }
       tagList(
         div(
-          style = "margin: 8px 0 4px;",
+          class = "loaded-tables-count",
+          sprintf(
+            "%d table%s loaded",
+            length(tbls),
+            if (length(tbls) == 1) "" else "s"
+          )
+        ),
+        # Scrolls on its own so a long list doesn't push the detection and
+        # database panels down the page
+        div(
+          class = "loaded-tables-list",
           lapply(names(tbls), function(nm) {
             df <- tbls[[nm]]
             div(
