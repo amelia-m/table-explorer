@@ -386,18 +386,26 @@ parse_schema_file <- function(path, name, notify_fn = message) {
 }
 
 # ── App export detection ─────────────────────────────────────
-# Returns a label if a data frame has the column layout of one of this app's
-# CSV exports (Relationships CSV, table details CSV), else NULL.
+# Returns a label if a data frame has exactly the column layout of one of this
+# app's CSV exports (Relationships CSV, table details CSV), else NULL. The
+# whole header must match so real mapping tables with some of these column
+# names (from_table, to_table, ...) are still loaded as data.
 
 app_export_signatures <- list(
-  "relationships list" = c("from_table", "from_col", "to_table", "to_col"),
-  "table details" = c("table", "column", "type", "non_null", "is_pk", "is_fk")
+  "relationships list" = c(
+    "from_table", "from_col", "to_table", "to_col", "detected_by",
+    "confidence", "score", "signals", "reasons"
+  ),
+  "table details" = c(
+    "table", "table_rows", "table_cols", "column", "type", "non_null",
+    "unique_vals", "is_pk", "is_fk"
+  )
 )
 
 detect_app_export <- function(df) {
   cols <- janitor::make_clean_names(names(df))
   for (kind in names(app_export_signatures)) {
-    if (all(app_export_signatures[[kind]] %in% cols)) {
+    if (setequal(cols, app_export_signatures[[kind]])) {
       return(kind)
     }
   }
