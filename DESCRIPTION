@@ -18,6 +18,7 @@ Imports:
     DT,
     shinythemes,
     janitor,
+    rlang,
     golem,
     stats,
     tools,
