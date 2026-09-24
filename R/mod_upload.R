@@ -602,8 +602,8 @@ mod_upload_server <- function(
         cleaned_name = character(),
         stringsAsFactors = FALSE
       ))
-      fk_cache$key <- NULL
       fk_cache$result <- list()
+      fk_cache$scanned_sig <- character(0)
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

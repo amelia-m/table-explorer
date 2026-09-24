@@ -559,3 +559,47 @@ test_that("detect_fks survives blank strings in compared text columns", {
   )
   expect_no_error(detect_fks(tables, method = "both", min_confidence = "low"))
 })
+
+# ── Incremental scans ─────────────────────────────────────────
+
+test_that("tables_needing_scan flags new and changed tables only", {
+  tables <- list(a = data.frame(x = 1:3), b = data.frame(y = 1:2))
+  sig <- vapply(tables, table_signature, character(1))
+  expect_equal(tables_needing_scan(tables, sig), character(0))
+  expect_equal(tables_needing_scan(tables, character(0)), c("a", "b"))
+  tables$b <- data.frame(y = 1:5)
+  tables$c <- data.frame(z = 1)
+  expect_equal(tables_needing_scan(tables, sig), c("b", "c"))
+})
+
+test_that("focused detect_fks adds links for new tables and keeps old ones", {
+  ids <- 1:40
+  old <- list(
+    customers = data.frame(customer_id = ids, name = paste0("n", ids)),
+    orders = data.frame(order_id = 1:80, customer_id = rep(ids, 2))
+  )
+  first <- detect_fks(old, "both", "medium")
+  all_tables <- c(old, list(
+    tbl_income = data.frame(customer_id = integer(0), amount = numeric(0))
+  ))
+  added <- detect_fks(
+    all_tables, "both", "medium",
+    focus_tables = "tbl_income",
+    existing = first
+  )
+  # Only relationships involving the new table are returned
+  expect_true(length(added) > 0)
+  expect_true(all(vapply(
+    added,
+    function(r) "tbl_income" %in% c(r$from_table, r$to_table),
+    logical(1)
+  )))
+  # Together they match a full scan
+  full <- detect_fks(all_tables, "both", "medium")
+  key <- function(rs) {
+    sort(vapply(rs, function(r) {
+      paste(r$from_table, r$from_col, r$to_table, r$to_col)
+    }, ""))
+  }
+  expect_equal(key(c(first, added)), key(full))
+})

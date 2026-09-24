@@ -20,8 +20,9 @@ app_server <- function(input, output, session) {
 
   # FK detection cache (mutable env, shared across modules)
   fk_cache <- new.env(parent = emptyenv())
-  fk_cache$key <- NULL
   fk_cache$result <- list()
+  fk_cache$scanned_sig <- character(0)
+  fk_cache$handled_id <- NULL
 
   # ── Upload module (includes manual override section) ─────────
   upload_out <- mod_upload_server(
@@ -73,33 +74,54 @@ app_server <- function(input, output, session) {
     )
   })
 
-  # ── FK detection with cache ───────────────────────────────────
+  # ── FK detection with incremental cache ──────────────────────
+  # fk_cache$result holds every relationship found so far and
+  # fk_cache$scanned_sig the signature of each table when it was scanned.
+  # Scans only run for a new scan request: scope "all" rescans everything,
+  # scope "new" compares only unscanned tables against the rest. Removing a
+  # table just filters its relationships out of the cached result.
   auto_rels_rv <- reactive({
     tbls <- all_tables_rv()
-    strategy <- detection$scan_strategy_rv()
+    request <- detection$scan_request_rv()
     settings <- detection$detection_settings_rv()
-    detection$detection_run_counter() # explicit dependency
-    detection$triage_btn_counter() # explicit dependency
     req(length(tbls) > 0)
+    current <- names(tbls)
 
-    if (identical(strategy, "pending")) {
-      return(list())
-    }
-    if (identical(strategy, "skip")) {
-      return(list())
-    }
-    if (is.null(settings)) {
-      return(list())
+    cached_for <- function(keep) {
+      Filter(
+        function(r) r$from_table %in% keep && r$to_table %in% keep,
+        fk_cache$result
+      )
     }
 
-    method <- if (identical(strategy, "naming_only")) {
-      "naming"
+    if (
+      is.null(request) ||
+        is.null(settings) ||
+        identical(request$id, fk_cache$handled_id)
+    ) {
+      return(cached_for(current))
+    }
+    fk_cache$handled_id <- request$id
+
+    to_scan <- if (identical(request$scope, "new")) {
+      tables_needing_scan(tbls, fk_cache$scanned_sig)
     } else {
-      settings$method
+      current
     }
-    min_conf <- settings$min_conf %||% "medium"
+    if (length(to_scan) == 0) {
+      return(cached_for(current))
+    }
+    # Relationships among already-scanned, unchanged tables are kept as is
+    kept <- if (identical(request$scope, "new")) {
+      cached_for(setdiff(current, to_scan))
+    } else {
+      list()
+    }
 
-    flags <- if (identical(strategy, "naming_only")) {
+    naming_only <- identical(request$strategy, "naming_only")
+    method <- if (naming_only) "naming" else settings$method
+    min_conf <- settings$min_conf %||% "medium"
+    flags <- if (naming_only) {
       list(
         naming = TRUE,
         value_overlap = FALSE,
@@ -117,30 +139,6 @@ app_server <- function(input, output, session) {
         distribution = isTRUE(settings$distribution),
         null_pattern = isTRUE(settings$null_pattern)
       )
-    }
-
-    key_parts <- paste(
-      names(tbls),
-      vapply(tbls, nrow, integer(1)),
-      vapply(tbls, ncol, integer(1)),
-      sep = ":",
-      collapse = "|"
-    )
-    flag_str <- paste(vapply(flags, as.character, character(1)), collapse = "")
-    cache_key <- paste0(
-      key_parts,
-      "//",
-      method,
-      "//",
-      min_conf,
-      "//",
-      flag_str,
-      "//",
-      strategy
-    )
-
-    if (!is.null(fk_cache$key) && identical(fk_cache$key, cache_key)) {
-      return(fk_cache$result)
     }
 
     sampled_tbls <- lapply(tbls, function(df) {
@@ -167,14 +165,21 @@ app_server <- function(input, output, session) {
       }
     }
 
-    result <- withProgress(
+    scan_label <- if (identical(request$scope, "new")) {
+      sprintf(
+        "%d new of %d tables",
+        length(to_scan),
+        length(sampled_tbls)
+      )
+    } else {
+      paste0(length(sampled_tbls), " tables")
+    }
+
+    found <- withProgress(
       message = "Detecting relationships...",
       value = 0.1,
       {
-        incProgress(
-          0.1,
-          detail = paste0(length(sampled_tbls), " tables, sampling...")
-        )
+        incProgress(0.1, detail = paste0(scan_label, ", sampling..."))
         tryCatch(
           {
             r <- detect_fks(
@@ -187,7 +192,9 @@ app_server <- function(input, output, session) {
                   value = 0.2 + 0.75 * (i - 1) / n,
                   detail = sprintf("table %d of %d: %s", i, n, tname)
                 )
-              }
+              },
+              focus_tables = if (identical(request$scope, "new")) to_scan,
+              existing = kept
             )
             setProgress(
               value = 1,
@@ -212,15 +219,27 @@ app_server <- function(input, output, session) {
               type = "error",
               duration = 8
             )
-            list()
+            NULL
           }
         )
       }
     )
 
-    fk_cache$key <- cache_key
-    fk_cache$result <- result
-    result
+    # On error keep the previous results and leave the tables unscanned
+    if (is.null(found)) {
+      return(cached_for(current))
+    }
+
+    sig <- vapply(tbls, table_signature, character(1))
+    if (identical(request$scope, "new")) {
+      prev_sig <- fk_cache$scanned_sig %||% character(0)
+      prev_sig <- prev_sig[intersect(names(prev_sig), setdiff(current, to_scan))]
+      fk_cache$scanned_sig <- c(prev_sig, sig[to_scan])
+    } else {
+      fk_cache$scanned_sig <- sig
+    }
+    fk_cache$result <- sort_rels(c(kept, found))
+    fk_cache$result
   })
 
   # ── Combined relationships ────────────────────────────────────
