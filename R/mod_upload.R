@@ -34,6 +34,12 @@ mod_upload_ui <- function(id) {
       "To reload a saved session, use Export \u2192 Restore Session; ",
       "CSVs exported from this app can't be imported."
     ),
+    # Right above the table list so it is visible without scrolling past it
+    checkboxInput(
+      ns("hide_empty_tables"),
+      "Hide empty tables (0 rows) in ERD, details & relationships",
+      value = FALSE
+    ),
     uiOutput(ns("loaded_tables_ui")),
     actionButton(
       ns("btn_clear_tables"),
@@ -720,6 +726,9 @@ mod_upload_server <- function(
     })
 
     # Return manual_rels_rv so app_server can include it in all_rels_rv
-    list(manual_rels_rv = manual_rels_rv)
+    list(
+      manual_rels_rv = manual_rels_rv,
+      hide_empty_tables = reactive(isTRUE(input$hide_empty_tables))
+    )
   })
 }

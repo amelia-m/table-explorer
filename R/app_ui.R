@@ -40,11 +40,6 @@ app_ui <- function(request) {
         div(
           class = "sidebar-box",
           mod_upload_ui("upload"),
-          checkboxInput(
-            "hide_empty_tables",
-            "Hide empty tables (0 rows)",
-            value = FALSE
-          ),
           tags$hr(),
           mod_detection_ui("detection"),
           tags$hr(),
