@@ -570,6 +570,9 @@ test_that("tables_needing_scan flags new and changed tables only", {
   tables$b <- data.frame(y = 1:5)
   tables$c <- data.frame(z = 1)
   expect_equal(tables_needing_scan(tables, sig), c("b", "c"))
+  # Same shape and column names, different values
+  tables <- list(a = data.frame(x = 4:6))
+  expect_equal(tables_needing_scan(tables, sig), "a")
 })
 
 test_that("focused detect_fks adds links for new tables and keeps old ones", {

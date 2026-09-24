@@ -1003,11 +1003,12 @@ detect_fks <- function(
 }
 
 # ── Incremental scan bookkeeping ─────────────────────────────
-# A table is rescanned only if it is new or its shape/columns changed since
-# the last scan (a re-upload under the same name).
+# A table is rescanned only if it is new or its contents changed since the
+# last scan (a re-upload under the same name). The hash covers values too, so
+# a replacement with the same shape and column names still counts as changed.
 
 table_signature <- function(df) {
-  paste(nrow(df), ncol(df), paste(names(df), collapse = ","), sep = ":")
+  rlang::hash(df)
 }
 
 tables_needing_scan <- function(tables, scanned_sig) {

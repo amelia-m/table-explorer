@@ -134,7 +134,7 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
         title = tags$span(
           style = "color:#60a5fa;font-family:'IBM Plex Mono',monospace;",
           sprintf(
-            "%d new table%s added",
+            "%d new or changed table%s",
             length(added),
             if (length(added) == 1) "" else "s"
           )
@@ -150,7 +150,7 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
             style = "color:#94a3b8;font-size:11px;",
             sprintf(
               paste0(
-                "Scan the new table%s against the %d existing table%s? ",
+                "Scan the new or changed table%s against the %d other table%s? ",
                 "Relationships already found are kept."
               ),
               if (length(added) == 1) "" else "s",
