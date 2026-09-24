@@ -283,3 +283,28 @@ test_that("read_haven_file notifies when haven missing", {
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("haven", errors)))
 })
+
+# ── App export detection ─────────────────────────────────────
+
+test_that("detect_app_export recognises this app's CSV exports", {
+  rels <- data.frame(
+    from_table = "orders", from_col = "customer_id",
+    to_table = "customers", to_col = "customer_id",
+    detected_by = "naming", confidence = "high", score = 1,
+    signals = "naming_exact", reasons = "exact FK naming"
+  )
+  details <- data.frame(
+    table = "orders", table_rows = 5, table_cols = 3, column = "order_id",
+    type = "integer", non_null = 5, unique_vals = 5, is_pk = TRUE,
+    is_fk = FALSE
+  )
+  expect_equal(detect_app_export(rels), "relationships list")
+  expect_equal(detect_app_export(details), "table details")
+  expect_null(detect_app_export(data.frame(customer_id = 1:3, name = "a")))
+  # A real mapping table sharing some export column names is still data
+  mapping <- data.frame(
+    from_table = "a", from_col = "x", to_table = "b", to_col = "y",
+    owner = "team"
+  )
+  expect_null(detect_app_export(mapping))
+})

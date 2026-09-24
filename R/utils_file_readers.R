@@ -298,7 +298,12 @@ parse_schema_file <- function(path, name, notify_fn = message) {
         }
         yaml::read_yaml(path)
       } else {
-        notify_fn(paste0("Unsupported schema format: .", ext))
+        notify_fn(paste0(
+          "Unsupported schema format: .",
+          ext,
+          ". Import Schema takes a .json or .yaml schema definition. ",
+          "To reload a saved session, use Export \u2192 Restore Session."
+        ))
         return(list(tables = list(), relationships = list()))
       }
     },
@@ -378,6 +383,33 @@ parse_schema_file <- function(path, name, notify_fn = message) {
   }
 
   list(tables = tables, relationships = relationships)
+}
+
+# ── App export detection ─────────────────────────────────────
+# Returns a label if a data frame has exactly the column layout of one of this
+# app's CSV exports (Relationships CSV, table details CSV), else NULL. The
+# whole header must match so real mapping tables with some of these column
+# names (from_table, to_table, ...) are still loaded as data.
+
+app_export_signatures <- list(
+  "relationships list" = c(
+    "from_table", "from_col", "to_table", "to_col", "detected_by",
+    "confidence", "score", "signals", "reasons"
+  ),
+  "table details" = c(
+    "table", "table_rows", "table_cols", "column", "type", "non_null",
+    "unique_vals", "is_pk", "is_fk"
+  )
+)
+
+detect_app_export <- function(df) {
+  cols <- janitor::make_clean_names(names(df))
+  for (kind in names(app_export_signatures)) {
+    if (setequal(cols, app_export_signatures[[kind]])) {
+      return(kind)
+    }
+  }
+  NULL
 }
 
 # ── Access database support ──────────────────────────────────

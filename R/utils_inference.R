@@ -64,7 +64,20 @@ format_patterns <- list(
 
 # ── Name helpers ─────────────────────────────────────────────
 
-clean_name <- function(name) janitor::make_clean_names(name)
+# Memoised: detection calls this for every column pair, and
+# janitor::make_clean_names is slow enough to dominate large scans.
+.clean_name_cache <- new.env(parent = emptyenv())
+
+clean_name <- function(name) {
+  # Prefixed so an empty or "" input never becomes a zero-length env name
+  key <- paste0("k:", paste(name, collapse = "\r"))
+  hit <- .clean_name_cache[[key]]
+  if (is.null(hit)) {
+    hit <- janitor::make_clean_names(name)
+    assign(key, hit, envir = .clean_name_cache)
+  }
+  hit
+}
 
 id_stem <- function(col_clean) sub("_id$", "", col_clean)
 
@@ -150,71 +163,80 @@ format_fingerprint <- function(col, sample_size = 200) {
   NULL
 }
 
+# ── Column profiles ──────────────────────────────────────────
+# Everything the content signals need from one column, computed once per
+# column rather than once per candidate pair.
+
+column_profile <- function(v, sample_cap = 5000) {
+  vals <- as.character(v[!is.na(v)])
+  uniq <- unique(vals)
+  uniq_sample <- uniq
+  if (length(uniq_sample) > sample_cap) {
+    set.seed(42)
+    uniq_sample <- uniq_sample[sample(length(uniq_sample), sample_cap)]
+  }
+  count_vals <- vals
+  if (length(count_vals) > sample_cap) {
+    set.seed(42)
+    count_vals <- count_vals[sample(length(count_vals), sample_cap)]
+  }
+  counts <- table(count_vals)
+  list(
+    dtype = col_dtype_class(v),
+    uniq = uniq,
+    uniq_sample = uniq_sample,
+    counts = setNames(as.numeric(counts), names(counts)),
+    fingerprint = format_fingerprint(v)
+  )
+}
+
 # ── Value overlap ────────────────────────────────────────────
 
-value_overlap <- function(v1, v2, sample_cap = 5000) {
-  s1 <- unique(na.omit(as.character(v1)))
-  s2 <- unique(na.omit(as.character(v2)))
-  # Sample down for performance on large value sets
-  if (length(s1) > sample_cap) {
-    set.seed(42)
-    s1 <- s1[sample(length(s1), sample_cap)]
-  }
-  if (length(s2) > sample_cap * 2) {
-    s2_set <- new.env(parent = emptyenv())
-    for (v in s2[seq_len(min(length(s2), sample_cap * 2))]) {
-      assign(v, TRUE, envir = s2_set)
-    }
-    if (length(s1) == 0) {
-      return(0.0)
-    }
-    hits <- sum(vapply(s1, function(v) exists(v, envir = s2_set), logical(1)))
-    return(hits / length(s1))
-  }
-  if (length(s1) == 0) {
+overlap_from_profiles <- function(p1, p2) {
+  if (length(p1$uniq_sample) == 0) {
     return(0.0)
   }
-  length(intersect(s1, s2)) / length(s1)
+  mean(p1$uniq_sample %in% p2$uniq)
+}
+
+value_overlap <- function(v1, v2, sample_cap = 5000) {
+  overlap_from_profiles(
+    column_profile(v1, sample_cap),
+    column_profile(v2, sample_cap)
+  )
 }
 
 # ── Distribution similarity (cosine) ────────────────────────
 
-distribution_similarity <- function(v1, v2, sample_cap = 5000) {
-  c1 <- as.character(na.omit(v1))
-  c2 <- as.character(na.omit(v2))
-  # Sample down for large columns
-  if (length(c1) > sample_cap) {
-    set.seed(42)
-    c1 <- c1[sample(length(c1), sample_cap)]
-  }
-  if (length(c2) > sample_cap) {
-    set.seed(43)
-    c2 <- c2[sample(length(c2), sample_cap)]
-  }
-
-  t1 <- table(c1)
-  t2 <- table(c2)
-  if (length(t1) == 0 || length(t2) == 0) {
+distribution_from_profiles <- function(p1, p2) {
+  c1 <- p1$counts
+  c2 <- p2$counts
+  if (length(c1) == 0 || length(c2) == 0) {
     return(0.0)
   }
 
-  # Use only shared vocabulary for cosine - much cheaper than full union
-  shared <- intersect(names(t1), names(t2))
+  # Use only shared vocabulary for cosine - much cheaper than full union.
+  # match(), not c1[shared]: indexing by the name "" (blank strings) gives NA
+  shared <- intersect(names(c1), names(c2))
   if (length(shared) == 0) {
     return(0.0)
   }
+  a <- c1[match(shared, names(c1))]
+  b <- c2[match(shared, names(c2))]
 
-  # match(), not t1[shared]: indexing by the name "" (blank strings) gives NA
-  a <- as.numeric(t1)[match(shared, names(t1))]
-  b <- as.numeric(t2)[match(shared, names(t2))]
-
-  dot <- sum(a * b)
-  norm_a <- sqrt(sum(as.numeric(t1)^2))
-  norm_b <- sqrt(sum(as.numeric(t2)^2))
+  norm_a <- sqrt(sum(c1^2))
+  norm_b <- sqrt(sum(c2^2))
   if (norm_a == 0 || norm_b == 0) {
     return(0.0)
   }
-  dot / (norm_a * norm_b)
+  sum(a * b) / (norm_a * norm_b)
+}
+
+distribution_similarity <- function(v1, v2, sample_cap = 5000) {
+  distribution_from_profiles(
+    column_profile(v1, sample_cap),
+    column_profile(v2, sample_cap)
+  )
 }
 
 # ── Null pattern correlation ─────────────────────────────────
@@ -269,30 +291,67 @@ detect_pks <- function(df, table_name, method = "both") {
   candidates
 }
 
+# ── Naming signal (memoised) ─────────────────────────────────
+# Depends only on the three names, which repeat across tables (client_id,
+# e2id, ...), so large scans hit the cache for most pairs.
+
+.naming_signal_cache <- new.env(parent = emptyenv())
+
+naming_signal <- function(col1, t2, col2) {
+  key <- paste("k", col1, t2, col2, sep = "\r")
+  if (exists(key, envir = .naming_signal_cache, inherits = FALSE)) {
+    return(get(key, envir = .naming_signal_cache))
+  }
+  c1 <- clean_name(col1)
+  t2c <- strip_table_prefix(clean_name(t2))
+  res <- if (is_fk_for(c1, t2c)) {
+    list(signal = "naming_exact", value = 1.0, reason = "exact FK naming")
+  } else {
+    stem1 <- sub("_(id|key|code|num|no)$", "", c1)
+    stem2 <- sub("_(id|key|code|num|no)$", "", clean_name(col2))
+    sim <- jaro_winkler_sim(stem1, stem2)
+    if (sim >= name_sim_high) {
+      list(
+        signal = "name_sim",
+        value = sim,
+        reason = sprintf("name similarity %.2f", sim)
+      )
+    } else if (sim >= name_sim_med) {
+      list(
+        signal = "name_sim_weak",
+        value = sim,
+        reason = sprintf("weak name similarity %.2f", sim)
+      )
+    }
+  }
+  assign(key, res, envir = .naming_signal_cache)
+  res
+}
+
 # ── Score a single candidate pair ────────────────────────────
 
-score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
+# p1/p2: optional column_profile() results for col1/col2. detect_fks passes
+# cached profiles; standalone callers can omit them.
+score_candidate <- function(
+  t1,
+  col1,
+  df1,
+  t2,
+  col2,
+  df2,
+  enable_flags,
+  p1 = NULL,
+  p2 = NULL
+) {
   signals <- list()
   reasons <- character(0)
 
   # 1. Naming conventions
   if (isTRUE(enable_flags[["naming"]])) {
-    c1 <- clean_name(col1)
-    t2c <- strip_table_prefix(clean_name(t2))
-    if (is_fk_for(c1, t2c)) {
-      signals[["naming_exact"]] <- 1.0
-      reasons <- c(reasons, "exact FK naming")
-    } else {
-      stem1 <- sub("_(id|key|code|num|no)$", "", c1)
-      stem2 <- sub("_(id|key|code|num|no)$", "", clean_name(col2))
-      sim <- jaro_winkler_sim(stem1, stem2)
-      if (sim >= name_sim_high) {
-        signals[["name_sim"]] <- sim
-        reasons <- c(reasons, sprintf("name similarity %.2f", sim))
-      } else if (sim >= name_sim_med) {
-        signals[["name_sim_weak"]] <- sim
-        reasons <- c(reasons, sprintf("weak name similarity %.2f", sim))
-      }
+    ns <- naming_signal(col1, t2, col2)
+    if (!is.null(ns)) {
+      signals[[ns$signal]] <- ns$value
+      reasons <- c(reasons, ns$reason)
     }
   }
 
@@ -309,9 +368,28 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
     }
   }
 
+  content_flags <- c(
+    "value_overlap",
+    "cardinality",
+    "format",
+    "distribution"
+  )
+  if (
+    n1 > 0 &&
+      n2 > 0 &&
+      any(vapply(enable_flags[content_flags], isTRUE, logical(1)))
+  ) {
+    if (is.null(p1)) {
+      p1 <- column_profile(df1[[col1]])
+    }
+    if (is.null(p2)) {
+      p2 <- column_profile(df2[[col2]])
+    }
+  }
+
   # 3. Value overlap
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
-    ov <- value_overlap(df1[[col1]], df2[[col2]])
+    ov <- overlap_from_profiles(p1, p2)
     if (ov >= overlap_high) {
       signals[["overlap_high"]] <- ov
       reasons <- c(reasons, sprintf("value overlap %.0f%%", ov * 100))
@@ -323,9 +401,13 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
 
   # 4. Exact cardinality match
   if (isTRUE(enable_flags[["cardinality"]]) && n1 > 0 && n2 > 0) {
-    u1 <- unique(na.omit(as.character(df1[[col1]])))
-    u2 <- unique(na.omit(as.character(df2[[col2]])))
-    if (length(u1) > 0 && length(u2) > 0 && setequal(u1, u2)) {
+    u1 <- p1$uniq
+    u2 <- p2$uniq
+    if (
+      length(u1) > 0 &&
+        length(u1) == length(u2) &&
+        all(u1 %in% u2)
+    ) {
       signals[["cardinality_match"]] <- 1.0
       reasons <- c(reasons, "identical value sets")
     }
@@ -333,8 +415,8 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
 
   # 5. Format fingerprint
   if (isTRUE(enable_flags[["format"]]) && n1 > 0 && n2 > 0) {
-    fmt1 <- format_fingerprint(df1[[col1]])
-    fmt2 <- format_fingerprint(df2[[col2]])
+    fmt1 <- p1$fingerprint
+    fmt2 <- p2$fingerprint
     if (!is.null(fmt1) && !is.null(fmt2) && fmt1 == fmt2) {
       signals[["format_match"]] <- 0.6
       reasons <- c(reasons, sprintf("shared format [%s]", fmt1))
@@ -343,7 +425,7 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
 
   # 6. Distribution similarity
   if (isTRUE(enable_flags[["distribution"]]) && n1 > 0 && n2 > 0) {
-    dist_sim <- distribution_similarity(df1[[col1]], df2[[col2]])
+    dist_sim <- distribution_from_profiles(p1, p2)
     if (dist_sim >= dist_sim_high) {
       signals[["dist_high"]] <- dist_sim
       reasons <- c(reasons, sprintf("distribution similarity %.2f", dist_sim))
@@ -594,7 +676,9 @@ detect_fks <- function(
   tables,
   method = "both",
   min_confidence = "medium",
-  enable_flags = NULL
+  enable_flags = NULL,
+  progress_fn = NULL,
+  max_pairs = 50000L
 ) {
   if (method == "manual" || length(tables) < 2) {
     return(list())
@@ -683,25 +767,33 @@ detect_fks <- function(
   table_rank <- setNames(integer(length(tnames)), tnames)
   table_rank[rank_order] <- seq_along(tnames)
 
-  # Pre-compute format fingerprints to avoid recomputation
-  fingerprint_cache <- new.env(parent = emptyenv())
+  # Column profiles, computed lazily once per column (only content signals
+  # use them, so a naming-only scan never builds any)
+  use_profiles <- any(vapply(
+    enable_flags[c("value_overlap", "cardinality", "format", "distribution")],
+    isTRUE,
+    logical(1)
+  ))
+  profile_cache <- new.env(parent = emptyenv())
 
-  get_fingerprint <- function(tname, cname, col) {
-    key <- paste(tname, cname, sep = "|")
-    if (exists(key, envir = fingerprint_cache)) {
-      return(get(key, envir = fingerprint_cache))
+  get_profile <- function(tname, cname) {
+    if (!use_profiles || nrow(tables[[tname]]) == 0) {
+      return(NULL)
     }
-    fp <- format_fingerprint(col)
-    assign(key, fp, envir = fingerprint_cache)
-    fp
+    key <- paste(tname, cname, sep = "|")
+    hit <- profile_cache[[key]]
+    if (is.null(hit)) {
+      hit <- column_profile(tables[[tname]][[cname]])
+      assign(key, hit, envir = profile_cache)
+    }
+    hit
   }
 
   results <- list()
   seen <- new.env(parent = emptyenv()) # O(1) lookup vs character vector
   best_scores <- new.env(parent = emptyenv())
 
-  # Cap total pair evaluations to prevent runaway on huge schemas
-  max_pairs <- 50000L
+  # max_pairs caps total pair evaluations to prevent runaway on huge schemas
   pair_count <- 0L
 
   make_rel <- function(t1, col1, t2, col2, res) {
@@ -718,7 +810,11 @@ detect_fks <- function(
     )
   }
 
-  for (t1 in tnames) {
+  for (t1_idx in seq_along(tnames)) {
+    t1 <- tnames[[t1_idx]]
+    if (!is.null(progress_fn)) {
+      progress_fn(t1_idx, length(tnames), t1)
+    }
     df1 <- tables[[t1]]
     t1_empty <- nrow(df1) == 0
     if (t1_empty && !isTRUE(enable_flags[["naming"]])) {
@@ -784,7 +880,17 @@ detect_fks <- function(
           # One unscorable pair (odd column type or values) must not abort
           # the whole scan, which would hide every relationship
           result <- tryCatch(
-            score_candidate(t1, col1, df1, t2, col2, df2, enable_flags),
+            score_candidate(
+              t1,
+              col1,
+              df1,
+              t2,
+              col2,
+              df2,
+              enable_flags,
+              get_profile(t1, col1),
+              get_profile(t2, col2)
+            ),
             error = function(e) NULL
           )
           if (is.null(result)) {
@@ -864,5 +970,7 @@ detect_fks <- function(
     results <- results[order_idx]
   }
 
+  # Let callers warn that tables late in the scan order were not compared
+  attr(results, "truncated") <- pair_count > max_pairs
   results
 }
