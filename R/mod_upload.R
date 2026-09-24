@@ -18,7 +18,7 @@ mod_upload_ui <- function(id) {
     ),
     div(
       style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
-      "CSV, TSV, Excel, Parquet, JSON, SPSS, SAS, Stata, RDS, RData, ODS, Access"
+      "Data files: CSV, TSV, Excel, Parquet, JSON, SPSS, SAS, Stata, RDS, RData, ODS, Access"
     ),
     fileInput(
       ns("schema_file"),
@@ -27,6 +27,12 @@ mod_upload_ui <- function(id) {
       accept = c(".json", ".yaml", ".yml"),
       placeholder = "No file selected",
       buttonLabel = "Import Schema"
+    ),
+    div(
+      style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
+      "Schema definition (.json / .yaml) listing tables and foreign keys. ",
+      "To reload a saved session, use Export \u2192 Restore Session; ",
+      "CSVs exported from this app can't be imported."
     ),
     uiOutput(ns("loaded_tables_ui")),
     actionButton(
@@ -102,6 +108,22 @@ mod_upload_server <- function(
             {
               result <- read_table_file(fpath, fname, notify_fn)
               raw_tbls <- result$tables
+              # Skip this app's own CSV exports: loading them as data adds a
+              # bogus table and doesn't restore anything
+              for (tname in names(raw_tbls)) {
+                kind <- detect_app_export(raw_tbls[[tname]])
+                if (!is.null(kind)) {
+                  notify_fn(paste0(
+                    fname,
+                    " looks like a ",
+                    kind,
+                    " export from this app, not a data table, so it was ",
+                    "skipped. To reload a saved session, use Export ",
+                    "\u2192 Restore Session."
+                  ))
+                  raw_tbls[[tname]] <- NULL
+                }
+              }
               if (length(raw_tbls) == 0) {
                 return(list(list(ok = FALSE, name = fname)))
               }
