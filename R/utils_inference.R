@@ -68,6 +68,35 @@ clean_name <- function(name) janitor::make_clean_names(name)
 
 id_stem <- function(col_clean) sub("_id$", "", col_clean)
 
+# Common table-name prefixes (tbl_clients, tlk_city_id, dim_product) that hide
+# the entity name from naming-convention matching.
+table_prefix_re <- "^(tbl|tlk|tb|lkp|lk|lu|lookup|ref|dim|fact|fct)_"
+
+strip_table_prefix <- function(tname_clean) {
+  stripped <- sub(table_prefix_re, "", tname_clean)
+  if (nzchar(stripped)) stripped else tname_clean
+}
+
+# Key-like column names: customer_id, e2id, order_key. A bare "id"/"key" is
+# excluded because it says nothing about which entity it identifies.
+is_key_name <- function(col_clean) {
+  grepl("(_|[0-9])(id|key)$", col_clean)
+}
+
+# Stricter than is_pk_name: the table is named for the key's entity
+# (customers owns customer_id, order_items does not own order_id).
+owns_key <- function(col_clean, tname_clean) {
+  stem <- sub("_(id|key)$", "", col_clean)
+  tname_clean %in%
+    c(
+      col_clean,
+      stem,
+      paste0(stem, "s"),
+      paste0(stem, "es"),
+      sub("y$", "ies", stem)
+    )
+}
+
 is_pk_name <- function(col_clean, tname_clean) {
   col_clean == "id" ||
     col_clean == paste0(tname_clean, "_id") ||
@@ -76,7 +105,7 @@ is_pk_name <- function(col_clean, tname_clean) {
 
 is_fk_for <- function(col_clean, t2clean) {
   col_clean == paste0(t2clean, "_id") ||
-    (grepl("_id$", col_clean) && startsWith(t2clean, id_stem(col_clean)))
+    (grepl("_id$", col_clean) && owns_key(col_clean, t2clean))
 }
 
 # ── Type classification ──────────────────────────────────────
@@ -190,7 +219,8 @@ distribution_similarity <- function(v1, v2, sample_cap = 5000) {
 # ── Null pattern correlation ─────────────────────────────────
 
 null_pattern_correlation <- function(df1, col1, df2, col2) {
-  if (nrow(df1) != nrow(df2)) {
+  # sd() is NA below 2 rows
+  if (nrow(df1) != nrow(df2) || nrow(df1) < 2) {
     return(0.0)
   }
   mask1 <- as.numeric(is.na(df1[[col1]]))
@@ -212,7 +242,7 @@ detect_pks <- function(df, table_name, method = "both") {
   n <- nrow(df)
 
   if (method %in% c("naming", "both", "content", "all")) {
-    tname <- clean_name(table_name)
+    tname <- strip_table_prefix(clean_name(table_name))
     cols_clean <- clean_name(cols)
     hits <- cols[vapply(
       cols_clean,
@@ -247,7 +277,7 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
   # 1. Naming conventions
   if (isTRUE(enable_flags[["naming"]])) {
     c1 <- clean_name(col1)
-    t2c <- clean_name(t2)
+    t2c <- strip_table_prefix(clean_name(t2))
     if (is_fk_for(c1, t2c)) {
       signals[["naming_exact"]] <- 1.0
       reasons <- c(reasons, "exact FK naming")
@@ -265,15 +295,18 @@ score_candidate <- function(t1, col1, df1, t2, col2, df2, enable_flags) {
     }
   }
 
-  # 2. Type compatibility guard
-  dtype1 <- col_dtype_class(df1[[col1]])
-  dtype2 <- col_dtype_class(df2[[col2]])
-  if (dtype1 != dtype2) {
-    return(NULL)
-  }
-
   n1 <- nrow(df1)
   n2 <- nrow(df2)
+
+  # 2. Type compatibility guard (skipped for empty tables, whose column types
+  # are whatever the reader defaulted to)
+  if (n1 > 0 && n2 > 0) {
+    dtype1 <- col_dtype_class(df1[[col1]])
+    dtype2 <- col_dtype_class(df2[[col2]])
+    if (dtype1 != dtype2) {
+      return(NULL)
+    }
+  }
 
   # 3. Value overlap
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
@@ -599,10 +632,10 @@ detect_fks <- function(
       if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
         next
       }
+      # isTRUE: an all-NA text column has no median and would error
       if (
         is.character(v) &&
-          length(v) > 0 &&
-          median(nchar(head(na.omit(v), 20))) > 60
+          isTRUE(median(nchar(head(na.omit(v), 20))) > 60)
       ) {
         next
       }
@@ -614,13 +647,40 @@ detect_fks <- function(
   })
   names(pk_map) <- tnames
 
-  # Pre-compute FK-candidate columns per table (skip non-FK-like columns)
+  # Pre-compute FK-candidate columns per table (skip non-FK-like columns).
+  # Empty tables have no values to screen, so their key-named columns are
+  # candidates for name matching.
   fk_candidates <- lapply(tnames, function(t) {
     df <- tables[[t]]
+    if (nrow(df) == 0) {
+      return(names(df)[is_key_name(clean_name(names(df)))])
+    }
     cols <- setdiff(names(df), pk_map[[t]])
     cols[vapply(cols, function(c) is_fk_candidate(df[[c]], c), logical(1))]
   })
   names(fk_candidates) <- tnames
+
+  # Unique key-named columns (client_id unique in several one-row-per-client
+  # tables) can still reference the same key in another table (1:1 links).
+  # A table named for the key (customers.customer_id) is the parent, not a
+  # source.
+  unique_key_sources <- lapply(tnames, function(t) {
+    pks <- pk_map[[t]]
+    pks_clean <- clean_name(pks)
+    tclean <- strip_table_prefix(clean_name(t))
+    pks[
+      is_key_name(pks_clean) &
+        !vapply(pks_clean, owns_key, logical(1), tname_clean = tclean)
+    ]
+  })
+  names(unique_key_sources) <- tnames
+
+  # Deterministic table ranking (most rows first, then name) used to pick a
+  # single parent for 1:1 and empty-table links, so N tables sharing a key
+  # form a star rather than an N x N mesh.
+  rank_order <- order(-vapply(tables, nrow, integer(1)), tnames)
+  table_rank <- setNames(integer(length(tnames)), tnames)
+  table_rank[rank_order] <- seq_along(tnames)
 
   # Pre-compute format fingerprints to avoid recomputation
   fingerprint_cache <- new.env(parent = emptyenv())
@@ -643,17 +703,50 @@ detect_fks <- function(
   max_pairs <- 50000L
   pair_count <- 0L
 
+  make_rel <- function(t1, col1, t2, col2, res) {
+    list(
+      from_table = t1,
+      from_col = col1,
+      to_table = t2,
+      to_col = col2,
+      detected_by = res$detected_by,
+      confidence = res$confidence,
+      score = res$score,
+      reasons = res$reasons,
+      signals = res$signals
+    )
+  }
+
   for (t1 in tnames) {
     df1 <- tables[[t1]]
-    if (nrow(df1) == 0 && !isTRUE(enable_flags[["naming"]])) {
+    t1_empty <- nrow(df1) == 0
+    if (t1_empty && !isTRUE(enable_flags[["naming"]])) {
       next
     }
 
-    source_cols <- fk_candidates[[t1]]
+    source_cols <- union(fk_candidates[[t1]], unique_key_sources[[t1]])
 
     for (col1 in source_cols) {
+      # Unique-key and empty-table sources link to one best parent only
+      src_unique <- col1 %in% unique_key_sources[[t1]]
+      single_parent <- src_unique || t1_empty
+      parent <- NULL
+
       for (t2 in tnames) {
         if (t2 == t1) {
+          next
+        }
+        # An empty table is only a plausible parent for another empty table
+        if (nrow(tables[[t2]]) == 0 && !t1_empty) {
+          next
+        }
+        # 1:1 links point up the ranking (or to the table that owns the key),
+        # so each pair appears once
+        if (
+          src_unique &&
+            table_rank[[t2]] > table_rank[[t1]] &&
+            !owns_key(clean_name(col1), strip_table_prefix(clean_name(t2)))
+        ) {
           next
         }
 
@@ -667,6 +760,12 @@ detect_fks <- function(
           pk_map[[t2]]
         } else {
           fk_candidates[[t2]]
+        }
+        if (src_unique) {
+          # A unique key only links to the same key, unique in the parent
+          target_cols <- pk_map[[t2]][
+            clean_name(pk_map[[t2]]) == clean_name(col1)
+          ]
         }
         if (length(target_cols) == 0) {
           next
@@ -701,6 +800,18 @@ detect_fks <- function(
           next
         }
 
+        if (single_parent) {
+          if (
+            is.null(parent) ||
+              best_result$score > parent$res$score ||
+              (best_result$score == parent$res$score &&
+                table_rank[[t2]] < table_rank[[parent$t2]])
+          ) {
+            parent <- list(t2 = t2, col2 = best_to_col, res = best_result)
+          }
+          next
+        }
+
         # Deduplicate: keep best target per source column
         col_key <- paste(t1, col1, sep = "|")
         prev_score <- if (exists(col_key, envir = best_scores)) {
@@ -714,17 +825,24 @@ detect_fks <- function(
         assign(col_key, best_result$score, envir = best_scores)
 
         assign(rel_key, TRUE, envir = seen)
-        results[[length(results) + 1]] <- list(
-          from_table = t1,
-          from_col = col1,
-          to_table = t2,
-          to_col = best_to_col,
-          detected_by = best_result$detected_by,
-          confidence = best_result$confidence,
-          score = best_result$score,
-          reasons = best_result$reasons,
-          signals = best_result$signals
+        results[[length(results) + 1]] <- make_rel(
+          t1, col1, t2, best_to_col, best_result
         )
+      }
+
+      if (!is.null(parent)) {
+        # Skip if the parent already links back here on the same columns
+        reverse_key <- paste(parent$t2, parent$col2, t1, col1, sep = "|")
+        if (!exists(reverse_key, envir = seen)) {
+          assign(
+            paste(t1, col1, parent$t2, parent$col2, sep = "|"),
+            TRUE,
+            envir = seen
+          )
+          results[[length(results) + 1]] <- make_rel(
+            t1, col1, parent$t2, parent$col2, parent$res
+          )
+        }
       }
       if (pair_count > max_pairs) break
     }
