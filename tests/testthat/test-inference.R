@@ -483,3 +483,65 @@ test_that("detect_composite_pks returns empty for single-column table", {
   result <- detect_composite_pks(df, "t")
   expect_length(result, 0)
 })
+
+# ── Prefixed names, 1:1 tables, empty tables ────────────────
+
+test_that("strip_table_prefix removes common table prefixes", {
+  expect_equal(strip_table_prefix("tbl_clients"), "clients")
+  expect_equal(strip_table_prefix("tlk_city_id"), "city_id")
+  expect_equal(strip_table_prefix("customers"), "customers")
+  expect_equal(strip_table_prefix("tbl"), "tbl")
+})
+
+test_that("is_fk_for requires the table to be named for the key", {
+  expect_true(is_fk_for("customer_id", "customers"))
+  expect_true(is_fk_for("city_id", "cities"))
+  expect_false(is_fk_for("client_id", "client_units"))
+  expect_false(is_fk_for("product_id", "product_suppliers"))
+})
+
+test_that("detect_fks survives all-NA text columns and one-row tables", {
+  tables <- list(
+    a = data.frame(client_id = 1:5, uci = NA_character_),
+    b = data.frame(client_id = 3L, uci = NA_character_)
+  )
+  expect_no_error(detect_fks(tables, method = "both", min_confidence = "low"))
+})
+
+test_that("detect_fks matches naming through tbl_/tlk_ prefixes", {
+  tables <- list(
+    tbl_address = data.frame(addr = 1:6, city_id = c(1, 2, 1, 3, 2, 1)),
+    tlk_city_id = data.frame(city_id = 1:3, city = c("x", "y", "z"))
+  )
+  rels <- detect_fks(tables, method = "naming", min_confidence = "medium")
+  expect_true(any(vapply(
+    rels,
+    function(r) r$from_col == "city_id" && r$to_table == "tlk_city_id",
+    logical(1)
+  )))
+})
+
+test_that("detect_fks links 1:1 tables sharing a unique key as a star", {
+  ids <- 101:150
+  tables <- list(
+    enrollment = data.frame(client_id = ids, status = rep(1:2, 25)),
+    demographics = data.frame(client_id = ids, age = 21:70),
+    hiv_status = data.frame(client_id = ids, flag = rep(0:1, 25))
+  )
+  rels <- detect_fks(tables, method = "both", min_confidence = "medium")
+  key_rels <- Filter(function(r) r$from_col == "client_id", rels)
+  # N tables -> N - 1 links to one parent, no mesh or reverse duplicates
+  expect_length(key_rels, 2)
+  expect_length(unique(vapply(key_rels, `[[`, character(1), "to_table")), 1)
+})
+
+test_that("detect_fks name-matches key columns of empty tables", {
+  tables <- list(
+    tbl_clients = data.frame(client_id = 1:10, age = 21:30),
+    tbl_income = data.frame(client_id = integer(0), amount = numeric(0))
+  )
+  rels <- detect_fks(tables, method = "both", min_confidence = "medium")
+  expect_length(rels, 1)
+  expect_equal(rels[[1]]$from_table, "tbl_income")
+  expect_equal(rels[[1]]$to_table, "tbl_clients")
+})
