@@ -177,11 +177,33 @@ app_server <- function(input, output, session) {
         )
         tryCatch(
           {
-            r <- detect_fks(sampled_tbls, method, min_conf, flags)
-            incProgress(
-              0.8,
+            r <- detect_fks(
+              sampled_tbls,
+              method,
+              min_conf,
+              flags,
+              progress_fn = function(i, n, tname) {
+                setProgress(
+                  value = 0.2 + 0.75 * (i - 1) / n,
+                  detail = sprintf("table %d of %d: %s", i, n, tname)
+                )
+              }
+            )
+            setProgress(
+              value = 1,
               detail = paste0("Found ", length(r), " relationship(s)")
             )
+            if (isTRUE(attr(r, "truncated"))) {
+              showNotification(
+                paste0(
+                  "Relationship scan hit its comparison limit, so some ",
+                  "tables were not fully compared. Try a quick scan ",
+                  "(naming only) or fewer tables."
+                ),
+                type = "warning",
+                duration = 12
+              )
+            }
             r
           },
           error = function(e) {
