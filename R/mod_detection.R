@@ -220,25 +220,31 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
           tags$p(
             style = "color:#94a3b8;font-size:11px;margin-top:8px;",
             "How would you like to scan for relationships?"
+          ),
+          # Filled in by app.js as soon as a button is clicked, since the
+          # server may still be busy loading tables and respond late
+          tags$p(
+            class = "triage-status",
+            style = "display:none;color:#facc15;font-size:11px;margin-top:4px;"
           )
         ),
         footer = tagList(
           actionButton(
             session$ns("triage_full"),
             "\u25b6 Full scan (all signals)",
-            class = "btn-add",
+            class = "btn-add triage-btn",
             style = "margin-right:6px;"
           ),
           actionButton(
             session$ns("triage_naming"),
             "\u26a1 Quick scan (naming only)",
-            class = "btn-add",
+            class = "btn-add triage-btn",
             style = "margin-right:6px;background:#1a1a00;color:#facc15;border:1px solid #854d0e;"
           ),
           actionButton(
             session$ns("triage_skip"),
             "\u23ed Skip auto-detection",
-            class = "btn-danger-soft",
+            class = "btn-danger-soft triage-btn",
             style = "width:auto;"
           )
         ),
@@ -248,6 +254,9 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
     })
 
     observeEvent(input$triage_full, {
+      if (!identical(scan_strategy_rv(), "pending")) {
+        return()
+      }
       removeModal()
       scan_strategy_rv("full")
       .snapshot_detection_settings()
@@ -259,6 +268,9 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       )
     })
     observeEvent(input$triage_naming, {
+      if (!identical(scan_strategy_rv(), "pending")) {
+        return()
+      }
       removeModal()
       scan_strategy_rv("naming_only")
       .snapshot_detection_settings()
@@ -270,6 +282,9 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       )
     })
     observeEvent(input$triage_skip, {
+      if (!identical(scan_strategy_rv(), "pending")) {
+        return()
+      }
       removeModal()
       scan_strategy_rv("skip")
       triage_btn_counter(triage_btn_counter() + 1L)
