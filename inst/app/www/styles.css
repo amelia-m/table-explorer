@@ -309,6 +309,8 @@
       font-size: 13px; padding: 0 2px; line-height: 1; flex-shrink: 0;
     }
     .loaded-table-item .btn-remove:hover { color: #fca5a5; }
+    .loaded-tables-count { font-size: 10px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; margin: 8px 0 4px; }
+    .loaded-tables-list { max-height: 320px; overflow-y: auto; margin-bottom: 4px; padding-right: 2px; }
     .loaded-tables-empty { font-size: 11px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; padding: 4px 0; }
     .cache-badge {
       display: inline-block; font-size: 10px; font-family: "IBM Plex Mono", monospace;

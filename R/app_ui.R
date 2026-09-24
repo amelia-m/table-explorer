@@ -43,7 +43,9 @@ app_ui <- function(request) {
           tags$hr(),
           mod_detection_ui("detection"),
           tags$hr(),
-          mod_db_connect_ui("db")
+          mod_db_connect_ui("db"),
+          tags$hr(),
+          mod_manual_override_ui("upload")
         )
       ),
 
