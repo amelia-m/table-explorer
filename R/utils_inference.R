@@ -204,8 +204,9 @@ distribution_similarity <- function(v1, v2, sample_cap = 5000) {
     return(0.0)
   }
 
-  a <- as.numeric(t1[shared])
-  b <- as.numeric(t2[shared])
+  # match(), not t1[shared]: indexing by the name "" (blank strings) gives NA
+  a <- as.numeric(t1)[match(shared, names(t1))]
+  b <- as.numeric(t2)[match(shared, names(t2))]
 
   dot <- sum(a * b)
   norm_a <- sqrt(sum(as.numeric(t1)^2))
@@ -780,7 +781,12 @@ detect_fks <- function(
             break
           }
 
-          result <- score_candidate(t1, col1, df1, t2, col2, df2, enable_flags)
+          # One unscorable pair (odd column type or values) must not abort
+          # the whole scan, which would hide every relationship
+          result <- tryCatch(
+            score_candidate(t1, col1, df1, t2, col2, df2, enable_flags),
+            error = function(e) NULL
+          )
           if (is.null(result)) {
             next
           }
