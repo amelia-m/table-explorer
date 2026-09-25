@@ -88,10 +88,11 @@ mod_detection_ui <- function(id) {
 mod_detection_server <- function(id, all_tables_rv, fk_cache) {
   moduleServer(id, function(input, output, session) {
     detection_settings_rv <- reactiveVal(NULL)
-    detection_run_counter <- reactiveVal(0L)
-    scan_strategy_rv <- reactiveVal("auto")
-    last_triage_key <- reactiveVal(NULL)
-    triage_btn_counter <- reactiveVal(0L)
+    # A scan request: list(id, scope = "all" | "new", strategy). app_server
+    # runs each request id once; removing tables never creates one.
+    scan_request_rv <- reactiveVal(NULL)
+    # Scope of the scan the open triage modal will start, NULL when no modal
+    pending_scope <- reactiveVal(NULL)
 
     .snapshot_detection_settings <- function() {
       detection_settings_rv(list(
@@ -104,11 +105,20 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
         distribution = isTRUE(input$fl_dist),
         null_pattern = isTRUE(input$fl_null)
       ))
-      detection_run_counter(detection_run_counter() + 1L)
+    }
+
+    .request_scan <- function(scope, strategy) {
+      .snapshot_detection_settings()
+      prev <- isolate(scan_request_rv())
+      scan_request_rv(list(
+        id = (prev$id %||% 0L) + 1L,
+        scope = scope,
+        strategy = strategy
+      ))
     }
 
     observeEvent(input$btn_run_detection, {
-      .snapshot_detection_settings()
+      .request_scan("all", "auto")
       showNotification(
         "\u25b6 Running detection with current settings...",
         type = "message",
@@ -116,32 +126,93 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       )
     })
 
+    .show_incremental_modal <- function(added, existing) {
+      pending_scope("new")
+      shown <- head(added, 8)
+      more <- length(added) - length(shown)
+      showModal(modalDialog(
+        title = tags$span(
+          style = "color:#60a5fa;font-family:'IBM Plex Mono',monospace;",
+          sprintf(
+            "%d new or changed table%s",
+            length(added),
+            if (length(added) == 1) "" else "s"
+          )
+        ),
+        tags$div(
+          style = "font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.8;",
+          tags$div(
+            style = "color:#e2e8f0;margin-bottom:8px;",
+            paste(shown, collapse = ", "),
+            if (more > 0) sprintf(" +%d more", more)
+          ),
+          tags$p(
+            style = "color:#94a3b8;font-size:11px;",
+            sprintf(
+              paste0(
+                "Scan the new or changed table%s against the %d other table%s? ",
+                "Relationships already found are kept."
+              ),
+              if (length(added) == 1) "" else "s",
+              length(existing),
+              if (length(existing) == 1) "" else "s"
+            )
+          ),
+          tags$p(
+            class = "triage-status",
+            style = "display:none;color:#facc15;font-size:11px;margin-top:4px;"
+          )
+        ),
+        footer = tagList(
+          actionButton(
+            session$ns("triage_full"),
+            "\u25b6 Scan new (all signals)",
+            class = "btn-add triage-btn",
+            style = "margin-right:6px;"
+          ),
+          actionButton(
+            session$ns("triage_naming"),
+            "\u26a1 Quick scan new (naming only)",
+            class = "btn-add triage-btn",
+            style = "margin-right:6px;background:#1a1a00;color:#facc15;border:1px solid #854d0e;"
+          ),
+          actionButton(
+            session$ns("triage_skip"),
+            "\u23ed Not now",
+            class = "btn-danger-soft triage-btn",
+            style = "width:auto;"
+          )
+        ),
+        easyClose = FALSE,
+        size = "s"
+      ))
+    }
+
     # ---- Scan triage when tables change ----
-    observeEvent(all_tables_rv(), {
+    # Removing tables never prompts or rescans: app_server just drops their
+    # cached relationships. Adding tables to an already-scanned set asks
+    # whether to scan the new tables against the existing ones.
+    observeEvent(all_tables_rv(), priority = 10, {
       tbls <- all_tables_rv()
-      if (length(tbls) < 2) {
-        scan_strategy_rv("auto")
-        .snapshot_detection_settings()
+      current <- names(tbls)
+      scanned <- names(fk_cache$scanned_sig %||% character(0))
+      added <- tables_needing_scan(tbls, fk_cache$scanned_sig)
+      if (length(added) == 0 || length(tbls) < 2) {
         return()
       }
 
-      triage_key <- paste(sort(names(tbls)), collapse = ",")
-      if (identical(triage_key, last_triage_key())) {
+      if (length(intersect(scanned, current)) > 0) {
+        .show_incremental_modal(added, setdiff(current, added))
         return()
       }
-      last_triage_key(triage_key)
-
-      fk_cache$key <- NULL
-      fk_cache$result <- list()
 
       est <- estimate_scan_complexity(tbls)
       if (est$tier == "fast") {
-        scan_strategy_rv("auto")
-        .snapshot_detection_settings()
+        .request_scan("all", "auto")
         return()
       }
 
-      scan_strategy_rv("pending")
+      pending_scope("all")
       time_str <- if (est$est_time_sec < 60) {
         paste0("~", ceiling(est$est_time_sec), " seconds")
       } else {
@@ -254,13 +325,13 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
     })
 
     observeEvent(input$triage_full, {
-      if (!identical(scan_strategy_rv(), "pending")) {
+      scope <- pending_scope()
+      if (is.null(scope)) {
         return()
       }
+      pending_scope(NULL)
       removeModal()
-      scan_strategy_rv("full")
-      .snapshot_detection_settings()
-      triage_btn_counter(triage_btn_counter() + 1L)
+      .request_scan(scope, "full")
       showNotification(
         "\u25b6 Running full scan with all signals...",
         type = "message",
@@ -268,13 +339,13 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       )
     })
     observeEvent(input$triage_naming, {
-      if (!identical(scan_strategy_rv(), "pending")) {
+      scope <- pending_scope()
+      if (is.null(scope)) {
         return()
       }
+      pending_scope(NULL)
       removeModal()
-      scan_strategy_rv("naming_only")
-      .snapshot_detection_settings()
-      triage_btn_counter(triage_btn_counter() + 1L)
+      .request_scan(scope, "naming_only")
       showNotification(
         "\u26a1 Running quick scan (naming conventions only)...",
         type = "message",
@@ -282,24 +353,26 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       )
     })
     observeEvent(input$triage_skip, {
-      if (!identical(scan_strategy_rv(), "pending")) {
+      scope <- pending_scope()
+      if (is.null(scope)) {
         return()
       }
+      pending_scope(NULL)
       removeModal()
-      scan_strategy_rv("skip")
-      triage_btn_counter(triage_btn_counter() + 1L)
       showNotification(
-        "\u23ed Auto-detection skipped. Add relationships manually.",
+        if (identical(scope, "new")) {
+          "\u23ed New tables not scanned. Use Run Detection to scan everything."
+        } else {
+          "\u23ed Auto-detection skipped. Add relationships manually."
+        },
         type = "warning",
         duration = 5
       )
     })
 
     list(
-      scan_strategy_rv = scan_strategy_rv,
+      scan_request_rv = scan_request_rv,
       detection_settings_rv = detection_settings_rv,
-      detection_run_counter = detection_run_counter,
-      triage_btn_counter = triage_btn_counter,
       enable_composite_pk = reactive(isTRUE(input$enable_composite_pk)),
       detect_method = reactive(input$detect_method %||% "both")
     )

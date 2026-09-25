@@ -678,7 +678,9 @@ detect_fks <- function(
   min_confidence = "medium",
   enable_flags = NULL,
   progress_fn = NULL,
-  max_pairs = 50000L
+  max_pairs = 50000L,
+  focus_tables = NULL,
+  existing = list()
 ) {
   if (method == "manual" || length(tables) < 2) {
     return(list())
@@ -793,6 +795,27 @@ detect_fks <- function(
   seen <- new.env(parent = emptyenv()) # O(1) lookup vs character vector
   best_scores <- new.env(parent = emptyenv())
 
+  # Incremental scan: with focus_tables set, only pairs involving at least one
+  # focus table are compared, and `existing` (earlier results for the other
+  # tables) seeds the dedup state so known links are not re-added or reversed
+  existing_sources <- new.env(parent = emptyenv())
+  for (r in existing) {
+    assign(paste(r$from_table, r$from_col, r$to_table, sep = "|"), TRUE, envir = seen)
+    assign(
+      paste(r$from_table, r$from_col, r$to_table, r$to_col, sep = "|"),
+      TRUE,
+      envir = seen
+    )
+    col_key <- paste(r$from_table, r$from_col, sep = "|")
+    prev <- best_scores[[col_key]]
+    score <- r$score %||% 0
+    if (is.null(prev) || score > prev) {
+      assign(col_key, score, envir = best_scores)
+    }
+    assign(col_key, TRUE, envir = existing_sources)
+  }
+  in_focus <- function(t) is.null(focus_tables) || t %in% focus_tables
+
   # max_pairs caps total pair evaluations to prevent runaway on huge schemas
   pair_count <- 0L
 
@@ -828,9 +851,20 @@ detect_fks <- function(
       src_unique <- col1 %in% unique_key_sources[[t1]]
       single_parent <- src_unique || t1_empty
       parent <- NULL
+      # A one-parent source that already has its parent keeps it
+      if (
+        single_parent &&
+          !in_focus(t1) &&
+          exists(paste(t1, col1, sep = "|"), envir = existing_sources)
+      ) {
+        next
+      }
 
       for (t2 in tnames) {
         if (t2 == t1) {
+          next
+        }
+        if (!in_focus(t1) && !in_focus(t2)) {
           next
         }
         # An empty table is only a plausible parent for another empty table
@@ -961,16 +995,40 @@ detect_fks <- function(
     if (pair_count > max_pairs) break
   }
 
-  # Sort by confidence desc, score desc
-  if (length(results) > 0) {
-    order_idx <- order(
-      -vapply(results, function(r) conf_rank[[r$confidence]], integer(1)),
-      -vapply(results, function(r) r$score, numeric(1))
-    )
-    results <- results[order_idx]
-  }
+  results <- sort_rels(results)
 
   # Let callers warn that tables late in the scan order were not compared
   attr(results, "truncated") <- pair_count > max_pairs
   results
+}
+
+# ── Incremental scan bookkeeping ─────────────────────────────
+# A table is rescanned only if it is new or its contents changed since the
+# last scan (a re-upload under the same name). The hash covers values too, so
+# a replacement with the same shape and column names still counts as changed.
+
+table_signature <- function(df) {
+  rlang::hash(df)
+}
+
+tables_needing_scan <- function(tables, scanned_sig) {
+  if (length(tables) == 0) {
+    return(character(0))
+  }
+  sig <- vapply(tables, table_signature, character(1))
+  prev <- unname(scanned_sig[names(tables)])
+  names(tables)[is.na(prev) | prev != sig]
+}
+
+# Sort relationships by confidence desc, then score desc
+sort_rels <- function(rels) {
+  if (length(rels) == 0) {
+    return(rels)
+  }
+  conf_rank <- c(low = 0L, medium = 1L, high = 2L)
+  order_idx <- order(
+    -vapply(rels, function(r) conf_rank[[r$confidence %||% "low"]], integer(1)),
+    -vapply(rels, function(r) r$score %||% 0, numeric(1))
+  )
+  rels[order_idx]
 }
