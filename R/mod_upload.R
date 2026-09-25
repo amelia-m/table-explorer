@@ -34,14 +34,29 @@ mod_upload_ui <- function(id) {
       "To reload a saved session, use Export \u2192 Restore Session; ",
       "CSVs exported from this app can't be imported."
     ),
+    # Right above the table list so it is visible without scrolling past it
+    checkboxInput(
+      ns("hide_empty_tables"),
+      "Hide empty tables (0 rows) in ERD, details & relationships",
+      value = FALSE
+    ),
     uiOutput(ns("loaded_tables_ui")),
     actionButton(
       ns("btn_clear_tables"),
       "\u2715  Remove All Tables",
       class = "btn-danger-soft"
-    ),
+    )
+  )
+}
 
-    tags$hr(),
+#' Manual override UI (served by mod_upload_server, same module id)
+#'
+#' Separate from mod_upload_ui so it can sit at the end of the sidebar,
+#' after sections 02 and 03, instead of under the loaded-tables list.
+#' @noRd
+mod_manual_override_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
     div(class = "section-title", "04 // Manual Override"),
     div(
       style = "font-size: 11px; color: #475569; margin-bottom: 8px;",
@@ -602,8 +617,8 @@ mod_upload_server <- function(
         cleaned_name = character(),
         stringsAsFactors = FALSE
       ))
-      fk_cache$key <- NULL
       fk_cache$result <- list()
+      fk_cache$scanned_sig <- character(0)
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 
@@ -615,7 +630,17 @@ mod_upload_server <- function(
       }
       tagList(
         div(
-          style = "margin: 8px 0 4px;",
+          class = "loaded-tables-count",
+          sprintf(
+            "%d table%s loaded",
+            length(tbls),
+            if (length(tbls) == 1) "" else "s"
+          )
+        ),
+        # Scrolls on its own so a long list doesn't push the detection and
+        # database panels down the page
+        div(
+          class = "loaded-tables-list",
           lapply(names(tbls), function(nm) {
             df <- tbls[[nm]]
             div(
@@ -720,6 +745,9 @@ mod_upload_server <- function(
     })
 
     # Return manual_rels_rv so app_server can include it in all_rels_rv
-    list(manual_rels_rv = manual_rels_rv)
+    list(
+      manual_rels_rv = manual_rels_rv,
+      hide_empty_tables = reactive(isTRUE(input$hide_empty_tables))
+    )
   })
 }
