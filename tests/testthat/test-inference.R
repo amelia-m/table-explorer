@@ -606,3 +606,83 @@ test_that("focused detect_fks adds links for new tables and keeps old ones", {
   }
   expect_equal(key(c(first, added)), key(full))
 })
+
+# ── Naming conventions across database tools ─────────────────
+
+test_that("table_entity strips prefixes, schemas, suffixes and plurals", {
+  expect_equal(table_entity("tlk_providers"), "provider")
+  expect_equal(table_entity("tlk_city_id"), "city")
+  expect_equal(table_entity("dbo_customers"), "customer")
+  expect_equal(table_entity("dim_customer"), "customer")
+  expect_equal(table_entity("state_lookup"), "state")
+  expect_equal(table_entity("ref_categories"), "category")
+  expect_equal(table_entity("tbl_addresses"), "address")
+  expect_equal(table_entity("enrollment_statuses"), "enrollment_status")
+  expect_equal(table_entity("people"), "person")
+  expect_equal(table_entity("status"), "status")
+})
+
+test_that("fk_name_match recognises common FK column conventions", {
+  expect_equal(fk_name_match("provider_id", "tlk_providers"), "exact")
+  expect_equal(fk_name_match("id_customer", "customers"), "exact")
+  expect_equal(fk_name_match("fk_customer", "customers"), "exact")
+  expect_equal(fk_name_match("customer_key", "dim_customer"), "exact")
+  expect_equal(fk_name_match("customer_sk", "dim_customer"), "exact")
+  expect_equal(fk_name_match("state_code", "ref_states"), "exact")
+  expect_equal(fk_name_match("order_no", "orders"), "exact")
+  expect_equal(fk_name_match("category_id", "tbl_categories"), "exact")
+  expect_equal(fk_name_match("person_id", "people"), "exact")
+  # Role / source prefixes
+  expect_equal(
+    fk_name_match("referring_provider_id", "tlk_providers", is_lookup = TRUE),
+    "role"
+  )
+  expect_equal(
+    fk_name_match("trax_enrollment_status_id", "tlk_enrollment_status"),
+    "role"
+  )
+  # Not matches
+  expect_null(fk_name_match("status_id", "tlk_enrollment_status"))
+  expect_null(fk_name_match("client_id", "client_units"))
+  expect_null(fk_name_match("product_id", "product_suppliers"))
+  expect_null(fk_name_match("name", "customers"))
+  # A single-word role match needs a lookup table
+  expect_null(fk_name_match("referring_provider_id", "tbl_providers"))
+})
+
+test_that("is_lookup_table uses names and shape", {
+  expect_true(is_lookup_table("tlk_services", data.frame(id = integer(0))))
+  expect_true(is_lookup_table("state_lookup", data.frame(code = "NE")))
+  expect_true(is_lookup_table(
+    "statuses",
+    data.frame(id = 1:3, label = c("a", "b", "c"))
+  ))
+  expect_false(is_lookup_table(
+    "orders",
+    data.frame(id = 1:600, a = 1, b = 2, c = 3, d = 4)
+  ))
+})
+
+test_that("detect_fks links Access-style lookups keyed on id", {
+  prov <- data.frame(id = 1:12, provider_name = paste("p", 1:12))
+  visits <- data.frame(
+    visit = 1:100,
+    provider_id = rep(1:2, 50), # only two distinct providers
+    referring_provider_id = rep(1:12, length.out = 100),
+    service_id = rep(1:4, 25)
+  )
+  tables <- list(
+    tbl_visits = visits,
+    tlk_providers = prov,
+    tlk_services = data.frame(id = integer(0), service = character(0))
+  )
+  rels <- detect_fks(tables, method = "naming", min_confidence = "medium")
+  got <- vapply(
+    rels,
+    function(r) paste0(r$from_col, "->", r$to_table, ".", r$to_col),
+    ""
+  )
+  expect_true("provider_id->tlk_providers.id" %in% got)
+  expect_true("referring_provider_id->tlk_providers.id" %in% got)
+  expect_true("service_id->tlk_services.id" %in% got)
+})

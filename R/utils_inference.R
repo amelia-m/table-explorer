@@ -19,6 +19,7 @@ dist_sim_med <- 0.75
 
 weight_map <- c(
   naming_exact = 1.00,
+  naming_role = 0.90,
   cardinality_match = 0.95,
   overlap_high = 0.90,
   name_sim = 0.60,
@@ -34,6 +35,7 @@ weight_map <- c(
 
 label_map <- c(
   naming_exact = "naming",
+  naming_role = "naming",
   name_sim = "name_similarity",
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
@@ -81,44 +83,203 @@ clean_name <- function(name) {
 
 id_stem <- function(col_clean) sub("_id$", "", col_clean)
 
-# Common table-name prefixes (tbl_clients, tlk_city_id, dim_product) that hide
-# the entity name from naming-convention matching.
-table_prefix_re <- "^(tbl|tlk|tb|lkp|lk|lu|lookup|ref|dim|fact|fct)_"
+# ── Naming conventions ───────────────────────────────────────
+# Covers common conventions across database tools:
+#   FK columns:  customer_id (Rails/Django/Access), CustomerID (SQL Server;
+#                cleaned to customer_id), id_customer, fk_customer,
+#                customer_key / customer_sk (warehouses), state_code /
+#                state_cd (code lookups), order_no / _num / _nbr,
+#                customer_uuid / _guid
+#   Role words:  referring_provider_id, trax_enrollment_status_id
+#   Tables:      tbl_/tlk_/tlu_/lkp_/lu_/ref_/dim_/fact_/stg_/mst_ prefixes,
+#                dbo./public. schemas, _lookup/_lkp/_ref/_dim/_codes/_types
+#                suffixes, regular and common irregular plurals
+
+schema_prefix_re <- "^(dbo|public|main|sys)_"
+table_prefix_re <- paste0(
+  "^(tbl|tlk|tlu|tb|lkp|lk|lu|lookup|ref|dim|fact|fct|stg|raw|mst|master)_"
+)
+table_suffix_re <- "_(lookup|lkp|lu|ref|dim|tbl|table|codes|types)$"
+lookup_name_re <- paste0(
+  "^(tlk|tlu|lkp|lk|lu|lookup|ref|code|cd)_|",
+  "_(lookup|lkp|lu|ref|codes|types)$"
+)
+# FK column affixes; the rest of the name is the entity it points at
+key_suffix_re <- paste0(
+  "_(id|key|sk|fk|pk|code|cd|no|num|nbr|number|uuid|guid)$"
+)
+key_prefix_re <- "^(id|fk|key)_"
+# Target-column names that identify a row on their own
+generic_key_names <- c("id", "pk", "key", "code", "uuid", "guid")
 
 strip_table_prefix <- function(tname_clean) {
-  stripped <- sub(table_prefix_re, "", tname_clean)
+  stripped <- sub(schema_prefix_re, "", tname_clean)
+  stripped <- sub(table_prefix_re, "", stripped)
   if (nzchar(stripped)) stripped else tname_clean
 }
 
-# Key-like column names: customer_id, e2id, order_key. A bare "id"/"key" is
-# excluded because it says nothing about which entity it identifies.
+irregular_plurals <- c(
+  people = "person",
+  children = "child",
+  men = "man",
+  women = "woman",
+  geese = "goose",
+  mice = "mouse",
+  indices = "index",
+  matrices = "matrix",
+  criteria = "criterion"
+)
+
+# Singularise the last word of a snake_case name
+singularize <- function(name) {
+  parts <- strsplit(name, "_", fixed = TRUE)[[1]]
+  if (length(parts) == 0) {
+    return(name)
+  }
+  w <- parts[[length(parts)]]
+  w <- if (w %in% names(irregular_plurals)) {
+    irregular_plurals[[w]]
+  } else if (grepl("ies$", w) && nchar(w) > 4) {
+    sub("ies$", "y", w)
+  } else if (grepl("(ss|us|is)$", w)) {
+    w
+  } else if (grepl("(s|x|z|ch|sh)es$", w)) {
+    sub("es$", "", w)
+  } else if (grepl("s$", w) && nchar(w) > 3) {
+    sub("s$", "", w)
+  } else {
+    w
+  }
+  parts[[length(parts)]] <- w
+  paste(parts, collapse = "_")
+}
+
+# The entity a table is named for: tlk_providers -> provider,
+# dbo_customer_lookup -> customer, tlk_city_id -> city
+table_entity <- function(tname_clean) {
+  x <- strip_table_prefix(tname_clean)
+  y <- sub(table_suffix_re, "", x)
+  if (nzchar(y)) x <- y
+  y <- sub("_(id|key|code|cd)$", "", x)
+  if (nzchar(y)) x <- y
+  singularize(x)
+}
+
+# Entity stems named by a key column, longest first. Returns NULL when the
+# column is not key-named. role = TRUE when leading words were dropped
+# (referring_provider_id -> provider).
+key_entities <- function(col_clean) {
+  stem <- sub(key_suffix_re, "", col_clean)
+  if (identical(stem, col_clean)) {
+    stem <- sub(key_prefix_re, "", col_clean)
+  }
+  if (identical(stem, col_clean) || !nzchar(stem)) {
+    return(NULL)
+  }
+  tokens <- strsplit(stem, "_", fixed = TRUE)[[1]]
+  tokens <- tokens[nzchar(tokens)]
+  n <- length(tokens)
+  if (n == 0) {
+    return(NULL)
+  }
+  lapply(seq_len(n), function(i) {
+    list(
+      stem = singularize(paste(tokens[i:n], collapse = "_")),
+      role = i > 1,
+      n_tokens = n - i + 1
+    )
+  })
+}
+
+# How a key column's name points at a table: "exact" (provider_id ->
+# providers), "role" (referring_provider_id -> tlk_providers), or NULL.
+# A role match on a single word is only trusted for lookup tables, since
+# generic words (status, type) would otherwise match unrelated tables.
+fk_name_match <- function(col_clean, tname_clean, is_lookup = FALSE) {
+  entity <- table_entity(tname_clean)
+  if (col_clean == paste0(entity, "_id")) {
+    return("exact")
+  }
+  for (k in key_entities(col_clean) %||% list()) {
+    if (identical(k$stem, entity)) {
+      if (!k$role) {
+        return("exact")
+      }
+      if (k$n_tokens >= 2 || is_lookup) {
+        return("role")
+      }
+    }
+  }
+  NULL
+}
+
+# Key-like column names: customer_id, e2id, order_key, id_customer. A bare
+# "id"/"key" is excluded because it says nothing about which entity it
+# identifies.
 is_key_name <- function(col_clean) {
-  grepl("(_|[0-9])(id|key)$", col_clean)
+  grepl("(_|[0-9])(id|key|sk|fk|uuid|guid)$", col_clean) |
+    grepl("^(id|fk)_.", col_clean)
 }
 
 # Stricter than is_pk_name: the table is named for the key's entity
 # (customers owns customer_id, order_items does not own order_id).
 owns_key <- function(col_clean, tname_clean) {
-  stem <- sub("_(id|key)$", "", col_clean)
-  tname_clean %in%
-    c(
-      col_clean,
-      stem,
-      paste0(stem, "s"),
-      paste0(stem, "es"),
-      sub("y$", "ies", stem)
-    )
+  tname_clean == col_clean ||
+    identical(fk_name_match(col_clean, tname_clean), "exact")
 }
 
 is_pk_name <- function(col_clean, tname_clean) {
   col_clean == "id" ||
     col_clean == paste0(tname_clean, "_id") ||
-    (grepl("_id$", col_clean) && startsWith(tname_clean, id_stem(col_clean)))
+    (grepl("_id$", col_clean) && startsWith(tname_clean, id_stem(col_clean))) ||
+    owns_key(col_clean, tname_clean)
 }
 
 is_fk_for <- function(col_clean, t2clean) {
-  col_clean == paste0(t2clean, "_id") ||
-    (grepl("_id$", col_clean) && owns_key(col_clean, t2clean))
+  identical(fk_name_match(col_clean, t2clean), "exact")
+}
+
+# Lookup tables: named like one (tlk_, lkp_, _lookup, ...) or shaped like
+# one (few rows, few columns, a unique id/code column). Memoised per shape.
+.lookup_cache <- new.env(parent = emptyenv())
+
+is_lookup_table <- function(tname, df) {
+  key <- paste("k", tname, nrow(df), ncol(df), sep = "\r")
+  hit <- .lookup_cache[[key]]
+  if (!is.null(hit)) {
+    return(hit)
+  }
+  tc <- clean_name(tname)
+  res <- grepl(lookup_name_re, sub(schema_prefix_re, "", tc)) ||
+    (nrow(df) > 0 &&
+      nrow(df) <= 500 &&
+      ncol(df) <= 4 &&
+      any(vapply(
+        names(df),
+        function(cn) {
+          cc <- clean_name(cn)
+          (cc %in% generic_key_names || is_key_name(cc)) &&
+            !anyNA(df[[cn]]) &&
+            length(unique(df[[cn]])) == nrow(df)
+        },
+        logical(1)
+      )))
+  assign(key, res, envir = .lookup_cache)
+  res
+}
+
+# Preference among target columns when several score the same:
+# id/code-style keys, then the same name as the source, then key-named
+target_col_pref <- function(col2_clean, col1_clean) {
+  if (col2_clean %in% generic_key_names) {
+    3L
+  } else if (col2_clean == col1_clean) {
+    2L
+  } else if (is_key_name(col2_clean)) {
+    1L
+  } else {
+    0L
+  }
 }
 
 # ── Type classification ──────────────────────────────────────
@@ -297,15 +458,27 @@ detect_pks <- function(df, table_name, method = "both") {
 
 .naming_signal_cache <- new.env(parent = emptyenv())
 
-naming_signal <- function(col1, t2, col2) {
-  key <- paste("k", col1, t2, col2, sep = "\r")
+naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
+  key <- paste("k", col1, t2, col2, t2_is_lookup, sep = "\r")
   if (exists(key, envir = .naming_signal_cache, inherits = FALSE)) {
     return(get(key, envir = .naming_signal_cache))
   }
   c1 <- clean_name(col1)
-  t2c <- strip_table_prefix(clean_name(t2))
-  res <- if (is_fk_for(c1, t2c)) {
+  # The table match doesn't depend on col2, so cache it per (col1, t2)
+  mkey <- paste("m", col1, t2, t2_is_lookup, sep = "\r")
+  match <- .naming_signal_cache[[mkey]]
+  if (is.null(match)) {
+    match <- fk_name_match(c1, clean_name(t2), t2_is_lookup) %||% "none"
+    assign(mkey, match, envir = .naming_signal_cache)
+  }
+  res <- if (identical(match, "exact")) {
     list(signal = "naming_exact", value = 1.0, reason = "exact FK naming")
+  } else if (identical(match, "role")) {
+    list(
+      signal = "naming_role",
+      value = 0.9,
+      reason = sprintf("FK naming with prefix (%s)", c1)
+    )
   } else {
     stem1 <- sub("_(id|key|code|num|no)$", "", c1)
     stem2 <- sub("_(id|key|code|num|no)$", "", clean_name(col2))
@@ -341,14 +514,20 @@ score_candidate <- function(
   df2,
   enable_flags,
   p1 = NULL,
-  p2 = NULL
+  p2 = NULL,
+  t2_is_lookup = NULL
 ) {
   signals <- list()
   reasons <- character(0)
 
   # 1. Naming conventions
   if (isTRUE(enable_flags[["naming"]])) {
-    ns <- naming_signal(col1, t2, col2)
+    ns <- naming_signal(
+      col1,
+      t2,
+      col2,
+      t2_is_lookup %||% is_lookup_table(t2, df2)
+    )
     if (!is.null(ns)) {
       signals[[ns$signal]] <- ns$value
       reasons <- c(reasons, ns$reason)
@@ -541,9 +720,10 @@ is_fk_candidate <- function(col, col_name) {
     return(FALSE)
   }
 
-  # Boolean / low-cardinality columns are not FKs
+  # Boolean / low-cardinality columns are not FKs, unless named like a key
+  # (provider_id holding one or two providers is still a foreign key)
   n_unique <- length(unique(na.omit(col)))
-  if (n_unique <= 2 && n > 10) {
+  if (n_unique <= 2 && n > 10 && !is_key_name(clean_name(col_name))) {
     return(FALSE)
   }
 
@@ -819,6 +999,12 @@ detect_fks <- function(
   # max_pairs caps total pair evaluations to prevent runaway on huge schemas
   pair_count <- 0L
 
+  lookup_flags <- vapply(
+    tnames,
+    function(t) is_lookup_table(t, tables[[t]]),
+    logical(1)
+  )
+
   make_rel <- function(t1, col1, t2, col2, res) {
     list(
       from_table = t1,
@@ -867,8 +1053,13 @@ detect_fks <- function(
         if (!in_focus(t1) && !in_focus(t2)) {
           next
         }
-        # An empty table is only a plausible parent for another empty table
-        if (nrow(tables[[t2]]) == 0 && !t1_empty) {
+        # An empty table is only a plausible parent for another empty table,
+        # or when it is named as a lookup table (tlk_services with no rows)
+        if (
+          nrow(tables[[t2]]) == 0 &&
+            !t1_empty &&
+            !lookup_flags[[t2]]
+        ) {
           next
         }
         # 1:1 links point up the ranking (or to the table that owns the key),
@@ -889,6 +1080,13 @@ detect_fks <- function(
         df2 <- tables[[t2]]
         target_cols <- if (length(pk_map[[t2]]) > 0) {
           pk_map[[t2]]
+        } else if (nrow(df2) == 0) {
+          # Empty tables: their key-named and id/code columns
+          names(df2)[vapply(
+            clean_name(names(df2)),
+            function(cc) is_key_name(cc) || cc %in% generic_key_names,
+            logical(1)
+          )]
         } else {
           fk_candidates[[t2]]
         }
@@ -923,14 +1121,20 @@ detect_fks <- function(
               df2,
               enable_flags,
               get_profile(t1, col1),
-              get_profile(t2, col2)
+              get_profile(t2, col2),
+              lookup_flags[[t2]]
             ),
             error = function(e) NULL
           )
           if (is.null(result)) {
             next
           }
-          if (is.null(best_result) || result$score > best_result$score) {
+          if (
+            is.null(best_result) ||
+              result$score > best_result$score ||
+              (result$score == best_result$score &&
+                target_col_pref(col2, col1) > target_col_pref(best_to_col, col1))
+          ) {
             best_result <- result
             best_to_col <- col2
           }

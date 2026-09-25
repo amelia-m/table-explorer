@@ -235,3 +235,18 @@ test_that("restore_session_json handles empty/missing fields", {
   expect_true(is.list(restored$manual_relationships))
   expect_true(is.list(restored$settings))
 })
+
+test_that("session round-trips review decisions", {
+  confirmed <- list(list(
+    from_table = "orders", from_col = "customer_id",
+    to_table = "customers", to_col = "customer_id",
+    detected_by = "naming", confidence = "high", score = 1
+  ))
+  json_str <- save_session_json(
+    list(), list(), list(), list(),
+    review = list(confirmed = confirmed, suppressed = list("a|b|c|d"))
+  )
+  result <- restore_session_json(json_str)
+  expect_equal(result$review$confirmed[[1]]$from_col, "customer_id")
+  expect_equal(unlist(result$review$suppressed), "a|b|c|d")
+})
