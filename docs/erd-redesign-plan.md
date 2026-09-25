@@ -1,6 +1,7 @@
 # ERD redesign plan
 
-Status: **proposal, not started.** It is based on the reference diagrams in
+Status: **approved; step 1 (relationship model + exports) in progress.**
+It is based on the reference diagrams in
 `docs/erd-examples/`, a web review of ERD best practices, and a map of the
 current code (September 2026).
 
@@ -210,7 +211,22 @@ Each step is its own PR, with tests. For the UI steps that means a
 headless-Chromium check on the sample data and a synthetic 50-table
 Access-style schema.
 
-## Open questions
+## Decisions (September 2026)
+
+- **Renderer:** elkjs + custom SVG in the app. Users can also export
+  Mermaid, DBML and ELK graph JSON, and render them in other tools.
+- **Placement:** the new diagram replaces the ERD tab. The current
+  visNetwork view becomes "Network overview".
+- **Unconfirmed inferred links:** muted, with a "?" mark. Low confidence is
+  hidden behind a switch.
+- **Order:** Phase 1 + exports first (step 1), then the Diagram view.
+- **Step 1 notes:**
+  - `child_min` is always zero, because it comes from a data snapshot.
+  - The model picks one primary key per table from the candidate keys
+    (`id`, then `<entity>_id`, then key-named). A table with several FKs
+    and no key-named candidate gets its composite key or none.
+
+## Open questions (resolved above, kept for context)
 
 - Is the renderer choice acceptable? It means vendoring elkjs (~1.5 MB)
   and writing custom SVG, rather than only improving visNetwork.

@@ -24,7 +24,7 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
 | **Manual overrides** | Add relationships auto-detection misses |
-| **Exports** | Relationships CSV, dbt schema.yml, Mermaid ERD, session save/restore (JSON) |
+| **Exports** | Relationships CSV (with review status), dbt schema.yml, Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), session save/restore (JSON) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
 ### Architecture (golem package)
@@ -43,11 +43,12 @@ R/
   mod_table_details.R    Per-table column summary
   mod_relationships.R    Relationships tab
   mod_name_changes.R     Name changes / rename log tab
-  mod_export.R           Export panel (CSV, dbt YAML, Mermaid, session)
+  mod_export.R           Export panel (CSV, dbt YAML, Mermaid, DBML, ELK, session)
   utils_inference.R      7-signal PK/FK detection engine
   utils_file_readers.R   Multi-format file parser (18 formats)
   utils_db_connectors.R  Database connection, introspection, loading
-  utils_export.R         dbt YAML, Mermaid ERD, session JSON
+  utils_erd_model.R      Shared ERD model: types, key badges, cardinality, roles
+  utils_export.R         dbt YAML, Mermaid ERD, DBML, ELK JSON, session JSON
   utils_vis.R            ERD network builder (build_network)
   utils_helpers.R        Shared helpers (%||%)
 inst/
@@ -130,6 +131,25 @@ run_app()
 - Key-named columns are always name-checked, even when they hold only one or two distinct values
 
 Scores are combined via noisy-OR aggregation: `score = 1 - prod(1 - weights)`. The composite score maps to confidence tiers: high (>= 0.85), medium (>= 0.55), low (< 0.55).
+
+### ERD exports
+
+Mermaid, DBML and ELK exports share one model (`R/utils_erd_model.R`) and
+use crow's-foot notation:
+
+- **Parent end**: `||` exactly one (FK never NULL) or `|o` zero-or-one
+  (nullable FK). **Child end**: `o{` zero-or-many or `o|` zero-or-one
+  (FK unique in the child, i.e. 1:1). The child minimum is always zero:
+  a data snapshot can't prove every parent has a child.
+- **Line**: solid (`--`) identifying (the FK is part of the child's PK),
+  dashed (`..`) non-identifying.
+- **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
+  `id`, then the table's own `<entity>_id`, then other key-named columns),
+  composite keys when detected.
+- **Provenance**: inferred links are labelled with their confidence
+  (`customer_id (inferred 87%)`); declared, manual and confirmed ones are
+  not. DBML colours inferred refs grey.
+- Output is sorted, so exports diff cleanly in git.
 
 ### Schema file format
 

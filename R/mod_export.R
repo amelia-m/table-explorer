@@ -20,7 +20,15 @@ mod_export_ui <- function(id) {
           class = "dl-btn"
         ),
         downloadButton(ns("dl_dbt_yaml"), "dbt schema.yml", class = "dl-btn"),
-        downloadButton(ns("dl_mermaid"), "Mermaid ERD", class = "dl-btn")
+        downloadButton(ns("dl_mermaid"), "Mermaid (.mmd)", class = "dl-btn"),
+        downloadButton(ns("dl_dbml"), "DBML (.dbml)", class = "dl-btn"),
+        downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn")
+      ),
+      div(
+        style = "font-size:11px;color:var(--text-secondary);margin:-8px 0 12px;line-height:1.5;",
+        "ERD exports use crow's-foot notation: || mandatory, |o optional, ",
+        "o{ many, o| one; dashed (..) = non-identifying. Inferred links are ",
+        "labelled with their confidence; confirmed and declared ones are not."
       ),
       tags$hr(),
       div(class = "section-title", "Session"),
@@ -95,6 +103,36 @@ mod_export_server <- function(
           composite_pk_map_rv()
         )
         writeLines(mmd_str, file)
+      }
+    )
+
+    output$dl_dbml <- downloadHandler(
+      filename = "schema.dbml",
+      content = function(file) {
+        writeLines(
+          generate_dbml(
+            all_tables_rv(),
+            all_rels_rv(),
+            pk_map_rv(),
+            composite_pk_map_rv()
+          ),
+          file
+        )
+      }
+    )
+
+    output$dl_elk <- downloadHandler(
+      filename = "erd.elk.json",
+      content = function(file) {
+        writeLines(
+          generate_elk_json(
+            all_tables_rv(),
+            all_rels_rv(),
+            pk_map_rv(),
+            composite_pk_map_rv()
+          ),
+          file
+        )
       }
     )
 
