@@ -48,6 +48,8 @@ mod_export_ui <- function(id) {
 #' @param composite_pk_map_rv reactive returning composite PK map
 #' @param manual_rels_rv reactiveVal holding manual relationships
 #' @param schema_rels_rv reactiveVal holding schema relationships
+#' @param false_positives_rv reactiveVal of suppressed relationship keys
+#' @param confirmed_rels_rv reactiveVal of confirmed relationships (by key)
 #' @param detect_method reactive returning the current detect_method setting
 #' @param min_confidence reactive returning the current min_confidence setting
 #' @noRd
@@ -59,6 +61,8 @@ mod_export_server <- function(
   composite_pk_map_rv,
   manual_rels_rv,
   schema_rels_rv,
+  false_positives_rv,
+  confirmed_rels_rv,
   detect_method,
   min_confidence
 ) {
@@ -107,6 +111,10 @@ mod_export_server <- function(
           settings = list(
             detect_method = detect_method(),
             min_confidence = min_confidence()
+          ),
+          review = list(
+            confirmed = unname(confirmed_rels_rv()),
+            suppressed = as.list(false_positives_rv())
           )
         )
         writeLines(json_str, file)
@@ -142,6 +150,17 @@ mod_export_server <- function(
       }
       if (length(result$schema_relationships) > 0) {
         schema_rels_rv(result$schema_relationships)
+      }
+      confirmed <- result$review$confirmed %||% list()
+      if (length(confirmed) > 0) {
+        confirmed_rels_rv(setNames(
+          confirmed,
+          vapply(confirmed, rel_key, character(1))
+        ))
+      }
+      suppressed <- unlist(result$review$suppressed %||% list())
+      if (length(suppressed) > 0) {
+        false_positives_rv(as.character(suppressed))
       }
       showNotification(
         paste0("Session restored: ", length(result$tables), " table(s)"),

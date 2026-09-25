@@ -17,6 +17,9 @@ app_server <- function(input, output, session) {
   table_meta_rv <- reactiveVal(list())
   false_positives_rv <- reactiveVal(character(0))
   conf_overrides_rv <- reactiveVal(list())
+  # Relationships the user confirmed, keyed by rel_key(). Stored whole so a
+  # confirmed link stays even if a later scan no longer finds it.
+  confirmed_rels_rv <- reactiveVal(list())
 
   # FK detection cache (mutable env, shared across modules)
   fk_cache <- new.env(parent = emptyenv())
@@ -243,22 +246,28 @@ app_server <- function(input, output, session) {
   })
 
   # ── Combined relationships ────────────────────────────────────
-  rel_key <- function(r) {
-    paste(r$from_table, r$from_col, r$to_table, r$to_col, sep = "|")
-  }
-
   all_rels_rv <- reactive({
     raw <- c(auto_rels_rv(), manual_rels_rv(), schema_rels_rv())
     suppressed <- false_positives_rv()
     overrides <- conf_overrides_rv()
+    confirmed <- confirmed_rels_rv()
     filtered <- Filter(function(r) !rel_key(r) %in% suppressed, raw)
-    lapply(filtered, function(r) {
+    # Keep confirmed links whose tables are still loaded, even if the
+    # current scan settings no longer detect them
+    present <- vapply(filtered, rel_key, character(1))
+    loaded <- names(all_tables_rv())
+    missing <- Filter(
+      function(r) r$from_table %in% loaded && r$to_table %in% loaded,
+      confirmed[setdiff(names(confirmed), present)]
+    )
+    lapply(c(filtered, unname(missing)), function(r) {
       k <- rel_key(r)
       if (k %in% names(overrides)) {
         r$confidence <- overrides[[k]]
         conf_rank <- c(low = 0.3, medium = 0.7, high = 0.95)
         r$score <- conf_rank[[r$confidence]]
       }
+      r$confirmed <- k %in% names(confirmed)
       r
     })
   })
@@ -310,7 +319,8 @@ app_server <- function(input, output, session) {
     visible_tables_rv,
     visible_rels_rv,
     false_positives_rv,
-    conf_overrides_rv
+    conf_overrides_rv,
+    confirmed_rels_rv
   )
 
   mod_name_changes_server("name_changes", rename_log_rv)
@@ -323,6 +333,8 @@ app_server <- function(input, output, session) {
     composite_pk_map_rv,
     manual_rels_rv,
     schema_rels_rv,
+    false_positives_rv = false_positives_rv,
+    confirmed_rels_rv = confirmed_rels_rv,
     detect_method = detection$detect_method,
     min_confidence = reactive(
       detection$detection_settings_rv()$min_conf %||% "medium"

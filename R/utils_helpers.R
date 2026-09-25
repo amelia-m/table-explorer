@@ -14,3 +14,13 @@
     b
   }
 }
+
+#' Stable key for a relationship, used for suppress/confirm decisions
+#' @noRd
+rel_key <- function(r) {
+  to_col <- r$to_col
+  if (is.null(to_col) || length(to_col) == 0 || is.na(to_col)) {
+    to_col <- ""
+  }
+  paste(r$from_table, r$from_col, r$to_table, to_col, sep = "|")
+}
