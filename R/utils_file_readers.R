@@ -405,7 +405,9 @@ app_export_signatures <- list(
 detect_app_export <- function(df) {
   cols <- janitor::make_clean_names(names(df))
   for (kind in names(app_export_signatures)) {
-    if (setequal(cols, app_export_signatures[[kind]])) {
+    sig <- app_export_signatures[[kind]]
+    # Relationships CSVs gained a review "status" column; accept both
+    if (setequal(cols, sig) || setequal(cols, c(sig, "status"))) {
       return(kind)
     }
   }

@@ -138,7 +138,8 @@ save_session_json <- function(
   rels,
   manual_rels,
   schema_rels,
-  settings = list()
+  settings = list(),
+  review = list()
 ) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
@@ -162,7 +163,9 @@ save_session_json <- function(
     relationships = rels,
     manual_relationships = manual_rels,
     schema_relationships = schema_rels,
-    settings = settings
+    settings = settings,
+    # User review decisions: confirmed relationships and suppressed keys
+    review = review
   )
 
   jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -175,7 +178,8 @@ restore_session_json <- function(json_text) {
       relationships = list(),
       manual_relationships = list(),
       schema_relationships = list(),
-      settings = list()
+      settings = list(),
+      review = list()
     ))
   }
 
@@ -205,6 +209,7 @@ restore_session_json <- function(json_text) {
     relationships = session$relationships %||% list(),
     manual_relationships = session$manual_relationships %||% list(),
     schema_relationships = session$schema_relationships %||% list(),
-    settings = session$settings %||% list()
+    settings = session$settings %||% list(),
+    review = session$review %||% list()
   )
 }

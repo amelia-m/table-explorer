@@ -68,6 +68,22 @@
     .modal-header, .modal-footer { border-color: var(--border-sub); }
     .modal-header .close { color: var(--text-primary); text-shadow: none; opacity: 0.6; }
 
+    /* ── Relationships review table ──────────────────────────── */
+    .rel-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .rel-toolbar-counts { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-secondary); }
+    .rel-toolbar-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn-rel { background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border-sub); border-radius: 6px; font-size: 12px; padding: 4px 10px; }
+    .btn-rel:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-rel-confirm { color: var(--success); border-color: var(--success); }
+    .btn-rel-suppress { color: var(--danger); border-color: var(--danger); }
+    .btn-rel-row { background: transparent; border: 1px solid var(--border-sub); border-radius: 4px; color: var(--text-secondary); font-size: 11px; padding: 0 6px; margin-right: 4px; cursor: pointer; }
+    .btn-rel-row.btn-rel-confirm { color: var(--success); border-color: var(--success); }
+    .btn-rel-row.btn-rel-suppress { color: var(--danger); border-color: var(--danger); }
+    .rel-status { font-family: "IBM Plex Mono", monospace; font-size: 11px; white-space: nowrap; }
+    .rel-status-confirmed { color: var(--success); font-weight: 600; }
+    .rel-status-review { color: var(--text-secondary); }
+    table.dataTable.rel-dt td { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+
     /* ── Header ───────────────────────────────────────────────── */
     .app-header {
       background: var(--bg-surface);
