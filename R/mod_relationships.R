@@ -8,6 +8,7 @@ mod_relationships_ui <- function(id) {
   ns <- NS(id)
   tagList(
     br(),
+    uiOutput(ns("relationships_summary")),
     uiOutput(ns("relationships_ui")),
     br(),
     downloadButton(ns("dl_rels"), "\u2b07  Export CSV", class = "dl-btn")
@@ -21,178 +22,339 @@ mod_relationships_ui <- function(id) {
 #' @param all_rels_rv reactive returning all relationships
 #' @param false_positives_rv reactiveVal holding suppressed relationship keys
 #' @param conf_overrides_rv reactiveVal holding confidence overrides
+#' @param confirmed_rels_rv reactiveVal: named list (rel_key -> rel) of
+#'   relationships the user confirmed
 #' @noRd
 mod_relationships_server <- function(
   id,
   all_tables_rv,
   all_rels_rv,
   false_positives_rv,
-  conf_overrides_rv
+  conf_overrides_rv,
+  confirmed_rels_rv
 ) {
   moduleServer(id, function(input, output, session) {
-    output$relationships_ui <- renderUI({
-      tbls <- all_tables_rv()
-      req(length(tbls) > 0)
-      rels <- all_rels_rv()
+    method_labels <- c(
+      naming = "naming",
+      name_similarity = "name similarity",
+      value_overlap = "value overlap",
+      cardinality = "cardinality",
+      format = "format",
+      distribution = "distribution",
+      null_pattern = "null pattern",
+      content = "content",
+      schema = "schema",
+      manual = "manual"
+    )
 
+    rels_rv <- reactive({
+      req(length(all_tables_rv()) > 0)
+      all_rels_rv()
+    })
+
+    # ---- Review summary + bulk actions ----
+    output$relationships_summary <- renderUI({
+      rels <- rels_rv()
+      n_conf <- sum(vapply(rels, function(r) isTRUE(r$confirmed), logical(1)))
+      n_supp <- length(false_positives_rv())
+      div(
+        class = "rel-toolbar",
+        span(
+          class = "rel-toolbar-counts",
+          sprintf(
+            "%d relationship%s · %d confirmed · %d to review",
+            length(rels),
+            if (length(rels) == 1) "" else "s",
+            n_conf,
+            length(rels) - n_conf
+          ),
+          if (n_supp > 0) sprintf(" · %d suppressed", n_supp)
+        ),
+        span(
+          class = "rel-toolbar-actions",
+          actionButton(
+            session$ns("confirm_selected"),
+            "✓ Confirm selected",
+            class = "btn-rel btn-rel-confirm"
+          ),
+          actionButton(
+            session$ns("unconfirm_selected"),
+            "Unconfirm selected",
+            class = "btn-rel"
+          ),
+          actionButton(
+            session$ns("suppress_selected"),
+            "✕ Suppress selected",
+            class = "btn-rel btn-rel-suppress"
+          ),
+          if (n_supp > 0) {
+            actionButton(
+              session$ns("restore_suppressed"),
+              "Restore suppressed",
+              class = "btn-rel"
+            )
+          }
+        )
+      )
+    })
+
+    # Row data for the table, in the same order as rels_rv()
+    rel_rows <- reactive({
+      rels <- rels_rv()
       if (length(rels) == 0) {
+        return(NULL)
+      }
+      conf_rank <- c(low = 1L, medium = 2L, high = 3L)
+      data.frame(
+        key = vapply(rels, rel_key, character(1)),
+        confirmed = vapply(rels, function(r) isTRUE(r$confirmed), logical(1)),
+        from_table = vapply(rels, `[[`, character(1), "from_table"),
+        from_col = vapply(rels, `[[`, character(1), "from_col"),
+        to_table = vapply(rels, `[[`, character(1), "to_table"),
+        to_col = vapply(
+          rels,
+          function(r) {
+            if (is.null(r$to_col) || is.na(r$to_col)) "?" else r$to_col
+          },
+          character(1)
+        ),
+        method = vapply(rels, function(r) r$detected_by %||% "", character(1)),
+        confidence = vapply(
+          rels,
+          function(r) r$confidence %||% "",
+          character(1)
+        ),
+        conf_rank = vapply(
+          rels,
+          function(r) {
+            unname(conf_rank[r$confidence %||% "low"]) %||% 0L
+          },
+          integer(1)
+        ),
+        score = vapply(
+          rels,
+          function(r) round(100 * (r$score %||% NA_real_)),
+          numeric(1)
+        ),
+        signals = vapply(
+          rels,
+          function(r) paste(names(r$signals), collapse = ", "),
+          character(1)
+        ),
+        reasons = vapply(
+          rels,
+          function(r) paste(r$reasons, collapse = "; "),
+          character(1)
+        ),
+        stringsAsFactors = FALSE
+      )
+    })
+
+    output$relationships_ui <- renderUI({
+      if (is.null(rel_rows())) {
         return(div(
           class = "empty-state",
           h4("No relationships detected"),
           p(
-            style = "color:#334155; font-size:13px;",
+            style = "color:var(--text-muted); font-size:13px;",
             "Try uploading more tables or adjusting the detection method."
           )
         ))
       }
+      DT::DTOutput(session$ns("rel_table"))
+    })
 
-      methods <- list(
-        list(key = "naming", label = "Naming Convention", cls = "m-naming"),
-        list(
-          key = "name_similarity",
-          label = "Name Similarity",
-          cls = "m-name_similarity"
+    .js_str <- function(x) {
+      paste0("'", gsub("(['\\\\])", "\\\\\\1", x), "'")
+    }
+    .row_button <- function(input_id, key, label, cls, title) {
+      sprintf(
+        paste0(
+          "<button class=\"btn-rel-row %s\" title=\"%s\" ",
+          "onclick=\"event.stopPropagation();",
+          "Shiny.setInputValue('%s', %s, {priority: 'event'})\">%s</button>"
         ),
-        list(
-          key = "value_overlap",
-          label = "Value Overlap",
-          cls = "m-value_overlap"
-        ),
-        list(
-          key = "cardinality",
-          label = "Cardinality Match",
-          cls = "m-cardinality"
-        ),
-        list(key = "format", label = "Format Fingerprint", cls = "m-format"),
-        list(
-          key = "distribution",
-          label = "Distribution Similarity",
-          cls = "m-distribution"
-        ),
-        list(
-          key = "null_pattern",
-          label = "Null Pattern",
-          cls = "m-null_pattern"
-        ),
-        list(key = "content", label = "Content Analysis", cls = "m-content"),
-        list(key = "schema", label = "Schema Defined", cls = "m-schema"),
-        list(key = "manual", label = "Manual", cls = "m-manual")
+        cls,
+        title,
+        session$ns(input_id),
+        htmltools::htmlEscape(.js_str(key), attribute = TRUE),
+        label
       )
+    }
 
-      tagList(
-        lapply(methods, function(m) {
-          m_rels <- Filter(function(r) r$detected_by == m$key, rels)
-          if (length(m_rels) == 0) {
-            return(NULL)
-          }
-          tagList(
-            div(
-              class = "rel-section-hdr",
-              paste0(m$label, " (", length(m_rels), ")")
-            ),
-            lapply(m_rels, function(r) {
-              to_col <- if (!is.na(r$to_col) && !is.null(r$to_col)) {
-                r$to_col
-              } else {
-                "?"
-              }
-              conf <- if (!is.null(r$confidence)) r$confidence else ""
-              score_val <- if (!is.null(r$score)) r$score else NA
-              conf_tags <- if (nzchar(conf)) {
-                tagList(
-                  span(class = paste("conf-dot", paste0("conf-", conf))),
-                  span(
-                    class = "conf-label",
-                    paste0(
-                      conf,
-                      if (!is.na(score_val)) {
-                        paste0(" ", round(score_val * 100), "%")
-                      } else {
-                        ""
-                      }
-                    )
-                  )
-                )
-              } else {
-                NULL
-              }
-              signal_tags <- if (!is.null(r$signals) && length(r$signals) > 0) {
-                div(
-                  class = "signal-chips",
-                  lapply(names(r$signals), function(s) {
-                    span(class = "signal-chip", s)
-                  })
-                )
-              } else {
-                NULL
-              }
-              rk <- paste(
-                r$from_table,
-                r$from_col,
-                r$to_table,
-                to_col,
-                sep = "|"
-              )
-              div(
-                class = "rel-row",
-                span(class = "rel-table", r$from_table),
-                span(class = "rel-col", paste0(".", r$from_col)),
-                span(class = "rel-arrow", "\u2192"),
-                span(class = "rel-table", r$to_table),
-                span(class = "rel-col", paste0(".", to_col)),
-                span(class = paste("rel-method", m$cls), m$key),
-                conf_tags,
-                signal_tags,
-                tags$button(
-                  class = "btn btn-xs",
-                  style = "font-size:9px;padding:1px 5px;margin-left:6px;background:#1a0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:4px;cursor:pointer;",
-                  onclick = sprintf(
-                    "Shiny.setInputValue('%s', '%s', {priority: 'event'})",
-                    session$ns("suppress_rel"),
-                    rk
-                  ),
-                  "\u2715"
-                )
-              )
-            })
+    output$rel_table <- DT::renderDT({
+      rows <- rel_rows()
+      req(rows)
+      status <- ifelse(
+        rows$confirmed,
+        "<span class=\"rel-status rel-status-confirmed\">✓ confirmed</span>",
+        "<span class=\"rel-status rel-status-review\">to review</span>"
+      )
+      method <- sprintf(
+        "<span class=\"rel-method m-%s\">%s</span>",
+        htmltools::htmlEscape(rows$method),
+        htmltools::htmlEscape(
+          ifelse(
+            rows$method %in% names(method_labels),
+            method_labels[rows$method],
+            rows$method
           )
-        }),
-        if (length(false_positives_rv()) > 0) {
-          div(
-            style = "margin-top:12px;padding-top:8px;border-top:1px solid var(--border);",
-            span(
-              style = "font-size:10px;color:var(--text-faint);",
-              paste0(
-                length(false_positives_rv()),
-                " relationship(s) suppressed"
+        )
+      )
+      actions <- vapply(
+        seq_len(nrow(rows)),
+        function(i) {
+          paste0(
+            if (rows$confirmed[i]) {
+              .row_button("unconfirm_rel", rows$key[i], "undo", "", "Unconfirm")
+            } else {
+              .row_button(
+                "confirm_rel",
+                rows$key[i],
+                "✓",
+                "btn-rel-confirm",
+                "Confirm"
               )
-            ),
-            tags$button(
-              class = "btn btn-xs",
-              style = "font-size:10px;padding:2px 8px;margin-left:8px;background:#0c2a1a;color:#4ade80;border:1px solid #15803d;border-radius:4px;cursor:pointer;",
-              onclick = sprintf(
-                "Shiny.setInputValue('%s', Date.now(), {priority: 'event'})",
-                session$ns("restore_suppressed")
-              ),
-              "Restore all"
+            },
+            .row_button(
+              "suppress_rel",
+              rows$key[i],
+              "✕",
+              "btn-rel-suppress",
+              "Suppress"
             )
           )
-        }
+        },
+        character(1)
+      )
+      df <- data.frame(
+        Status = status,
+        `From table` = rows$from_table,
+        `From column` = rows$from_col,
+        `To table` = rows$to_table,
+        `To column` = rows$to_col,
+        Method = method,
+        Confidence = rows$confidence,
+        # Numbers passed as text on purpose: DT gives numeric columns a
+        # range-slider filter that needs the noUiSlider library, and if it
+        # fails to load the error stalls every later Shiny update on the
+        # page. Hidden zero-padded copies keep the sort numeric.
+        conf_rank = as.character(rows$conf_rank),
+        `Score %` = ifelse(is.na(rows$score), "", as.character(rows$score)),
+        score_sort = ifelse(
+          is.na(rows$score),
+          "000",
+          sprintf("%03d", as.integer(rows$score))
+        ),
+        Signals = rows$signals,
+        Actions = actions,
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+      # 0-based column indices for DataTables options
+      idx <- function(name) which(names(df) == name) - 1L
+      DT::datatable(
+        df,
+        rownames = FALSE,
+        escape = setdiff(names(df), c("Status", "Method", "Actions")),
+        selection = list(mode = "multiple", target = "row"),
+        filter = "top",
+        options = list(
+          pageLength = 25,
+          lengthMenu = list(c(25, 50, 100, -1), c("25", "50", "100", "All")),
+          order = list(list(idx("Score %"), "desc")),
+          stateSave = TRUE,
+          autoWidth = FALSE,
+          scrollX = TRUE,
+          columnDefs = list(
+            # Sort Confidence by rank (high > medium > low), not alphabetically
+            list(targets = idx("Confidence"), orderData = idx("conf_rank")),
+            list(targets = idx("Score %"), orderData = idx("score_sort")),
+            list(
+              targets = c(idx("conf_rank"), idx("score_sort")),
+              visible = FALSE,
+              searchable = FALSE
+            ),
+            list(targets = idx("Actions"), orderable = FALSE, searchable = FALSE),
+            list(className = "dt-center", targets = idx("Score %"))
+          )
+        ),
+        class = "compact hover rel-dt"
       )
     })
 
-    observeEvent(input$suppress_rel, {
-      rk <- input$suppress_rel
-      current <- false_positives_rv()
-      if (!rk %in% current) {
-        false_positives_rv(c(current, rk))
+    .selected_keys <- function() {
+      rows <- rel_rows()
+      sel <- input$rel_table_rows_selected
+      if (is.null(rows) || length(sel) == 0) {
         showNotification(
-          "Relationship suppressed.",
-          type = "message",
+          "Select one or more rows first.",
+          type = "warning",
           duration = 3
         )
+        return(character(0))
       }
-    })
+      rows$key[sel]
+    }
+
+    .confirm <- function(keys) {
+      rels <- rels_rv()
+      by_key <- setNames(rels, vapply(rels, rel_key, character(1)))
+      keys <- intersect(keys, names(by_key))
+      if (length(keys) == 0) {
+        return(invisible())
+      }
+      confirmed <- confirmed_rels_rv()
+      for (k in keys) {
+        r <- by_key[[k]]
+        r$confirmed <- NULL
+        confirmed[[k]] <- r
+      }
+      confirmed_rels_rv(confirmed)
+      showNotification(
+        sprintf(
+          "%d relationship%s confirmed.",
+          length(keys),
+          if (length(keys) == 1) "" else "s"
+        ),
+        type = "message",
+        duration = 3
+      )
+    }
+
+    .unconfirm <- function(keys) {
+      confirmed <- confirmed_rels_rv()
+      keys <- intersect(keys, names(confirmed))
+      if (length(keys) == 0) {
+        return(invisible())
+      }
+      confirmed_rels_rv(confirmed[setdiff(names(confirmed), keys)])
+    }
+
+    .suppress <- function(keys) {
+      if (length(keys) == 0) {
+        return(invisible())
+      }
+      # Suppressing a link also withdraws any confirmation
+      .unconfirm(keys)
+      false_positives_rv(union(false_positives_rv(), keys))
+      showNotification(
+        sprintf(
+          "%d relationship%s suppressed.",
+          length(keys),
+          if (length(keys) == 1) "" else "s"
+        ),
+        type = "message",
+        duration = 3
+      )
+    }
+
+    observeEvent(input$confirm_rel, .confirm(input$confirm_rel))
+    observeEvent(input$unconfirm_rel, .unconfirm(input$unconfirm_rel))
+    observeEvent(input$suppress_rel, .suppress(input$suppress_rel))
+    observeEvent(input$confirm_selected, .confirm(.selected_keys()))
+    observeEvent(input$unconfirm_selected, .unconfirm(.selected_keys()))
+    observeEvent(input$suppress_selected, .suppress(.selected_keys()))
 
     observeEvent(input$restore_suppressed, {
       false_positives_rv(character(0))
@@ -227,7 +389,8 @@ mod_relationships_server <- function(
           confidence = "",
           score = numeric(0),
           signals = "",
-          reasons = ""
+          reasons = "",
+          status = ""
         )[0, ],
         file,
         row.names = FALSE
@@ -258,6 +421,7 @@ mod_relationships_server <- function(
             } else {
               ""
             },
+            status = if (isTRUE(r$confirmed)) "confirmed" else "unreviewed",
             stringsAsFactors = FALSE
           )
         })
