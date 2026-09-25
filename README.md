@@ -113,13 +113,21 @@ run_app()
 
 | Signal | What it measures | Weight |
 |---|---|---|
-| **Naming** | Exact FK naming patterns (`{table}_id`, `{table}_key`) | 1.00 |
+| **Naming** | FK column named for the target table's entity (see conventions below); 0.90 when role/source words precede it (`referring_provider_id`) | 0.90-1.00 |
 | **Name similarity** | Jaro-Winkler fuzzy match between column/table names | 0.60 |
 | **Value overlap** | Fraction of values in column A that exist in column B | 0.55-0.90 |
 | **Cardinality** | Whether column A looks like an FK (many rows, few unique values) | 0.95 |
 | **Format fingerprint** | Whether both columns share value format (UUID, ISO date, email, etc.) | 0.40 |
 | **Distribution similarity** | KS-test on numeric value distributions | 0.30-0.50 |
 | **Null-pattern correlation** | Pearson correlation of null positions across tables | 0.20 |
+
+**Naming conventions recognised** (no setup needed):
+
+- FK columns: `customer_id` (Rails/Django/Access), `CustomerID` (SQL Server; cleaned to `customer_id`), `id_customer`, `fk_customer`, `customer_key` / `customer_sk` (warehouses), `state_code` / `state_cd`, `order_no` / `_num` / `_nbr`, `customer_uuid` / `_guid`
+- Role or source words before the entity: `referring_provider_id`, `trax_enrollment_status_id` (a single-word match like `provider` requires the target to be a lookup table)
+- Table names: `tbl_` `tlk_` `tlu_` `lkp_` `lu_` `ref_` `dim_` `fact_` `stg_` `mst_` prefixes, `dbo.` / `public.` schemas, `_lookup` `_lkp` `_ref` `_dim` `_codes` `_types` suffixes, regular and common irregular plurals
+- Lookup tables (named like one, or small with a unique `id`/code column) are preferred targets, their `id`/`code` column is chosen as the matched key, and they can be matched even when empty
+- Key-named columns are always name-checked, even when they hold only one or two distinct values
 
 Scores are combined via noisy-OR aggregation: `score = 1 - prod(1 - weights)`. The composite score maps to confidence tiers: high (>= 0.85), medium (>= 0.55), low (< 0.55).
 
