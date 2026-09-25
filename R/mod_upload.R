@@ -314,12 +314,12 @@ mod_upload_server <- function(
       showModal(modalDialog(
         title = tagList(
           tags$span(
-            style = "color:#f59e0b;font-family:'IBM Plex Mono',monospace;",
+            style = "color:var(--warn);font-family:'IBM Plex Mono',monospace;",
             paste0("\u26a0 Duplicate table name: '", nm, "'")
           )
         ),
         tags$p(
-          style = "font-size:13px;color:#94a3b8;",
+          style = "font-size:13px;color:var(--text-secondary);",
           "A table named ",
           tags$b(nm),
           " is already loaded. The incoming file has different metadata:"
@@ -329,22 +329,22 @@ mod_upload_server <- function(
           tags$thead(
             tags$tr(
               tags$th(
-                style = "padding:6px 10px;border-bottom:1px solid #334155;color:#64748b;text-align:left;",
+                style = "padding:6px 10px;border-bottom:1px solid var(--border-sub);color:var(--text-secondary);text-align:left;",
                 ""
               ),
               tags$th(
-                style = "padding:6px 10px;border-bottom:1px solid #334155;color:#60a5fa;text-align:left;",
+                style = "padding:6px 10px;border-bottom:1px solid var(--border-sub);color:var(--accent);text-align:left;",
                 "Existing"
               ),
               tags$th(
-                style = "padding:6px 10px;border-bottom:1px solid #334155;color:#4ade80;text-align:left;",
+                style = "padding:6px 10px;border-bottom:1px solid var(--border-sub);color:var(--success);text-align:left;",
                 "Incoming"
               )
             )
           ),
           tags$tbody(
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:#64748b;", "Dimensions"),
+              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "Dimensions"),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -359,7 +359,7 @@ mod_upload_server <- function(
               )
             ),
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:#64748b;", "File size"),
+              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "File size"),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -377,7 +377,7 @@ mod_upload_server <- function(
         ),
         br(),
         tags$p(
-          style = "font-size:12px;color:#64748b;",
+          style = "font-size:12px;color:var(--text-secondary);",
           "How should this be resolved?"
         ),
         footer = tagList(
