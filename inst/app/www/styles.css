@@ -23,6 +23,9 @@
       --tbl-row-hover: #1e293b;
       --rel-border:    #1e293b;
       --code-bg:       #0f172a;
+      --warn:          #facc15;
+      --danger:        #f87171;
+      --success:       #4ade80;
     }
     /* ── CSS variables: light ─────────────────────────────────── */
     body.light-mode {
@@ -47,6 +50,9 @@
       --tbl-row-hover: #f1f5f9;
       --rel-border:    #e2e8f0;
       --code-bg:       #e2e8f0;
+      --warn:          #a16207;
+      --danger:        #dc2626;
+      --success:       #15803d;
     }
 
     /* ── Base ─────────────────────────────────────────────────── */
@@ -56,6 +62,11 @@
       color: var(--text-primary);
       transition: background 0.25s, color 0.25s;
     }
+
+    /* ── Modals: follow the app theme (Bootstrap's default is white in both) */
+    .modal-content { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); }
+    .modal-header, .modal-footer { border-color: var(--border-sub); }
+    .modal-header .close { color: var(--text-primary); text-shadow: none; opacity: 0.6; }
 
     /* ── Header ───────────────────────────────────────────────── */
     .app-header {
@@ -148,7 +159,7 @@
     /* ── Sidebar buttons ──────────────────────────────────────── */
     .btn-add { background: #166534; border: none; color: #4ade80; font-size: 12px; border-radius: 6px; width: 100%; padding: 7px; margin-top: 6px; }
     .btn-add:hover { background: #14532d; color: #86efac; }
-    .btn-danger-soft { background: var(--bg-inset); border: 1px solid #7f1d1d; color: #f87171; font-size: 12px; border-radius: 6px; width: 100%; padding: 6px; margin-top: 4px; }
+    .btn-danger-soft { background: var(--bg-inset); border: 1px solid #7f1d1d; color: var(--danger); font-size: 12px; border-radius: 6px; width: 100%; padding: 6px; margin-top: 4px; }
     .btn-danger-soft:hover { background: #450a0a; color: #fca5a5; }
     .btn-file { background: var(--border) !important; border: none !important; color: var(--accent-soft) !important; font-size: 12px !important; }
     .shiny-input-container > .input-group .form-control { font-size: 12px; }

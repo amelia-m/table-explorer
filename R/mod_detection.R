@@ -132,7 +132,7 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       more <- length(added) - length(shown)
       showModal(modalDialog(
         title = tags$span(
-          style = "color:#60a5fa;font-family:'IBM Plex Mono',monospace;",
+          style = "color:var(--accent);font-family:'IBM Plex Mono',monospace;",
           sprintf(
             "%d new or changed table%s",
             length(added),
@@ -142,12 +142,12 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
         tags$div(
           style = "font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.8;",
           tags$div(
-            style = "color:#e2e8f0;margin-bottom:8px;",
+            style = "color:var(--text-primary);margin-bottom:8px;",
             paste(shown, collapse = ", "),
             if (more > 0) sprintf(" +%d more", more)
           ),
           tags$p(
-            style = "color:#94a3b8;font-size:11px;",
+            style = "color:var(--text-secondary);font-size:11px;",
             sprintf(
               paste0(
                 "Scan the new or changed table%s against the %d other table%s? ",
@@ -160,7 +160,7 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
           ),
           tags$p(
             class = "triage-status",
-            style = "display:none;color:#facc15;font-size:11px;margin-top:4px;"
+            style = "display:none;color:var(--warn);font-size:11px;margin-top:4px;"
           )
         ),
         footer = tagList(
@@ -218,7 +218,7 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       } else {
         paste0("~", round(est$est_time_sec / 60, 1), " minutes")
       }
-      tier_color <- if (est$tier == "moderate") "#facc15" else "#f87171"
+      tier_color <- if (est$tier == "moderate") "var(--warn)" else "var(--danger)"
 
       showModal(modalDialog(
         title = tagList(
@@ -240,42 +240,42 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
           tags$table(
             style = "width:100%;border-collapse:collapse;margin-bottom:12px;",
             tags$tr(
-              tags$td(style = "color:#64748b;padding:4px 10px;", "Tables"),
+              tags$td(style = "color:var(--text-secondary);padding:4px 10px;", "Tables"),
               tags$td(
-                style = "color:#e2e8f0;padding:4px 10px;font-weight:700;",
+                style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 est$n_tables
               )
             ),
             tags$tr(
               tags$td(
-                style = "color:#64748b;padding:4px 10px;",
+                style = "color:var(--text-secondary);padding:4px 10px;",
                 "Total columns"
               ),
               tags$td(
-                style = "color:#e2e8f0;padding:4px 10px;font-weight:700;",
+                style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 est$total_cols
               )
             ),
             tags$tr(
-              tags$td(style = "color:#64748b;padding:4px 10px;", "Total rows"),
+              tags$td(style = "color:var(--text-secondary);padding:4px 10px;", "Total rows"),
               tags$td(
-                style = "color:#e2e8f0;padding:4px 10px;font-weight:700;",
+                style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 format(est$total_rows, big.mark = ",")
               )
             ),
             tags$tr(
               tags$td(
-                style = "color:#64748b;padding:4px 10px;",
+                style = "color:var(--text-secondary);padding:4px 10px;",
                 "Est. pair comparisons"
               ),
               tags$td(
-                style = "color:#e2e8f0;padding:4px 10px;font-weight:700;",
+                style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 format(est$est_pairs, big.mark = ",")
               )
             ),
             tags$tr(
               tags$td(
-                style = "color:#64748b;padding:4px 10px;",
+                style = "color:var(--text-secondary);padding:4px 10px;",
                 "Est. time (full scan)"
               ),
               tags$td(
@@ -289,14 +289,14 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
             )
           ),
           tags$p(
-            style = "color:#94a3b8;font-size:11px;margin-top:8px;",
+            style = "color:var(--text-secondary);font-size:11px;margin-top:8px;",
             "How would you like to scan for relationships?"
           ),
           # Filled in by app.js as soon as a button is clicked, since the
           # server may still be busy loading tables and respond late
           tags$p(
             class = "triage-status",
-            style = "display:none;color:#facc15;font-size:11px;margin-top:4px;"
+            style = "display:none;color:var(--warn);font-size:11px;margin-top:4px;"
           )
         ),
         footer = tagList(
