@@ -104,6 +104,7 @@ test_that("generate_mermaid_erd marks PK columns", {
 test_that("generate_mermaid_erd includes relationships", {
   mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
 
+  # Mandatory parent (no NULL FKs), many children; lines are always solid
   expect_true(grepl("customers \\|\\|--o\\{ orders", mmd))
 })
 
@@ -114,8 +115,8 @@ test_that("generate_mermaid_erd assigns correct data types", {
   expect_true(grepl("int customer_id", mmd))
   # name is character -> string
   expect_true(grepl("string name", mmd))
-  # amount is numeric -> int
-  expect_true(grepl("int amount", mmd))
+  # amount has decimals -> float
+  expect_true(grepl("float amount", mmd))
 })
 
 test_that("generate_mermaid_erd handles Date columns", {
@@ -130,6 +131,7 @@ test_that("generate_mermaid_erd handles Date columns", {
 })
 
 test_that("generate_mermaid_erd handles empty input", {
+  # No tables: no direction/notes lines either
   mmd <- generate_mermaid_erd(list(), list(), list())
   expect_equal(trimws(mmd), "erDiagram")
 })
@@ -249,4 +251,163 @@ test_that("session round-trips review decisions", {
   result <- restore_session_json(json_str)
   expect_equal(result$review$confirmed[[1]]$from_col, "customer_id")
   expect_equal(unlist(result$review$suppressed), "a|b|c|d")
+})
+
+# ── Model-based ERD exports ──────────────────────────────────
+
+erd_export_fixture <- function() {
+  tables <- list(
+    customers = data.frame(customer_id = 1:3, email = c("a", "b", "c")),
+    orders = data.frame(order_id = 1:4, customer_id = c(1L, NA, 2L, 3L)),
+    customer_profile = data.frame(customer_id = 1:3, bio = c("x", "y", "z")),
+    order_items = data.frame(
+      order_id = c(1L, 1L, 2L), product_id = c(1L, 2L, 1L)
+    ),
+    products = data.frame(product_id = 1:2, sku = c("A", "B"))
+  )
+  mk <- function(ft, fc, tt, tc, by = "naming", conf = FALSE) {
+    list(
+      from_table = ft, from_col = fc, to_table = tt, to_col = tc,
+      detected_by = by, confidence = "high", score = 0.87, confirmed = conf,
+      reasons = "exact FK naming"
+    )
+  }
+  rels <- list(
+    mk("orders", "customer_id", "customers", "customer_id"),
+    mk("customer_profile", "customer_id", "customers", "customer_id",
+       by = "schema"),
+    mk("order_items", "order_id", "orders", "order_id", conf = TRUE),
+    mk("order_items", "product_id", "products", "product_id", conf = TRUE)
+  )
+  pks <- list(
+    customers = "customer_id", orders = "order_id",
+    customer_profile = "customer_id", products = "product_id"
+  )
+  cpks <- list(order_items = list(c("order_id", "product_id")))
+  list(tables = tables, rels = rels, pks = pks, cpks = cpks)
+}
+
+test_that("Mermaid uses crow's-foot optionality with solid lines", {
+  f <- erd_export_fixture()
+  mmd <- generate_mermaid_erd(f$tables, f$rels, f$pks, f$cpks)
+  # Nullable FK -> optional parent, inferred label; never dashed (dashes
+  # break Mermaid's markers)
+  expect_true(grepl(
+    'customers |o--o{ orders : "customer_id \u2192 customer_id (inferred 87%)"',
+    mmd, fixed = TRUE
+  ))
+  expect_false(grepl("..", gsub("%%[^\n]*", "", mmd), fixed = TRUE))
+  # 1:1, declared (no confidence label)
+  expect_true(grepl(
+    'customers ||--o| customer_profile : "customer_id \u2192 customer_id"',
+    mmd, fixed = TRUE
+  ))
+  # Composite-PK junction: identifying FK shows as a PK, FK column
+  expect_true(grepl("orders ||--o{ order_items", mmd, fixed = TRUE))
+  # Key markers
+  expect_true(grepl("int customer_id FK \"nullable\"", mmd, fixed = TRUE))
+  expect_true(grepl("int order_id PK, FK", mmd, fixed = TRUE))
+  expect_true(grepl("direction LR", mmd, fixed = TRUE))
+})
+
+test_that("Mermaid quotes unusual names and is deterministic", {
+  tables <- list(`my table` = data.frame(id = 1:2))
+  mmd <- generate_mermaid_erd(tables, list(), list(`my table` = "id"))
+  expect_true(grepl('"my table" {', mmd, fixed = TRUE))
+  f <- erd_export_fixture()
+  expect_identical(
+    generate_mermaid_erd(f$tables, f$rels, f$pks, f$cpks),
+    generate_mermaid_erd(f$tables, rev(f$rels), f$pks, f$cpks)
+  )
+})
+
+test_that("DBML has tables, settings, refs, composite PK and groups", {
+  f <- erd_export_fixture()
+  dbml <- generate_dbml(f$tables, f$rels, f$pks, f$cpks)
+  expect_true(grepl("Table customers [headerColor:", dbml, fixed = TRUE))
+  expect_true(grepl("customer_id int [pk, not null]", dbml, fixed = TRUE))
+  expect_true(grepl("Ref: orders.customer_id > customers.customer_id [color: #94a3b8]",
+                    dbml, fixed = TRUE))
+  expect_true(grepl("Ref: customer_profile.customer_id - customers.customer_id",
+                    dbml, fixed = TRUE))
+  expect_true(grepl("(order_id, product_id) [pk]", dbml, fixed = TRUE))
+  expect_true(grepl("TableGroup orders {", dbml, fixed = TRUE))
+})
+
+test_that("ELK JSON has one node per table, ports per column, FK->PK edges", {
+  skip_if_not_installed("jsonlite")
+  f <- erd_export_fixture()
+  g <- jsonlite::fromJSON(
+    generate_elk_json(f$tables, f$rels, f$pks, f$cpks),
+    simplifyVector = FALSE
+  )
+  expect_equal(g$layoutOptions[["elk.edgeRouting"]], "ORTHOGONAL")
+  expect_equal(length(g$children), 5)
+  orders <- Filter(function(n) n$id == "orders", g$children)[[1]]
+  # orders.customer_id is an FK source, orders.order_id a target
+  expect_setequal(
+    vapply(orders$ports, `[[`, "", "id"),
+    c("orders.customer_id:out", "orders.order_id:in")
+  )
+  expect_equal(length(g$edges), 4)
+  e <- Filter(
+    function(e) e$sources[[1]] == "orders.customer_id:out",
+    g$edges
+  )[[1]]
+  expect_equal(e$targets[[1]], "customers.customer_id:in")
+  expect_equal(e$properties$parentMin, "zero")
+  expect_equal(e$properties$provenance, "inferred")
+})
+
+test_that("ELK ports sit on their column row at the card border", {
+  skip_if_not_installed("jsonlite")
+  f <- erd_export_fixture()
+  g <- jsonlite::fromJSON(
+    generate_elk_json(f$tables, f$rels, f$pks, f$cpks),
+    simplifyVector = FALSE
+  )
+  row_h <- g$properties$rowHeight
+  head_h <- g$properties$headerHeight
+  port_ids <- character(0)
+  for (n in g$children) {
+    # FIXED_POS: ELK honours the coordinates (FIXED_ORDER ignores them)
+    expect_equal(n$layoutOptions[["elk.portConstraints"]], "FIXED_POS")
+    cols <- vapply(n$properties$columns, `[[`, "", "name")
+    for (p in n$ports) {
+      col <- sub(":(in|out)$", "", sub(paste0("^", n$id, "\\."), "", p$id))
+      i <- match(col, cols)
+      expect_false(is.na(i))
+      expect_equal(p$y, head_h + (i - 0.5) * row_h)
+      if (grepl(":out$", p$id)) {
+        expect_equal(p$x, n$width)
+        expect_equal(p$layoutOptions[["elk.port.side"]], "EAST")
+      } else {
+        expect_equal(p$x, 0)
+        expect_equal(p$layoutOptions[["elk.port.side"]], "WEST")
+      }
+    }
+    port_ids <- c(port_ids, vapply(n$ports, `[[`, "", "id"))
+  }
+  # Every edge endpoint exists, and every port is used by some edge
+  ends <- unlist(lapply(g$edges, function(e) c(e$sources[[1]], e$targets[[1]])))
+  expect_true(all(ends %in% port_ids))
+  expect_true(all(port_ids %in% ends))
+  # A PK+FK column gets both an in and an out port when it is both
+  oi <- Filter(function(n) n$id == "order_items", g$children)[[1]]
+  expect_true("order_items.order_id:out" %in% vapply(oi$ports, `[[`, "", "id"))
+})
+
+test_that("dbt emits a relationships test for every FK on a column", {
+  tables <- list(
+    a = data.frame(x_id = 1:2),
+    b = data.frame(x_id = 1:2),
+    c = data.frame(x_id = c(1L, 2L, 2L))
+  )
+  rels <- list(
+    list(from_table = "c", from_col = "x_id", to_table = "a", to_col = "x_id"),
+    list(from_table = "c", from_col = "x_id", to_table = "b", to_col = "x_id")
+  )
+  yml <- generate_dbt_yaml(tables, rels, list(a = "x_id", b = "x_id"))
+  expect_true(grepl("ref('a')", yml, fixed = TRUE))
+  expect_true(grepl("ref('b')", yml, fixed = TRUE))
 })

@@ -686,3 +686,38 @@ test_that("detect_fks links Access-style lookups keyed on id", {
   expect_true("referring_provider_id->tlk_providers.id" %in% got)
   expect_true("service_id->tlk_services.id" %in% got)
 })
+
+# ── Self-referencing FKs ─────────────────────────────────────
+
+test_that("detect_fks finds self-referencing hierarchy columns", {
+  tables <- list(
+    employees = data.frame(
+      id = 1:6,
+      name = letters[1:6],
+      manager_id = c(NA, 1L, 1L, 2L, 2L, 3L)
+    ),
+    categories = data.frame(
+      id = 1:5,
+      parent_category_id = c(NA, 1L, 1L, 2L, 2L)
+    ),
+    orders = data.frame(order_id = 1:5, customer_id = c(1L, 2L, 1L, 3L, 2L)),
+    customers = data.frame(customer_id = 1:3)
+  )
+  rels <- detect_fks(tables, method = "naming", min_confidence = "medium")
+  key <- vapply(rels, function(r) {
+    paste0(r$from_table, ".", r$from_col, "->", r$to_table, ".", r$to_col)
+  }, "")
+  expect_true("employees.manager_id->employees.id" %in% key)
+  expect_true("categories.parent_category_id->categories.id" %in% key)
+  expect_false(any(grepl("^orders\\.customer_id->orders", key)))
+})
+
+test_that("self_ref_match rejects non-hierarchy and other-entity names", {
+  df <- data.frame(id = 1:5, prior_status_id = c(1L, 2L, 1L, 2L, 3L),
+                   trax_client_id = 1:5)
+  expect_null(self_ref_match("tbl_clients", "prior_status_id", df, "id"))
+  expect_null(self_ref_match("tbl_clients", "trax_client_id", df, "id"))
+  # Values not in the key
+  emp <- data.frame(id = 1:3, manager_id = c(90L, 91L, 92L))
+  expect_null(self_ref_match("employees", "manager_id", emp, "id"))
+})

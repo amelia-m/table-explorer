@@ -8,6 +8,8 @@
       conventions (Access, Rails/Django, SQL Server, warehouse `_key`/`_sk`,
       code lookups, role prefixes) are detected automatically already.
 
+- [ ] ERD redesign: see `docs/erd-redesign-plan.md` (proposal, phased).
+
 ## Reference: ERD design examples
 
 Third-party example diagrams, kept for design reference only (a possible
