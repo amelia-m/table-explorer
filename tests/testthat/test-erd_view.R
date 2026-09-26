@@ -142,3 +142,79 @@ test_that("keys-only ports sit on the visible rows", {
     }
   }
 })
+
+test_that("links without a usable target column attach to the parent key", {
+  mk <- function(to_col) {
+    list(
+      from_table = "orders", from_col = "customer_id", to_table = "customers",
+      to_col = to_col, detected_by = "schema", confidence = "high",
+      score = 1, confirmed = FALSE
+    )
+  }
+  for (tc in list("", NA_character_, "no_such_col", NULL)) {
+    m <- erd_model(
+      erd_fixture()[c("customers", "orders")],
+      list(mk(tc)),
+      list(customers = "customer_id", orders = "order_id")
+    )
+    expect_length(m$rels, 1)
+    expect_equal(m$rels[[1]]$to_col, "customer_id")
+    g <- erd_elk_graph(erd_view(m))
+    expect_true(all(unlist(g$edges[[1]][c("sources", "targets")]) %in% graph_ports(g)))
+  }
+})
+
+test_that("links that can't be placed on a row stay out of the model", {
+  rel <- list(
+    from_table = "audit_log", from_col = "msg", to_table = "order_items",
+    to_col = "", detected_by = "schema", confidence = "high", score = 1,
+    confirmed = FALSE
+  )
+  # order_items has a composite key and no "msg" column
+  m <- erd_model(
+    erd_fixture(), list(rel), list(),
+    list(order_items = list(c("order_id", "product_id")))
+  )
+  expect_length(m$rels, 0)
+  ghost <- rel
+  ghost$from_col <- "missing"
+  ghost$to_table <- "customers"
+  expect_length(erd_model(erd_fixture(), list(ghost), list())$rels, 0)
+})
+
+test_that("large-schema 'Keys only' default isn't taken for a user choice", {
+  skip_if_not_installed("shiny")
+  big <- stats::setNames(
+    lapply(1:45, function(i) data.frame(id = 1:3)),
+    paste0("t", 1:45)
+  )
+  tables <- shiny::reactiveVal(big)
+  shiny::testServer(
+    mod_erd_server,
+    args = list(
+      tables_rv = tables,
+      rels_rv = shiny::reactive(list()),
+      pk_map_rv = shiny::reactive(list()),
+      composite_pk_map_rv = shiny::reactive(list()),
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      false_positives_rv = shiny::reactiveVal(character(0))
+    ),
+    {
+      session$setInputs(detail = "all", direction = "RIGHT", hops = 2)
+      session$flushReact()
+      expect_equal(detail_rv(), "keys")
+      # The radio echoes the server's update back
+      session$setInputs(detail = "keys")
+      expect_null(user_detail())
+      # A small dataset goes back to all columns
+      tables(erd_fixture())
+      session$flushReact()
+      expect_equal(detail_rv(), "all")
+      # A real choice sticks
+      session$setInputs(detail = "names")
+      tables(big)
+      session$flushReact()
+      expect_equal(detail_rv(), "names")
+    }
+  )
+})

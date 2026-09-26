@@ -140,7 +140,15 @@ mod_erd_server <- function(
     # Detail level the user picked; until then large schemas start in
     # "Keys only" (decided here, so the first draw is already the light one)
     user_detail <- reactiveVal(NULL)
-    observeEvent(input$detail, user_detail(input$detail), ignoreInit = TRUE)
+    # Value the server last pushed to the radio; its echo isn't a user choice
+    auto_detail <- reactiveVal(NULL)
+    observeEvent(input$detail, {
+      if (identical(input$detail, auto_detail())) {
+        auto_detail(NULL)
+      } else {
+        user_detail(input$detail)
+      }
+    }, ignoreInit = TRUE)
     detail_rv <- reactive({
       user_detail() %||%
         if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
@@ -175,6 +183,7 @@ mod_erd_server <- function(
         selected = intersect(isolate(input$areas), areas)
       )
       if (is.null(user_detail()) && !identical(detail_rv(), isolate(input$detail))) {
+        auto_detail(detail_rv())
         updateRadioButtons(session, "detail", selected = detail_rv())
       }
     })
