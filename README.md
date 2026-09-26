@@ -160,8 +160,8 @@ use crow's-foot notation:
   `id`, then the table's own `<entity>_id`, then other key-named columns),
   composite keys when detected.
 - **Provenance**: inferred links are labelled with their confidence
-  (`customer_id (inferred 87%)`); declared, manual and confirmed ones are
-  not. DBML colours inferred refs grey.
+  (`customer_id → customer_id (inferred 87%)`); declared, manual and
+  confirmed ones are not. DBML colours inferred refs grey.
 - Output is sorted, so exports diff cleanly in git.
 - **ELK graph**: each column gets a port pinned to its row at the card
   border (`FIXED_POS`): `table.col:out` on the east side for FK sources,
