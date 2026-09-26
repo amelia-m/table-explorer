@@ -143,6 +143,30 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   pk_cols_of <- function(t) primary_keys[[t]] %||% character(0)
 
   # ── Relationships ──────────────────────────────────────────
+  # Every line needs a row at both ends. Schema files can name a target
+  # table without a column (to_col ""): use the parent's primary key, else
+  # a same-named column. Links that still can't be placed stay out of the
+  # diagram (they remain in the Relationships tab).
+  rels <- lapply(rels, function(r) {
+    parent_cols <- names(tables[[r$to_table]])
+    tc <- r$to_col
+    if (length(tc) != 1 || is.na(tc) || !(tc %in% parent_cols)) {
+      pk <- pk_cols_of(r$to_table)
+      tc <- if (length(pk) == 1) {
+        pk
+      } else if (r$from_col %in% parent_cols) {
+        r$from_col
+      } else {
+        NA_character_
+      }
+    }
+    r$to_col <- tc
+    r
+  })
+  rels <- Filter(
+    function(r) !is.na(r$to_col) && r$from_col %in% names(tables[[r$from_table]]),
+    rels
+  )
   rels <- lapply(rels, function(r) {
     child <- tables[[r$from_table]]
     fk <- child[[r$from_col]]
