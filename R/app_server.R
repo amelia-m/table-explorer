@@ -303,6 +303,16 @@ app_server <- function(input, output, session) {
     visible_tables_rv,
     visible_rels_rv,
     pk_map_rv,
+    composite_pk_map_rv,
+    confirmed_rels_rv,
+    false_positives_rv
+  )
+
+  mod_network_server(
+    "network",
+    visible_tables_rv,
+    visible_rels_rv,
+    pk_map_rv,
     composite_pk_map_rv
   )
 
