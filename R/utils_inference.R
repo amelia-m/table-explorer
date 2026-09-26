@@ -20,6 +20,7 @@ dist_sim_med <- 0.75
 weight_map <- c(
   naming_exact = 1.00,
   naming_role = 0.90,
+  naming_self = 0.90,
   cardinality_match = 0.95,
   overlap_high = 0.90,
   name_sim = 0.60,
@@ -36,6 +37,7 @@ weight_map <- c(
 label_map <- c(
   naming_exact = "naming",
   naming_role = "naming",
+  naming_self = "naming",
   name_sim = "name_similarity",
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
@@ -237,6 +239,10 @@ is_pk_name <- function(col_clean, tname_clean) {
 
 is_fk_for <- function(col_clean, t2clean) {
   identical(fk_name_match(col_clean, t2clean), "exact")
+}
+
+is_lookup_name <- function(tname) {
+  grepl(lookup_name_re, sub(schema_prefix_re, "", clean_name(tname)))
 }
 
 # Lookup tables: named like one (tlk_, lkp_, _lookup, ...) or shaped like
@@ -1033,6 +1039,27 @@ detect_fks <- function(
     source_cols <- union(fk_candidates[[t1]], unique_key_sources[[t1]])
 
     for (col1 in source_cols) {
+      # Self-reference (employees.manager_id -> employees.id)
+      if (isTRUE(enable_flags[["naming"]]) && in_focus(t1)) {
+        self <- self_ref_match(t1, col1, df1, pk_map[[t1]])
+        if (!is.null(self)) {
+          self_key <- paste(t1, col1, t1, sep = "|")
+          if (
+            !exists(self_key, envir = seen) &&
+              conf_rank[[self$res$confidence]] >= min_rank
+          ) {
+            assign(self_key, TRUE, envir = seen)
+            results[[length(results) + 1]] <- make_rel(
+              t1,
+              col1,
+              t1,
+              self$to_col,
+              self$res
+            )
+          }
+        }
+      }
+
       # Unique-key and empty-table sources link to one best parent only
       src_unique <- col1 %in% unique_key_sources[[t1]]
       single_parent <- src_unique || t1_empty
@@ -1222,6 +1249,75 @@ tables_needing_scan <- function(tables, scanned_sig) {
   sig <- vapply(tables, table_signature, character(1))
   prev <- unname(scanned_sig[names(tables)])
   names(tables)[is.na(prev) | prev != sig]
+}
+
+# ── Self-referencing FKs ─────────────────────────────────────
+# A key-named column pointing back at its own table's key. It needs a
+# hierarchy word (manager_id, parent_id, reports_to_id), and whatever is left
+# of the name must be empty or name the table itself (parent_category_id in
+# categories). prior_status_id is not a self-reference: "status" names
+# another entity. When the table has values, most must appear in the key.
+
+self_ref_words <- c(
+  "parent", "manager", "supervisor", "reports_to", "superior",
+  "predecessor", "successor", "previous", "prior", "next", "root",
+  "master", "boss"
+)
+
+self_ref_match <- function(t1, col1, df1, pk_cols) {
+  c1 <- clean_name(col1)
+  if (!is_key_name(c1)) {
+    return(NULL)
+  }
+  tc <- clean_name(t1)
+  # Target: the table's own key column (id / <entity>_id / unique key)
+  cand <- setdiff(
+    unique(c(
+      pk_cols %||% character(0),
+      names(df1)[clean_name(names(df1)) %in% generic_key_names],
+      names(df1)[vapply(names(df1), function(cn) owns_key(clean_name(cn), tc), logical(1))]
+    )),
+    col1
+  )
+  if (length(cand) == 0) {
+    return(NULL)
+  }
+  prefs <- vapply(cand, target_col_pref, integer(1), col1_clean = c1)
+  to_col <- cand[order(-prefs)][[1]]
+
+  stem <- sub(key_suffix_re, "", c1)
+  rest <- stem
+  for (w in self_ref_words) {
+    rest <- gsub(paste0("(^|_)", w, "(_|$)"), "_", rest)
+  }
+  rest <- gsub("^_+|_+$", "", gsub("_+", "_", rest))
+  hierarchy <- !identical(rest, stem)
+  if (!hierarchy || (nzchar(rest) && singularize(rest) != table_entity(tc))) {
+    return(NULL)
+  }
+
+  if (nrow(df1) > 0) {
+    v <- df1[[col1]]
+    v <- as.character(v[!is.na(v)])
+    if (length(v) == 0) {
+      return(NULL)
+    }
+    target <- as.character(df1[[to_col]])
+    if (mean(v %in% target) < 0.8) {
+      return(NULL)
+    }
+  }
+
+  list(
+    to_col = to_col,
+    res = list(
+      signals = list(naming_self = 0.9),
+      reasons = sprintf("self-reference naming (%s)", c1),
+      score = 0.9,
+      confidence = "high",
+      detected_by = "naming"
+    )
+  )
 }
 
 # Sort relationships by confidence desc, then score desc

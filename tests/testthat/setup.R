@@ -22,6 +22,7 @@ if (!requireNamespace("tableexplorer", quietly = TRUE)) {
     r_files <- c(
       "utils_helpers.R",
       "utils_inference.R",
+      "utils_erd_model.R",
       "utils_file_readers.R",
       "utils_db_connectors.R",
       "utils_export.R"
