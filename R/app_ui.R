@@ -14,7 +14,11 @@ app_ui <- function(request) {
         href = "tableexplorer/styles.css"
       ),
       # Static JS
-      tags$script(src = "tableexplorer/app.js")
+      tags$script(src = "tableexplorer/app.js"),
+      # ERD diagram: layout (elkjs, EPL-2.0) and pan/zoom (BSD-2)
+      tags$script(src = "tableexplorer/vendor/elkjs/elk-api.js"),
+      tags$script(src = "tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js"),
+      tags$script(src = "tableexplorer/erd.js")
     ),
 
     # ---- Header ----
@@ -55,6 +59,7 @@ app_ui <- function(request) {
         tabsetPanel(
           id = "main_tabs",
           tabPanel("ERD Diagram", mod_erd_ui("erd")),
+          tabPanel("Network overview", mod_network_ui("network")),
           tabPanel("Table Details", mod_table_details_ui("table_details")),
           tabPanel("Relationships", mod_relationships_ui("relationships")),
           tabPanel("Name Changes", mod_name_changes_ui("name_changes")),
