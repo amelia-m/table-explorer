@@ -141,8 +141,13 @@ use crow's-foot notation:
   (nullable FK). **Child end**: `o{` zero-or-many or `o|` zero-or-one
   (FK unique in the child, i.e. 1:1). The child minimum is always zero:
   a data snapshot can't prove every parent has a child.
-- **Line**: solid (`--`) identifying (the FK is part of the child's PK),
-  dashed (`..`) non-identifying.
+- **Line**: always solid (`--`) in Mermaid. Mermaid draws each crow's-foot
+  marker's centre line with the relationship line itself, so dashed (`..`)
+  lines make the bars and feet look broken and detached from the entity
+  (checked in Mermaid 10.9 and 12). Identifying relationships stay visible:
+  their FK column is also marked `PK`. The ELK graph keeps an `identifying`
+  flag, so renderers that draw complete markers can dash non-identifying
+  lines.
 - **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
   `id`, then the table's own `<entity>_id`, then other key-named columns),
   composite keys when detected.
@@ -150,6 +155,13 @@ use crow's-foot notation:
   (`customer_id (inferred 87%)`); declared, manual and confirmed ones are
   not. DBML colours inferred refs grey.
 - Output is sorted, so exports diff cleanly in git.
+- **ELK graph**: each column gets a port pinned to its row at the card
+  border (`FIXED_POS`): `table.col:out` on the east side for FK sources,
+  `table.col:in` on the west side for targets. Edge-node spacing keeps the
+  last segment at each end longer than a marker. Check any export with
+  `node dev/check_erd_geometry.js erd.elk.json --svg preview.svg` (needs
+  `elkjs`). It verifies every line end sits on its row and the border,
+  with a straight run into the marker.
 
 ### Schema file format
 

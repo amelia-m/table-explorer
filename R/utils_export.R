@@ -114,12 +114,25 @@ erd_area_colors <- function(model) {
 
 # ── Mermaid ERD generator ─────────────────────────────────────
 # Crow's-foot markers from the ERD model: parent end || (mandatory) or |o
-# (optional FK), child end o{ (many) or o| (one); -- identifying, ..
-# non-identifying. Output is sorted so diffs stay meaningful.
+# (optional FK), child end o{ (many) or o| (one). Lines are always solid
+# (--): Mermaid draws each marker's centre line with the relationship line
+# itself, so dashed (..) lines make the bars and crow's feet look broken and
+# detached from the entity (seen in Mermaid 10 and 12). Identifying FKs
+# remain visible as "PK, FK" columns. Output is sorted so diffs stay
+# meaningful.
 
 generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
   model <- erd_model(tables, rels, pks, composite_pks)
-  lines <- c("erDiagram", if (length(model$tables) > 0) "    direction LR")
+  lines <- c(
+    "erDiagram",
+    if (length(model$tables) > 0) {
+      c(
+        "    %% Crow's foot: || one, |o zero-or-one, o{ zero-or-many, o| zero-or-one.",
+        "    %% Lines are solid on purpose; identifying FKs are the PK, FK columns.",
+        "    direction LR"
+      )
+    }
+  )
 
   for (t in model$tables) {
     lines <- c(lines, paste0("    ", erd_ident(t$name), " {"))
@@ -149,7 +162,7 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
   for (r in model$rels) {
     parent_end <- switch(r$parent_min, one = "||", zero = "|o", "|o")
     child_end <- switch(r$child_max, one = "o|", many = "o{", "o{")
-    line <- if (isTRUE(r$identifying)) "--" else ".."
+    line <- "--"
     note <- erd_rel_note(r)
     label <- if (identical(note, "inferred") || grepl("^inferred", note)) {
       paste0(r$from_col, " (", note, ")")
@@ -283,10 +296,18 @@ generate_dbml <- function(tables, rels, pks, composite_pks = NULL) {
 }
 
 # ── ELK graph generator (elkjs) ───────────────────────────────
-# One node per table with one port per column (FIXED_ORDER, east side for
-# FK sources, west side for targets) and edges FK port -> PK port, laid out
-# with the layered algorithm and orthogonal routing. `properties` carries
-# the ERD model so any elkjs-based renderer can draw a standard ERD.
+# One node per table. Ports sit exactly on their column's row at the card
+# border (FIXED_POS; FIXED_ORDER would ignore the coordinates and spread the
+# ports evenly): `table.col:out` on the east side for FK sources and
+# `table.col:in` on the west side for relationship targets, created only
+# when used, so a PK+FK column can be both. Edge-node spacing keeps the
+# final segment at each end longer than a crow's-foot marker. `properties`
+# carries the ERD model (and the row geometry) so any elkjs-based renderer
+# can draw a standard ERD.
+
+erd_elk_row_height <- 20
+erd_elk_header_height <- 28
+erd_elk_marker_room <- 30
 
 generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
@@ -294,29 +315,41 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
   }
   model <- erd_model(tables, rels, pks, composite_pks)
   colors <- erd_area_colors(model)
-  row_h <- 20
-  head_h <- 28
+  row_h <- erd_elk_row_height
+  head_h <- erd_elk_header_height
+
+  out_cols <- split(
+    vapply(model$rels, `[[`, character(1), "from_col"),
+    vapply(model$rels, `[[`, character(1), "from_table")
+  )
+  in_cols <- split(
+    vapply(model$rels, function(r) r$to_col %||% r$from_col, character(1)),
+    vapply(model$rels, `[[`, character(1), "to_table")
+  )
 
   children <- lapply(model$tables, function(t) {
     cols <- t$columns
     width <- max(160, 8 * max(nchar(c(t$name, paste(cols$name, cols$type)))) + 60)
-    ports <- lapply(seq_len(nrow(cols)), function(i) {
+    port <- function(i, dir) {
+      east <- identical(dir, "out")
       list(
-        id = paste0(t$name, ".", cols$name[i]),
-        layoutOptions = list(
-          "elk.port.side" = if (!is.na(cols$fk_index[i])) "EAST" else "WEST",
-          "elk.port.index" = i - 1L
-        ),
+        id = paste0(t$name, ".", cols$name[i], ":", dir),
+        layoutOptions = list("elk.port.side" = if (east) "EAST" else "WEST"),
+        x = if (east) width else 0,
         y = head_h + (i - 0.5) * row_h,
-        width = 1,
-        height = 1
+        width = 0,
+        height = 0
       )
-    })
+    }
+    ports <- c(
+      lapply(which(cols$name %in% out_cols[[t$name]]), port, dir = "out"),
+      lapply(which(cols$name %in% in_cols[[t$name]]), port, dir = "in")
+    )
     list(
       id = t$name,
       width = width,
       height = head_h + max(1, nrow(cols)) * row_h,
-      layoutOptions = list("elk.portConstraints" = "FIXED_ORDER"),
+      layoutOptions = list("elk.portConstraints" = "FIXED_POS"),
       ports = ports,
       properties = list(
         role = t$role,
@@ -341,8 +374,8 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
     r <- model$rels[[i]]
     list(
       id = paste0("rel", i),
-      sources = list(paste0(r$from_table, ".", r$from_col)),
-      targets = list(paste0(r$to_table, ".", r$to_col %||% r$from_col)),
+      sources = list(paste0(r$from_table, ".", r$from_col, ":out")),
+      targets = list(paste0(r$to_table, ".", r$to_col %||% r$from_col, ":in")),
       properties = list(
         childMax = r$child_max,
         childMin = r$child_min,
@@ -364,7 +397,15 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
       "elk.direction" = "RIGHT",
       "elk.edgeRouting" = "ORTHOGONAL",
       "elk.layered.spacing.nodeNodeBetweenLayers" = 80,
+      "elk.layered.spacing.edgeNodeBetweenLayers" = erd_elk_marker_room,
+      "elk.spacing.edgeNode" = erd_elk_marker_room,
+      # Self-references (manager_id -> id) loop around their own card
+      "elk.spacing.nodeSelfLoop" = erd_elk_marker_room,
       "elk.spacing.nodeNode" = 40
+    ),
+    properties = list(
+      rowHeight = row_h,
+      headerHeight = head_h
     ),
     children = unname(children),
     edges = edges
