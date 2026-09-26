@@ -148,6 +148,14 @@ use crow's-foot notation:
   their FK column is also marked `PK`. The ELK graph keeps an `identifying`
   flag, so renderers that draw complete markers can dash non-identifying
   lines.
+- **Mermaid connects tables, not rows.** Its ER syntax has no column
+  anchors, and the renderer spaces line ends evenly down a box side, so a
+  line's height on a box doesn't mean anything. Labels therefore name both
+  columns (`quantity → item_id`). Splitting tables into one box per
+  column was tested and rejected. As ER entities the boxes scatter (0/7
+  tables stayed together). As a flowchart with a node per column, the rows
+  sit 60-435 px apart and differ in width, and no spacing setting closes
+  the gaps. For row-accurate diagrams use the ELK graph export.
 - **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
   `id`, then the table's own `<entity>_id`, then other key-named columns),
   composite keys when detected.
