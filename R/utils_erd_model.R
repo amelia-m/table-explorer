@@ -285,3 +285,107 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
 
   list(tables = tbl_models, rels = rels)
 }
+
+# ── ERD view: focus, subject areas, detail level ─────────────
+# Trims an erd_model() for display:
+#   focus     table name to centre on (NULL = all tables)
+#   hops      relationship hops around the focus (Inf = whole component)
+#   areas     subject areas to keep (NULL = all)
+#   show_low  keep low-confidence inferred relationships
+#   detail    "all" columns, "keys" (PK/FK/UK and linked columns) or
+#             "names" (header only)
+# Header colours are fixed from the full model so filtering doesn't
+# recolour tables. Returns the trimmed model plus the orphan list and the
+# number of hidden tables/relationships.
+erd_view <- function(
+  model,
+  focus = NULL,
+  hops = 2,
+  areas = NULL,
+  show_low = FALSE,
+  detail = "all"
+) {
+  colors <- erd_area_colors(model)
+  all_names <- names(model$tables)
+
+  rels <- model$rels
+  if (!isTRUE(show_low)) {
+    rels <- Filter(
+      function(r) {
+        !(identical(r$provenance, "inferred") && identical(r$confidence, "low"))
+      },
+      rels
+    )
+  }
+  # Unconnected: no shown relationship (lookups included, whatever their role)
+  linked <- unique(unlist(lapply(rels, function(r) c(r$from_table, r$to_table))))
+  orphans <- sort(setdiff(all_names, linked))
+
+  keep <- all_names
+  if (length(areas) > 0) {
+    keep <- keep[vapply(
+      model$tables[keep],
+      function(t) t$subject_area %in% areas,
+      logical(1)
+    )]
+  }
+  if (!is.null(focus) && nzchar(focus) && focus %in% keep) {
+    reached <- focus
+    frontier <- focus
+    step <- 0
+    while (length(frontier) > 0 && step < hops) {
+      nxt <- unique(unlist(lapply(rels, function(r) {
+        if (r$from_table %in% frontier) {
+          r$to_table
+        } else if (r$to_table %in% frontier) {
+          r$from_table
+        }
+      })))
+      nxt <- setdiff(intersect(nxt, keep), reached)
+      reached <- c(reached, nxt)
+      frontier <- nxt
+      step <- step + 1
+    }
+    keep <- reached
+  }
+  keep <- sort(keep)
+  rels <- Filter(
+    function(r) r$from_table %in% keep && r$to_table %in% keep,
+    rels
+  )
+
+  linked_cols <- function(t) {
+    unique(c(
+      unlist(lapply(Filter(function(r) r$from_table == t, rels), `[[`, "from_col")),
+      unlist(lapply(
+        Filter(function(r) r$to_table == t, rels),
+        function(r) r$to_col %||% r$from_col
+      ))
+    ))
+  }
+
+  tables <- lapply(model$tables[keep], function(t) {
+    t$header_color <- colors[[t$subject_area]]
+    cols <- t$columns
+    if (identical(detail, "keys")) {
+      show <- cols$pk | !is.na(cols$fk_index) | cols$uk |
+        cols$name %in% linked_cols(t$name)
+      t$hidden_columns <- sum(!show)
+      t$columns <- cols[show, , drop = FALSE]
+    } else if (identical(detail, "names")) {
+      t$hidden_columns <- nrow(cols)
+    } else {
+      t$hidden_columns <- 0L
+    }
+    t
+  })
+
+  list(
+    tables = tables,
+    rels = rels,
+    orphans = orphans,
+    hidden_tables = length(all_names) - length(keep),
+    hidden_rels = length(model$rels) - length(rels),
+    detail = detail
+  )
+}

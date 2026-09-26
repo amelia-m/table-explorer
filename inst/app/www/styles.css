@@ -371,3 +371,55 @@
       background: var(--bg-inset); border: 1px solid var(--border); border-radius: 6px;
     }
     .rename-summary b { color: var(--accent); }
+
+    /* ── ERD diagram (erd.js) ─────────────────────────────────── */
+    .erd-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 18px; }
+    .erd-controls .form-group { margin-bottom: 6px; }
+    .erd-controls .control-label { font-size: 12px; color: var(--text-secondary); }
+    .erd-buttons { display: flex; gap: 6px; margin-bottom: 10px; }
+    .erd-summary { font-size: 12px; color: var(--text-secondary); margin: 2px 0 8px; }
+    .erd-layout { display: flex; gap: 12px; align-items: flex-start; }
+    .erd-main { flex: 1 1 auto; min-width: 0; }
+    .erd-side { flex: 0 0 260px; max-height: 72vh; overflow-y: auto; }
+    @media (max-width: 1100px) {
+      .erd-layout { flex-direction: column; }
+      .erd-side { flex-basis: auto; width: 100%; max-height: none; }
+    }
+    .erd-canvas { height: 68vh; min-height: 360px; background: var(--bg-surface); border: 1px solid var(--border-sub); border-radius: 8px; overflow: hidden; position: relative; }
+    .erd-canvas .erd-svg { display: block; cursor: grab; }
+    .erd-canvas .erd-svg:active { cursor: grabbing; }
+    .erd-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+    .erd-node, .erd-edge { cursor: pointer; transition: opacity 0.12s; }
+    .erd-svg.erd-dim .erd-node:not(.erd-hl),
+    .erd-svg.erd-dim .erd-edge:not(.erd-hl) { opacity: 0.22; }
+    .erd-edge.erd-hl .erd-line, .erd-edge.erd-selected .erd-line { stroke-width: 2.4; }
+    .erd-edge.erd-selected .erd-line, .erd-edge.erd-selected .erd-marker { stroke: var(--accent); }
+    .erd-node.erd-selected .erd-card { stroke: var(--accent); stroke-width: 2; }
+
+    .erd-legend { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+    .erd-legend summary { cursor: pointer; color: var(--text-primary); font-weight: 600; }
+    .erd-legend-body { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 8px 4px; }
+    .erd-legend-head { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+    .erd-legend-item { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+    .erd-legend-item svg { flex: 0 0 auto; }
+    .erd-legend-item b { font-size: 10px; min-width: 24px; display: inline-block; }
+    .erd-legend-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .erd-legend-junction { width: 24px; height: 14px; border: 1px dashed var(--text-muted); border-radius: 3px; display: inline-block; }
+
+    .erd-panel { background: var(--tbl-card-bg); border: 1px solid var(--border-sub); border-radius: 8px; padding: 12px; margin-bottom: 10px; font-size: 12px; color: var(--text-primary); }
+    .erd-panel-hint { color: var(--text-secondary); }
+    .erd-panel-title { font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--accent); margin-bottom: 6px; word-break: break-all; }
+    .erd-panel-rel { font-family: "IBM Plex Mono", monospace; margin-bottom: 8px; word-break: break-all; }
+    .erd-panel-meta { color: var(--text-secondary); margin-bottom: 8px; }
+    .erd-panel dl { margin: 0 0 8px; }
+    .erd-panel dt { color: var(--text-secondary); font-weight: 400; margin-top: 4px; }
+    .erd-panel dd { margin-left: 0; }
+    .erd-panel-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .erd-panel-cols { width: 100%; margin-bottom: 8px; }
+    .erd-panel-cols td { padding: 2px 4px; border-top: 1px solid var(--border-sub); }
+    .erd-panel-cols td:first-child { color: var(--warn); font-size: 10px; font-weight: 700; width: 48px; }
+    .erd-panel-cols td:last-child { color: var(--text-secondary); text-align: right; }
+    .erd-orphans { font-size: 12px; color: var(--text-primary); }
+    .erd-orphans summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
+    .erd-orphan { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border-sub); color: var(--accent); padding: 3px 2px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+    .erd-orphan:hover { background: var(--tbl-row-hover); }

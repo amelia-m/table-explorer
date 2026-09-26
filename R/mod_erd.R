@@ -1,8 +1,16 @@
 # ============================================================
-# mod_erd.R - ERD Visualization Panel
+# mod_erd.R - ERD Diagram (standard physical ERD)
 # ============================================================
+#
+# Table cards with PK/FK/UK badges, lines from the FK row to the PK row,
+# orthogonal routing and crow's-foot ends. Layout runs in the browser with
+# elkjs (inst/app/www/erd.js); the server sends the ELK graph built from
+# erd_model() / erd_view() / erd_elk_graph(). The force-directed view lives
+# on in mod_network.R ("Network overview").
 
-#' ERD module UI
+erd_large_schema <- 40L
+
+#' ERD diagram module UI
 #' @noRd
 mod_erd_ui <- function(id) {
   ns <- NS(id)
@@ -12,431 +20,362 @@ mod_erd_ui <- function(id) {
       "output.has_tables == 'false'",
       div(
         class = "empty-state",
-        div(style = "font-size: 48px; margin-bottom: 16px;", "\u25eb"),
+        div(style = "font-size: 48px; margin-bottom: 16px;", "◫"),
         h4("No tables loaded"),
         p(
-          style = "color:#334155; font-size:13px;",
-          "Upload one or more CSV files using the sidebar to begin."
+          style = "color:var(--text-muted); font-size:13px;",
+          "Upload one or more files using the sidebar to begin."
         )
       )
     ),
     conditionalPanel(
       "output.has_tables == 'true'",
       div(
-        class = "legend",
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#4ADE80;"),
-          "naming"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#2DD4BF;"),
-          "name similarity"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#FB923C;"),
-          "value overlap"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#FACC15;"),
-          "cardinality"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#60A5FA;"),
-          "format"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#A78BFA;"),
-          "distribution"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#F0ABFC;"),
-          "null pattern"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#67E8F9;"),
-          "schema"
-        ),
-        div(
-          class = "legend-item",
-          div(class = "legend-dot", style = "background:#F87171;"),
-          "manual"
-        ),
-        div(
-          class = "legend-item",
-          div(
-            class = "legend-dot",
-            style = "background:#fff;border:1px dashed #64748b;"
-          ),
-          "low confidence (dashed)"
-        )
-      ),
-      div(
-        style = "display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;",
-        selectInput(
-          ns("erd_layout"),
-          "Layout:",
-          width = "160px",
-          choices = c(
-            "Force" = "force",
-            "Hierarchical" = "hierarchical",
-            "Circular" = "circular"
-          ),
-          selected = "force"
+        class = "erd-controls",
+        selectizeInput(
+          ns("focus"),
+          "Focus table",
+          choices = c("All tables" = ""),
+          width = "220px",
+          options = list(placeholder = "All tables")
         ),
         sliderInput(
-          ns("spring_length"),
-          "Spring length:",
-          width = "200px",
-          min = 80,
-          max = 600,
-          value = 220,
-          step = 20
-        )
-      ),
-      div(
-        class = "erd-container",
-        visNetwork::visNetworkOutput(ns("erd_plot"), height = "540px")
-      ),
-      div(
-        class = "erd-hint",
-        "drag to pin nodes \u00b7 double-click to unpin \u00b7 scroll to zoom \u00b7 click for details"
-      )
-    ),
-    # Sticky node detail panel overlay
-    tags$div(
-      id = "node-panel-overlay",
-      style = paste0(
-        "display:none;position:fixed;top:80px;right:20px;z-index:9999;",
-        "width:360px;max-height:80vh;overflow-y:auto;",
-        "background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;",
-        "box-shadow:0 8px 32px rgba(0,0,0,0.7);",
-        "font-family:'IBM Plex Mono',monospace;"
-      ),
-      tags$div(
-        style = "display:flex;justify-content:space-between;align-items:center;padding:12px 16px 8px;border-bottom:1px solid #1e3a5f;",
-        tags$span(
-          id = "node-panel-title",
-          style = "color:#60a5fa;font-size:13px;font-weight:700;",
-          "Table Details"
+          ns("hops"),
+          "Hops (4 = all)",
+          min = 1,
+          max = 4,
+          value = 2,
+          step = 1,
+          width = "130px",
+          ticks = FALSE
         ),
-        tags$button(
-          id = "node-panel-close",
-          style = "background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:0;line-height:1;",
-          onclick = sprintf(
-            "document.getElementById('node-panel-overlay').style.display='none'; Shiny.setInputValue('%s', Math.random(), {priority:'event'})",
-            ns("vis_close_panel")
+        radioButtons(
+          ns("detail"),
+          "Show",
+          choices = c(
+            "All columns" = "all",
+            "Keys only" = "keys",
+            "Names only" = "names"
           ),
-          "\u00d7"
+          selected = "all",
+          inline = TRUE
+        ),
+        selectizeInput(
+          ns("areas"),
+          "Subject areas",
+          choices = NULL,
+          multiple = TRUE,
+          width = "220px",
+          options = list(placeholder = "All areas")
+        ),
+        radioButtons(
+          ns("direction"),
+          "Layout",
+          choices = c("Left → right" = "RIGHT", "Top → down" = "DOWN"),
+          selected = "RIGHT",
+          inline = TRUE
+        ),
+        checkboxInput(ns("show_low"), "Show low-confidence links", FALSE),
+        div(
+          class = "erd-buttons",
+          tags$button(
+            class = "btn-rel",
+            onclick = sprintf("erdFit('%s')", ns("canvas")),
+            "Fit"
+          ),
+          tags$button(
+            class = "btn-rel",
+            onclick = sprintf("erdDownload('%s', 'svg')", ns("canvas")),
+            "⬇ SVG"
+          ),
+          tags$button(
+            class = "btn-rel",
+            onclick = sprintf("erdDownload('%s', 'png')", ns("canvas")),
+            "⬇ PNG"
+          )
         )
       ),
-      uiOutput(ns("node_panel_ui"))
+      uiOutput(ns("summary")),
+      div(
+        class = "erd-layout",
+        div(
+          class = "erd-main",
+          div(id = ns("canvas"), class = "erd-canvas"),
+          tags$details(
+            class = "erd-legend",
+            open = NA,
+            tags$summary("Legend"),
+            div(id = ns("legend"), class = "erd-legend-body")
+          )
+        ),
+        div(class = "erd-side", uiOutput(ns("side")))
+      )
     )
   )
 }
 
-#' ERD module server
+#' ERD diagram module server
 #'
 #' @param id Module id
-#' @param all_tables_rv reactiveVal holding tables
-#' @param all_rels_rv reactive returning all relationships
-#' @param pk_map_rv reactive returning PK map
-#' @param composite_pk_map_rv reactive returning composite PK map
+#' @param tables_rv reactive: visible tables
+#' @param rels_rv reactive: visible relationships (with `confirmed`)
+#' @param pk_map_rv reactive: PK candidates per table
+#' @param composite_pk_map_rv reactive: composite keys per table
+#' @param confirmed_rels_rv reactiveVal of confirmed relationships (by key)
+#' @param false_positives_rv reactiveVal of suppressed relationship keys
 #' @noRd
 mod_erd_server <- function(
   id,
-  all_tables_rv,
-  all_rels_rv,
+  tables_rv,
+  rels_rv,
   pk_map_rv,
-  composite_pk_map_rv
+  composite_pk_map_rv,
+  confirmed_rels_rv,
+  false_positives_rv
 ) {
   moduleServer(id, function(input, output, session) {
-    selected_node_rv <- reactiveVal(NULL)
+    ns <- session$ns
+    selected_rel <- reactiveVal(NULL)
+    selected_table <- reactiveVal(NULL)
+    # Detail level the user picked; until then large schemas start in
+    # "Keys only" (decided here, so the first draw is already the light one)
+    user_detail <- reactiveVal(NULL)
+    observeEvent(input$detail, user_detail(input$detail), ignoreInit = TRUE)
+    detail_rv <- reactive({
+      user_detail() %||%
+        if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
+    })
 
-    output$erd_plot <- visNetwork::renderVisNetwork({
-      tbls <- all_tables_rv()
+    model_rv <- reactive({
+      tbls <- tables_rv()
       req(length(tbls) > 0)
-      tryCatch(
-        {
-          net <- build_network(
-            tbls,
-            all_rels_rv(),
-            pk_map_rv(),
-            composite_pk_map_rv()
-          )
-          layout_mode <- input$erd_layout %||% "force"
-          spring_len <- input$spring_length %||% 220
+      erd_model(tbls, rels_rv(), pk_map_rv(), composite_pk_map_rv())
+    })
 
-          vis <- visNetwork::visNetwork(net$nodes, net$edges, background = "#0f172a") |>
-            visNetwork::visOptions(
-              highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
-              nodesIdSelection = FALSE
-            ) |>
-            visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
-            visNetwork::visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
-            visNetwork::visInteraction(
-              navigationButtons = TRUE,
-              tooltipDelay = 80,
-              hover = TRUE
-            ) |>
-            visNetwork::visEvents(
-              # Delay the panel so a double-click (unpin) can cancel it
-              click = sprintf(
-                "function(params) {
-                  clearTimeout(this._erdClickTimer);
-                  if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    this._erdClickTimer = setTimeout(function() {
-                      Shiny.setInputValue('%s', {id: nodeId, ts: Date.now()}, {priority: 'event'});
-                      showNodePanel(nodeId);
-                    }, 250);
-                  }
-                }",
-                session$ns("vis_clicked_node")
-              ),
-              dragEnd = "function(params) {
-                if (params.nodes.length > 0) {
-                  var nodeId = params.nodes[0];
-                  var pos = this.getPositions([nodeId]);
-                  this.body.data.nodes.update({
-                    id: nodeId,
-                    x: pos[nodeId].x,
-                    y: pos[nodeId].y,
-                    fixed: {x: true, y: true}
-                  });
-                }
-              }",
-              doubleClick = "function(params) {
-                clearTimeout(this._erdClickTimer);
-                if (params.nodes.length > 0) {
-                  var nodeId = params.nodes[0];
-                  this.body.data.nodes.update({
-                    id: nodeId,
-                    fixed: {x: false, y: false}
-                  });
-                }
-              }"
-            )
+    # Keep the focus / area choices in step with the loaded tables
+    observeEvent(model_rv(), {
+      m <- model_rv()
+      tnames <- names(m$tables)
+      areas <- sort(unique(vapply(
+        m$tables,
+        function(t) t$subject_area,
+        character(1)
+      )))
+      focus <- isolate(input$focus)
+      updateSelectizeInput(
+        session,
+        "focus",
+        choices = c("All tables" = "", tnames),
+        selected = if (!is.null(focus) && focus %in% tnames) focus else ""
+      )
+      updateSelectizeInput(
+        session,
+        "areas",
+        choices = areas,
+        selected = intersect(isolate(input$areas), areas)
+      )
+      if (is.null(user_detail()) && !identical(detail_rv(), isolate(input$detail))) {
+        updateRadioButtons(session, "detail", selected = detail_rv())
+      }
+    })
 
-          if (layout_mode == "hierarchical") {
-            vis <- vis |>
-              visNetwork::visHierarchicalLayout(
-                direction = "UD",
-                sortMethod = "directed"
-              ) |>
-              visNetwork::visPhysics(enabled = FALSE)
-          } else if (layout_mode == "circular") {
-            n_nodes <- nrow(net$nodes)
-            if (n_nodes > 0) {
-              radius <- max(200, n_nodes * 50)
-              angles <- seq(0, 2 * pi, length.out = n_nodes + 1)[seq_len(
-                n_nodes
-              )]
-              net$nodes$x <- cos(angles) * radius
-              net$nodes$y <- sin(angles) * radius
-            }
-            vis <- visNetwork::visNetwork(net$nodes, net$edges, background = "#0f172a") |>
-              visNetwork::visOptions(
-                highlightNearest = list(
-                  enabled = TRUE,
-                  degree = 1,
-                  hover = TRUE
-                ),
-                nodesIdSelection = FALSE
-              ) |>
-              visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
-              visNetwork::visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
-              visNetwork::visInteraction(
-                navigationButtons = TRUE,
-                tooltipDelay = 80,
-                hover = TRUE
-              ) |>
-              visNetwork::visPhysics(enabled = FALSE) |>
-              visNetwork::visEvents(
-                click = sprintf(
-                  "function(params) {
-                    clearTimeout(this._erdClickTimer);
-                    if (params.nodes.length > 0) {
-                      var nodeId = params.nodes[0];
-                      this._erdClickTimer = setTimeout(function() {
-                        Shiny.setInputValue('%s', {id: nodeId, ts: Date.now()}, {priority: 'event'});
-                        showNodePanel(nodeId);
-                      }, 250);
-                    }
-                  }",
-                  session$ns("vis_clicked_node")
-                ),
-                dragEnd = "function(params) {
-                  if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    var pos = this.getPositions([nodeId]);
-                    this.body.data.nodes.update({
-                      id: nodeId,
-                      x: pos[nodeId].x,
-                      y: pos[nodeId].y,
-                      fixed: {x: true, y: true}
-                    });
-                  }
-                }",
-                doubleClick = "function(params) {
-                  clearTimeout(this._erdClickTimer);
-                  if (params.nodes.length > 0) {
-                    var nodeId = params.nodes[0];
-                    this.body.data.nodes.update({
-                      id: nodeId,
-                      fixed: {x: false, y: false}
-                    });
-                  }
-                }"
-              )
-          } else {
-            vis <- vis |>
-              visNetwork::visLayout(randomSeed = 42) |>
-              visNetwork::visPhysics(
-                solver = "forceAtlas2Based",
-                forceAtlas2Based = list(
-                  gravitationalConstant = -80,
-                  springLength = spring_len,
-                  springConstant = 0.04,
-                  damping = 0.9
-                ),
-                stabilization = list(iterations = 300, fit = TRUE)
-              )
-          }
-          vis
-        },
-        error = function(e) {
-          showNotification(
-            paste0("ERD error: ", conditionMessage(e)),
-            type = "error",
-            duration = 10
-          )
-          visNetwork::visNetwork(
-            data.frame(
-              id = 1,
-              label = paste("Error:", conditionMessage(e)),
-              color = "#7f1d1d",
-              font.color = "white"
-            ),
-            data.frame(),
-            background = "#0f172a"
-          )
-        }
+    view_rv <- reactive({
+      m <- model_rv()
+      hops <- input$hops %||% 2
+      erd_view(
+        m,
+        focus = input$focus,
+        hops = if (hops >= 4) Inf else hops,
+        areas = input$areas,
+        show_low = isTRUE(input$show_low),
+        detail = detail_rv()
       )
     })
 
-    observeEvent(input$vis_clicked_node, {
-      req(input$vis_clicked_node$id)
-      selected_node_rv(input$vis_clicked_node$id)
-    })
-
-    observeEvent(input$vis_close_panel, {
-      selected_node_rv(NULL)
-    })
-
-    output$node_panel_ui <- renderUI({
-      node_id <- selected_node_rv()
-      req(node_id)
-      tbls <- all_tables_rv()
-      pks <- pk_map_rv()
-      cpks <- composite_pk_map_rv()
-      rels <- all_rels_rv()
-
-      tnames <- names(tbls)
-      req(node_id <= length(tnames))
-      t <- tnames[[node_id]]
-      df <- tbls[[t]]
-      pk_v <- pks[[t]]
-      cpk_groups <- cpks[[t]]
-      cpk_cols <- unique(unlist(cpk_groups))
-      fk_r <- Filter(function(r) r$from_table == t, rels)
-      fk_cols <- vapply(fk_r, `[[`, character(1), "from_col")
-
-      col_chips <- lapply(names(df), function(cn) {
-        if (cn %in% pk_v || cn %in% cpk_cols) {
-          tags$span(
-            class = "col-chip",
-            style = "background:#2a1a00;color:#fbbf24;border-color:#78350f;",
-            cn
-          )
-        } else if (cn %in% fk_cols) {
-          tags$span(
-            class = "col-chip",
-            style = "background:#1a0a2e;color:#c084fc;border-color:#4c1d95;",
-            cn
-          )
-        } else {
-          tags$span(
-            class = "col-chip",
-            style = "background:rgba(255,255,255,0.04);color:#94a3b8;border-color:#1e3a5f;",
-            cn
-          )
-        }
-      })
-
-      tagList(
-        tags$div(
-          class = "panel-section",
-          tags$div(class = "panel-label", "Overview"),
-          tags$div(
-            style = "display:flex;gap:12px;flex-wrap:wrap;",
-            tags$span(
-              class = "pill pill-rows",
-              paste0(format(nrow(df), big.mark = ","), " rows")
-            ),
-            tags$span(class = "pill pill-cols", paste0(ncol(df), " cols"))
-          )
-        ),
-        tags$div(
-          class = "panel-section",
-          tags$div(class = "panel-label", "Primary Key(s)"),
-          if (length(pk_v) > 0) {
-            tags$div(lapply(pk_v, function(p) {
-              tags$span(class = "pill pill-pk", p)
-            }))
-          } else if (length(cpk_groups) > 0) {
-            tags$div(lapply(cpk_groups, function(g) {
-              tags$span(
-                class = "pill pill-pk",
-                paste0("CPK: ", paste(g, collapse = " + "))
-              )
-            }))
-          } else {
-            tags$span(style = "color:#f87171;font-size:12px;", "none detected")
-          }
-        ),
-        tags$div(
-          class = "panel-section",
-          tags$div(class = "panel-label", "Foreign Key(s)"),
-          if (length(fk_r) > 0) {
-            tags$div(lapply(fk_r, function(r) {
-              to_col <- if (!is.na(r$to_col) && !is.null(r$to_col)) {
-                r$to_col
-              } else {
-                "?"
-              }
-              tags$div(
-                style = "font-size:11px;color:#c084fc;padding:1px 0;",
-                paste0(r$from_col, " \u2192 ", r$to_table, ".", to_col)
-              )
-            }))
-          } else {
-            tags$span(style = "color:#64748b;font-size:12px;", "none")
-          }
-        ),
-        tags$div(
-          class = "panel-section",
-          tags$div(class = "panel-label", paste0("Columns (", ncol(df), ")")),
-          tags$div(style = "display:flex;flex-wrap:wrap;gap:3px;", col_chips)
+    observe({
+      v <- view_rv()
+      graph <- erd_elk_graph(
+        v,
+        detail = v$detail,
+        direction = input$direction %||% "RIGHT"
+      )
+      session$sendCustomMessage(
+        "erd-render",
+        list(
+          container = ns("canvas"),
+          legend = ns("legend"),
+          relInput = ns("erd_rel"),
+          tableInput = ns("erd_table"),
+          graph = graph
         )
       )
+    })
+
+    output$summary <- renderUI({
+      v <- view_rv()
+      m <- model_rv()
+      n_all <- length(m$tables)
+      parts <- c(
+        sprintf(
+          "%d of %d table%s",
+          length(v$tables),
+          n_all,
+          if (n_all == 1) "" else "s"
+        ),
+        sprintf(
+          "%d relationship%s",
+          length(v$rels),
+          if (length(v$rels) == 1) "" else "s"
+        ),
+        if (v$hidden_rels > 0) {
+          sprintf("%d hidden by filters", v$hidden_rels)
+        }
+      )
+      hint <- if (n_all > erd_large_schema && !nzchar(input$focus %||% "")) {
+        " · Large schema: pick a focus table to explore its neighbourhood."
+      }
+      div(class = "erd-summary", paste(parts, collapse = " · "), hint)
+    })
+
+    observeEvent(input$erd_rel, {
+      selected_rel(input$erd_rel)
+      selected_table(NULL)
+    })
+    observeEvent(input$erd_table, {
+      selected_table(input$erd_table)
+      selected_rel(NULL)
+    })
+    observeEvent(input$focus_orphan, {
+      updateSelectizeInput(session, "focus", selected = input$focus_orphan)
+    })
+    observeEvent(input$focus_selected, {
+      updateSelectizeInput(session, "focus", selected = selected_table())
+    })
+    observeEvent(input$confirm, {
+      review_confirm(selected_rel(), rels_rv(), confirmed_rels_rv)
+    })
+    observeEvent(input$unconfirm, {
+      review_unconfirm(selected_rel(), confirmed_rels_rv)
+    })
+    observeEvent(input$suppress, {
+      review_suppress(selected_rel(), confirmed_rels_rv, false_positives_rv)
+      selected_rel(NULL)
+    })
+
+    words_child <- c(one = "at most one", many = "zero or more", unknown = "unknown (no rows)")
+    words_parent <- c(one = "exactly one", zero = "zero or one", unknown = "unknown (no rows)")
+
+    output$side <- renderUI({
+      m <- model_rv()
+      key <- selected_rel()
+      tname <- selected_table()
+      v <- view_rv()
+
+      orphan_ui <- if (length(v$orphans) > 0) {
+        tags$details(
+          class = "erd-orphans",
+          tags$summary(sprintf("Unconnected tables (%d)", length(v$orphans))),
+          div(lapply(v$orphans, function(o) {
+            tags$button(
+              class = "erd-orphan",
+              onclick = sprintf(
+                "Shiny.setInputValue('%s', '%s', {priority: 'event'})",
+                ns("focus_orphan"),
+                gsub("'", "\\\\'", o)
+              ),
+              o
+            )
+          }))
+        )
+      }
+
+      detail_ui <- if (!is.null(key)) {
+        r <- Filter(function(x) identical(rel_key(x), key), m$rels)
+        if (length(r) == 0) {
+          NULL
+        } else {
+          r <- r[[1]]
+          confirmed <- identical(r$provenance, "confirmed")
+          div(
+            class = "erd-panel",
+            div(class = "erd-panel-title", "Relationship"),
+            div(
+              class = "erd-panel-rel",
+              sprintf("%s.%s", r$from_table, r$from_col),
+              tags$br(),
+              "→ ",
+              sprintf("%s.%s", r$to_table, r$to_col %||% r$from_col)
+            ),
+            tags$dl(
+              tags$dt("Each child row has"),
+              tags$dd(paste(words_parent[[r$parent_min]], "parent")),
+              tags$dt("Each parent has"),
+              tags$dd(paste(words_child[[r$child_max]], "children")),
+              tags$dt("Identifying"),
+              tags$dd(if (isTRUE(r$identifying)) "yes (FK is part of the PK)" else "no"),
+              tags$dt("Source"),
+              tags$dd(
+                r$provenance,
+                if (identical(r$provenance, "inferred") && !is.null(r$score)) {
+                  sprintf(" · %s %d%%", r$confidence, round(100 * r$score))
+                }
+              ),
+              if (length(r$reasons)) tags$dt("Evidence"),
+              if (length(r$reasons)) tags$dd(paste(r$reasons, collapse = "; "))
+            ),
+            div(
+              class = "erd-panel-actions",
+              if (confirmed) {
+                actionButton(ns("unconfirm"), "Undo confirm", class = "btn-rel")
+              } else if (identical(r$provenance, "inferred")) {
+                actionButton(ns("confirm"), "✓ Confirm", class = "btn-rel btn-rel-confirm")
+              },
+              if (r$provenance %in% c("inferred", "confirmed")) {
+                actionButton(ns("suppress"), "✕ Suppress", class = "btn-rel btn-rel-suppress")
+              }
+            )
+          )
+        }
+      } else if (!is.null(tname) && tname %in% names(m$tables)) {
+        t <- m$tables[[tname]]
+        cols <- t$columns
+        div(
+          class = "erd-panel",
+          div(class = "erd-panel-title", t$name),
+          div(
+            class = "erd-panel-meta",
+            sprintf(
+              "%s rows · %d columns · %s · %s",
+              format(t$n_rows, big.mark = ","),
+              nrow(cols),
+              t$role,
+              t$subject_area
+            )
+          ),
+          tags$table(
+            class = "erd-panel-cols",
+            lapply(seq_len(nrow(cols)), function(i) {
+              tags$tr(
+                tags$td(paste(c(
+                  if (cols$pk[i]) "PK",
+                  if (!is.na(cols$fk_index[i])) paste0("FK", cols$fk_index[i]),
+                  if (cols$uk[i]) "UK"
+                ), collapse = ",")),
+                tags$td(cols$name[i]),
+                tags$td(paste0(cols$type[i], if (isTRUE(cols$nullable[i])) " ∅"))
+              )
+            })
+          ),
+          actionButton(ns("focus_selected"), "Focus this table", class = "btn-rel")
+        )
+      } else {
+        div(
+          class = "erd-panel erd-panel-hint",
+          "Click a line for its details and to confirm or suppress it; ",
+          "click a table header to see its columns."
+        )
+      }
+      tagList(detail_ui, orphan_ui)
     })
 
     invisible(NULL)
