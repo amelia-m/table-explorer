@@ -129,6 +129,7 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
       c(
         "    %% Crow's foot: || one, |o zero-or-one, o{ zero-or-many, o| zero-or-one.",
         "    %% Lines are solid on purpose; identifying FKs are the PK, FK columns.",
+        "    %% Mermaid joins tables, not rows: labels name the FK -> key columns.",
         "    direction LR"
       )
     }
@@ -163,11 +164,14 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
     parent_end <- switch(r$parent_min, one = "||", zero = "|o", "|o")
     child_end <- switch(r$child_max, one = "o|", many = "o{", "o{")
     line <- "--"
+    # Mermaid links entities, not rows, and places line ends evenly along
+    # a box side, so name both columns in the label
     note <- erd_rel_note(r)
-    label <- if (identical(note, "inferred") || grepl("^inferred", note)) {
-      paste0(r$from_col, " (", note, ")")
+    cols <- paste0(r$from_col, " \u2192 ", r$to_col %||% r$from_col)
+    label <- if (grepl("^inferred", note)) {
+      paste0(cols, " (", note, ")")
     } else {
-      r$from_col
+      cols
     }
     lines <- c(
       lines,

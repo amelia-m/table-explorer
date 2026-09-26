@@ -292,12 +292,16 @@ test_that("Mermaid uses crow's-foot optionality with solid lines", {
   mmd <- generate_mermaid_erd(f$tables, f$rels, f$pks, f$cpks)
   # Nullable FK -> optional parent, inferred label; never dashed (dashes
   # break Mermaid's markers)
-  expect_true(grepl('customers |o--o{ orders : "customer_id (inferred 87%)"',
-                    mmd, fixed = TRUE))
+  expect_true(grepl(
+    'customers |o--o{ orders : "customer_id \u2192 customer_id (inferred 87%)"',
+    mmd, fixed = TRUE
+  ))
   expect_false(grepl("..", gsub("%%[^\n]*", "", mmd), fixed = TRUE))
   # 1:1, declared (no confidence label)
-  expect_true(grepl('customers ||--o| customer_profile : "customer_id"',
-                    mmd, fixed = TRUE))
+  expect_true(grepl(
+    'customers ||--o| customer_profile : "customer_id \u2192 customer_id"',
+    mmd, fixed = TRUE
+  ))
   # Composite-PK junction: identifying FK shows as a PK, FK column
   expect_true(grepl("orders ||--o{ order_items", mmd, fixed = TRUE))
   # Key markers

@@ -27,8 +27,9 @@ mod_export_ui <- function(id) {
       div(
         style = "font-size:11px;color:var(--text-secondary);margin:-8px 0 12px;line-height:1.5;",
         "ERD exports use crow's-foot notation: || mandatory, |o optional, ",
-        "o{ many, o| one; dashed (..) = non-identifying. Inferred links are ",
-        "labelled with their confidence; confirmed and declared ones are not."
+        "o{ many, o| one. Inferred links are labelled with their confidence. ",
+        "Mermaid connects tables, not rows (labels name the columns); for ",
+        "row-accurate lines use the ELK graph."
       ),
       tags$hr(),
       div(class = "section-title", "Session"),
