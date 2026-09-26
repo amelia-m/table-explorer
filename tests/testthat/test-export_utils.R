@@ -104,8 +104,8 @@ test_that("generate_mermaid_erd marks PK columns", {
 test_that("generate_mermaid_erd includes relationships", {
   mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
 
-  # Mandatory parent (no NULL FKs), many children, non-identifying (dashed)
-  expect_true(grepl("customers \\|\\|\\.\\.o\\{ orders", mmd, fixed = FALSE))
+  # Mandatory parent (no NULL FKs), many children; lines are always solid
+  expect_true(grepl("customers \\|\\|--o\\{ orders", mmd))
 })
 
 test_that("generate_mermaid_erd assigns correct data types", {
@@ -131,6 +131,7 @@ test_that("generate_mermaid_erd handles Date columns", {
 })
 
 test_that("generate_mermaid_erd handles empty input", {
+  # No tables: no direction/notes lines either
   mmd <- generate_mermaid_erd(list(), list(), list())
   expect_equal(trimws(mmd), "erDiagram")
 })
@@ -286,16 +287,18 @@ erd_export_fixture <- function() {
   list(tables = tables, rels = rels, pks = pks, cpks = cpks)
 }
 
-test_that("Mermaid uses crow's-foot optionality and identifying lines", {
+test_that("Mermaid uses crow's-foot optionality with solid lines", {
   f <- erd_export_fixture()
   mmd <- generate_mermaid_erd(f$tables, f$rels, f$pks, f$cpks)
-  # Nullable FK -> optional parent, dashed (non-identifying), inferred label
-  expect_true(grepl('customers |o..o{ orders : "customer_id (inferred 87%)"',
+  # Nullable FK -> optional parent, inferred label; never dashed (dashes
+  # break Mermaid's markers)
+  expect_true(grepl('customers |o--o{ orders : "customer_id (inferred 87%)"',
                     mmd, fixed = TRUE))
-  # 1:1 identifying, declared (no confidence label)
+  expect_false(grepl("..", gsub("%%[^\n]*", "", mmd), fixed = TRUE))
+  # 1:1, declared (no confidence label)
   expect_true(grepl('customers ||--o| customer_profile : "customer_id"',
                     mmd, fixed = TRUE))
-  # Composite-PK junction: identifying
+  # Composite-PK junction: identifying FK shows as a PK, FK column
   expect_true(grepl("orders ||--o{ order_items", mmd, fixed = TRUE))
   # Key markers
   expect_true(grepl("int customer_id FK \"nullable\"", mmd, fixed = TRUE))
@@ -337,15 +340,57 @@ test_that("ELK JSON has one node per table, ports per column, FK->PK edges", {
   expect_equal(g$layoutOptions[["elk.edgeRouting"]], "ORTHOGONAL")
   expect_equal(length(g$children), 5)
   orders <- Filter(function(n) n$id == "orders", g$children)[[1]]
-  expect_equal(length(orders$ports), 2)
+  # orders.customer_id is an FK source, orders.order_id a target
+  expect_setequal(
+    vapply(orders$ports, `[[`, "", "id"),
+    c("orders.customer_id:out", "orders.order_id:in")
+  )
   expect_equal(length(g$edges), 4)
   e <- Filter(
-    function(e) e$sources[[1]] == "orders.customer_id",
+    function(e) e$sources[[1]] == "orders.customer_id:out",
     g$edges
   )[[1]]
-  expect_equal(e$targets[[1]], "customers.customer_id")
+  expect_equal(e$targets[[1]], "customers.customer_id:in")
   expect_equal(e$properties$parentMin, "zero")
   expect_equal(e$properties$provenance, "inferred")
+})
+
+test_that("ELK ports sit on their column row at the card border", {
+  skip_if_not_installed("jsonlite")
+  f <- erd_export_fixture()
+  g <- jsonlite::fromJSON(
+    generate_elk_json(f$tables, f$rels, f$pks, f$cpks),
+    simplifyVector = FALSE
+  )
+  row_h <- g$properties$rowHeight
+  head_h <- g$properties$headerHeight
+  port_ids <- character(0)
+  for (n in g$children) {
+    # FIXED_POS: ELK honours the coordinates (FIXED_ORDER ignores them)
+    expect_equal(n$layoutOptions[["elk.portConstraints"]], "FIXED_POS")
+    cols <- vapply(n$properties$columns, `[[`, "", "name")
+    for (p in n$ports) {
+      col <- sub(":(in|out)$", "", sub(paste0("^", n$id, "\\."), "", p$id))
+      i <- match(col, cols)
+      expect_false(is.na(i))
+      expect_equal(p$y, head_h + (i - 0.5) * row_h)
+      if (grepl(":out$", p$id)) {
+        expect_equal(p$x, n$width)
+        expect_equal(p$layoutOptions[["elk.port.side"]], "EAST")
+      } else {
+        expect_equal(p$x, 0)
+        expect_equal(p$layoutOptions[["elk.port.side"]], "WEST")
+      }
+    }
+    port_ids <- c(port_ids, vapply(n$ports, `[[`, "", "id"))
+  }
+  # Every edge endpoint exists, and every port is used by some edge
+  ends <- unlist(lapply(g$edges, function(e) c(e$sources[[1]], e$targets[[1]])))
+  expect_true(all(ends %in% port_ids))
+  expect_true(all(port_ids %in% ends))
+  # A PK+FK column gets both an in and an out port when it is both
+  oi <- Filter(function(n) n$id == "order_items", g$children)[[1]]
+  expect_true("order_items.order_id:out" %in% vapply(oi$ports, `[[`, "", "id"))
 })
 
 test_that("dbt emits a relationships test for every FK on a column", {
