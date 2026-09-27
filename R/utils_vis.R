@@ -5,10 +5,10 @@
 #' @noRd
 build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   tnames <- names(tables)
-  name_to_id <- setNames(seq_along(tnames), tnames)
 
   nodes <- data.frame(
-    id = seq_along(tnames),
+    # Table names as ids: stable when the table order changes
+    id = tnames,
     label = vapply(
       tnames,
       function(t) {
@@ -172,8 +172,8 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
 
   if (length(rels) == 0) {
     edges <- data.frame(
-      from = integer(0),
-      to = integer(0),
+      from = character(0),
+      to = character(0),
       label = character(0),
       title = character(0),
       arrows = character(0),
@@ -231,8 +231,8 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
         }
 
         data.frame(
-          from = name_to_id[[r$from_table]],
-          to = name_to_id[[r$to_table]],
+          from = r$from_table,
+          to = r$to_table,
           label = r$from_col,
           title = paste0(
             "<div style='",
@@ -269,7 +269,8 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
           color.highlight = ecol,
           color.opacity = conf_opacity,
           width = conf_width,
-          dashes = (conf == "low"),
+          # Confirmed links are solid whatever their score
+          dashes = (conf == "low" && !isTRUE(r$confirmed)),
           font.size = 10,
           font.color = "#e2e8f0",
           font.strokeWidth = 3,
