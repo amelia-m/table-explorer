@@ -298,55 +298,13 @@ mod_relationships_server <- function(
     }
 
     .confirm <- function(keys) {
-      rels <- rels_rv()
-      by_key <- setNames(rels, vapply(rels, rel_key, character(1)))
-      keys <- intersect(keys, names(by_key))
-      if (length(keys) == 0) {
-        return(invisible())
-      }
-      confirmed <- confirmed_rels_rv()
-      for (k in keys) {
-        r <- by_key[[k]]
-        r$confirmed <- NULL
-        confirmed[[k]] <- r
-      }
-      confirmed_rels_rv(confirmed)
-      showNotification(
-        sprintf(
-          "%d relationship%s confirmed.",
-          length(keys),
-          if (length(keys) == 1) "" else "s"
-        ),
-        type = "message",
-        duration = 3
-      )
+      review_confirm(keys, rels_rv(), confirmed_rels_rv)
     }
-
     .unconfirm <- function(keys) {
-      confirmed <- confirmed_rels_rv()
-      keys <- intersect(keys, names(confirmed))
-      if (length(keys) == 0) {
-        return(invisible())
-      }
-      confirmed_rels_rv(confirmed[setdiff(names(confirmed), keys)])
+      review_unconfirm(keys, confirmed_rels_rv)
     }
-
     .suppress <- function(keys) {
-      if (length(keys) == 0) {
-        return(invisible())
-      }
-      # Suppressing a link also withdraws any confirmation
-      .unconfirm(keys)
-      false_positives_rv(union(false_positives_rv(), keys))
-      showNotification(
-        sprintf(
-          "%d relationship%s suppressed.",
-          length(keys),
-          if (length(keys) == 1) "" else "s"
-        ),
-        type = "message",
-        duration = 3
-      )
+      review_suppress(keys, confirmed_rels_rv, false_positives_rv)
     }
 
     observeEvent(input$confirm_rel, .confirm(input$confirm_rel))

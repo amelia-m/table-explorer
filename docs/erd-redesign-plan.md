@@ -1,6 +1,8 @@
 # ERD redesign plan
 
-Status: **approved; step 1 (relationship model + exports) in progress.**
+Status: **approved. Step 1 (relationship model + exports) done
+(amelia-m/table-explorer#17); step 2 (ERD Diagram tab, Network overview)
+done.** Next: data dictionary, dbt constraints, session diff, lints.
 It is based on the reference diagrams in
 `docs/erd-examples/`, a web review of ERD best practices, and a map of the
 current code (September 2026).
@@ -225,6 +227,17 @@ Access-style schema.
   - The model picks one primary key per table from the candidate keys
     (`id`, then `<entity>_id`, then key-named). A table with several FKs
     and no key-named candidate gets its composite key or none.
+
+- **Step 2 notes:**
+  - Layout runs in a Web Worker (`elk-api.js` + `elk-worker.min.js`), so a
+    big graph doesn't freeze the page; a newer view cancels a layout still
+    running. 52 tables / 199 links lay out in about 0.5-1 s.
+  - Views over 600 relationships ask the user to narrow them first
+    ("Draw anyway" is offered): 1,600 links took ~9 s and can't be read.
+  - A restyle that doesn't move anything (confirming a link, theme
+    switch) reuses the layout and keeps pan/zoom.
+  - The hops slider runs 1-3 plus "all" (4); the focus neighbourhood shows
+    every relationship among the tables it keeps.
 
 ## Open questions (resolved above, kept for context)
 

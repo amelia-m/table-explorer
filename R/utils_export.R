@@ -317,10 +317,19 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
   }
-  model <- erd_model(tables, rels, pks, composite_pks)
+  graph <- erd_elk_graph(erd_model(tables, rels, pks, composite_pks))
+  jsonlite::toJSON(graph, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+}
+
+# ELK graph (as an R list) from an ERD model or an erd_view() result.
+# detail: "all" columns, "keys" (only key/linked columns; a view already
+# trims these) or "names" (header only; ports sit on the header).
+# direction: ELK direction, "RIGHT" (left to right) or "DOWN".
+erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
   colors <- erd_area_colors(model)
   row_h <- erd_elk_row_height
   head_h <- erd_elk_header_height
+  names_only <- identical(detail, "names")
 
   out_cols <- split(
     vapply(model$rels, `[[`, character(1), "from_col"),
@@ -333,14 +342,17 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
 
   children <- lapply(model$tables, function(t) {
     cols <- t$columns
-    width <- max(160, 8 * max(nchar(c(t$name, paste(cols$name, cols$type)))) + 60)
+    width <- max(
+      160,
+      8 * max(nchar(c(t$name, if (!names_only) paste(cols$name, cols$type)))) + 60
+    )
     port <- function(i, dir) {
       east <- identical(dir, "out")
       list(
         id = paste0(t$name, ".", cols$name[i], ":", dir),
         layoutOptions = list("elk.port.side" = if (east) "EAST" else "WEST"),
         x = if (east) width else 0,
-        y = head_h + (i - 0.5) * row_h,
+        y = if (names_only) head_h / 2 else head_h + (i - 0.5) * row_h,
         width = 0,
         height = 0
       )
@@ -352,35 +364,46 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
     list(
       id = t$name,
       width = width,
-      height = head_h + max(1, nrow(cols)) * row_h,
+      height = if (names_only) head_h else head_h + max(1, nrow(cols)) * row_h,
       layoutOptions = list("elk.portConstraints" = "FIXED_POS"),
       ports = ports,
       properties = list(
         role = t$role,
         subjectArea = t$subject_area,
-        headerColor = colors[[t$subject_area]],
+        headerColor = t$header_color %||% colors[[t$subject_area]],
         rows = t$n_rows,
-        columns = lapply(seq_len(nrow(cols)), function(i) {
-          list(
-            name = cols$name[i],
-            type = cols$type[i],
-            nullable = cols$nullable[i],
-            pk = cols$pk[i],
-            fk = if (is.na(cols$fk_index[i])) NULL else cols$fk_index[i],
-            uk = cols$uk[i]
-          )
-        })
+        hiddenColumns = t$hidden_columns %||% 0L,
+        columns = if (names_only) {
+          list()
+        } else {
+          lapply(seq_len(nrow(cols)), function(i) {
+            list(
+              name = cols$name[i],
+              type = cols$type[i],
+              nullable = cols$nullable[i],
+              pk = cols$pk[i],
+              fk = if (is.na(cols$fk_index[i])) NULL else cols$fk_index[i],
+              uk = cols$uk[i]
+            )
+          })
+        }
       )
     )
   })
 
   edges <- lapply(seq_along(model$rels), function(i) {
     r <- model$rels[[i]]
+    to_col <- r$to_col %||% r$from_col
     list(
       id = paste0("rel", i),
       sources = list(paste0(r$from_table, ".", r$from_col, ":out")),
-      targets = list(paste0(r$to_table, ".", r$to_col %||% r$from_col, ":in")),
+      targets = list(paste0(r$to_table, ".", to_col, ":in")),
       properties = list(
+        key = rel_key(r),
+        fromTable = r$from_table,
+        fromCol = r$from_col,
+        toTable = r$to_table,
+        toCol = to_col,
         childMax = r$child_max,
         childMin = r$child_min,
         parentMin = r$parent_min,
@@ -394,11 +417,11 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
     )
   })
 
-  graph <- list(
+  list(
     id = "root",
     layoutOptions = list(
       "elk.algorithm" = "layered",
-      "elk.direction" = "RIGHT",
+      "elk.direction" = direction,
       "elk.edgeRouting" = "ORTHOGONAL",
       "elk.layered.spacing.nodeNodeBetweenLayers" = 80,
       "elk.layered.spacing.edgeNodeBetweenLayers" = erd_elk_marker_room,
@@ -409,12 +432,12 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
     ),
     properties = list(
       rowHeight = row_h,
-      headerHeight = head_h
+      headerHeight = head_h,
+      detail = detail
     ),
     children = unname(children),
     edges = edges
   )
-  jsonlite::toJSON(graph, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
 }
 
 # ── Session save/restore ──────────────────────────────────────

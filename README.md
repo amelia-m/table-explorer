@@ -19,7 +19,8 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **Confidence scoring** | Noisy-OR composite scoring with low/medium/high confidence tiers; filter by minimum confidence |
 | **Signal toggles** | Enable/disable individual signals; changes take effect on "Run Detection" button click |
 | **Scan triage** | Estimates scan complexity for large schemas; lets you choose full scan, naming-only, or skip |
-| **Interactive ERD** | visNetwork graph with drag, zoom, hover tooltips; layout modes (force/hierarchical/circular), spring length slider |
+| **ERD Diagram** | Standard physical ERD: table cards with PK/FK/UK badges, types and nullable marks; lines run from the FK row to the PK row with crow's-foot ends (elkjs layout, orthogonal routing). Focus a table with a hops slider, detail levels (all columns / keys only / names only), subject-area filter, left→right or top→down layout, pan/zoom, click a line to confirm or suppress it, SVG/PNG download |
+| **Network overview** | The force-directed visNetwork graph (drag, zoom, hover tooltips; force/hierarchical/circular layouts), good for spotting clusters |
 | **Table Details** | Per-table column summary with type, non-null count, unique values, PK/FK flags, table size |
 | **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
@@ -39,7 +40,8 @@ R/
   mod_upload.R           Upload panel + manual override
   mod_db_connect.R       Database connection panel
   mod_detection.R        Detection controls + scan triage
-  mod_erd.R              ERD visualization (visNetwork)
+  mod_erd.R              ERD Diagram tab (drawn in the browser by www/erd.js)
+  mod_network.R          Network overview tab (visNetwork)
   mod_table_details.R    Per-table column summary
   mod_relationships.R    Relationships tab
   mod_name_changes.R     Name changes / rename log tab
@@ -132,6 +134,26 @@ run_app()
 
 Scores are combined via noisy-OR aggregation: `score = 1 - prod(1 - weights)`. The composite score maps to confidence tiers: high (>= 0.85), medium (>= 0.55), low (< 0.55).
 
+### ERD Diagram tab
+
+The diagram is laid out in the browser by [elkjs](https://github.com/kieler/elkjs)
+(EPL-2.0, run in a Web Worker so the page stays responsive) and drawn as SVG
+by `inst/app/www/erd.js`, with pan/zoom from
+[svg-pan-zoom](https://github.com/bumbu/svg-pan-zoom) (BSD-2). Both are
+vendored in `inst/app/www/vendor/`.
+
+- **Reading it**: solid lines are identifying (the FK is part of the
+  child's PK), dashed are not. Inferred links that nobody has confirmed are
+  grey with a `?` chip; confirmed, declared and manual ones are drawn in
+  full ink. Low-confidence links are hidden unless "Show low-confidence
+  links" is on. The legend under the diagram explains the ends and badges.
+- **Large schemas**: over 40 tables it opens in "Keys only" and suggests
+  picking a focus table. Views with more than 600 relationships ask you to
+  narrow them first (focus, subject area or minimum confidence), with a
+  "Draw anyway" button.
+- **Downloads**: the SVG / PNG buttons save the current view with its
+  colours, at full size.
+
 ### ERD exports
 
 Mermaid, DBML and ELK exports share one model (`R/utils_erd_model.R`) and
@@ -155,7 +177,8 @@ use crow's-foot notation:
   column was tested and rejected. As ER entities the boxes scatter (0/7
   tables stayed together). As a flowchart with a node per column, the rows
   sit 60-435 px apart and differ in width, and no spacing setting closes
-  the gaps. For row-accurate diagrams use the ELK graph export.
+  the gaps. For row-accurate diagrams use the ELK graph export or the
+  ERD Diagram tab's SVG/PNG download.
 - **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
   `id`, then the table's own `<entity>_id`, then other key-named columns),
   composite keys when detected.
