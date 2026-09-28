@@ -413,8 +413,10 @@ detect_app_export <- function(df) {
   cols <- janitor::make_clean_names(names(df))
   for (kind in names(app_export_signatures)) {
     sig <- app_export_signatures[[kind]]
-    # Relationships CSVs gained a review "status" column; accept both
-    if (setequal(cols, sig) || setequal(cols, c(sig, "status"))) {
+    # Relationships CSVs gained a review "status" and then a "source" column;
+    # accept every version
+    optional <- c("status", "source")
+    if (all(sig %in% cols) && all(setdiff(cols, sig) %in% optional)) {
       return(kind)
     }
   }
