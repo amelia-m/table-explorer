@@ -267,8 +267,9 @@ build_network <- function(tables, rels, pk_map, composite_pk_map = NULL) {
           arrows = "to",
           color.color = ecol,
           color.highlight = ecol,
-          color.opacity = conf_opacity,
-          width = conf_width,
+          color.opacity = if (identical(r$detected_by, "schema")) 1 else conf_opacity,
+          # Declared links (schema, database, Access) stand out from detected ones
+          width = if (identical(r$detected_by, "schema")) 3.5 else conf_width,
           # Confirmed links are solid whatever their score
           dashes = (conf == "low" && !isTRUE(r$confirmed)),
           font.size = 10,

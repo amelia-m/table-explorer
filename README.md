@@ -96,8 +96,11 @@ install.packages(c("DBI", "RSQLite", "RPostgres", "RMariaDB", "odbc", "bigrquery
 # Fuzzy name matching
 install.packages("stringdist")
 
-# Access databases (Java-based)
+# Access databases (Java-based; rJava, which RJDBC installs, also reads the
+# relationships declared in the file)
 install.packages("RJDBC")
+# Without Java, relationships can still be read if mdbtools is installed
+# (macOS: brew install mdbtools; Debian/Ubuntu: apt install mdbtools)
 ```
 
 ### Run locally
@@ -133,6 +136,46 @@ run_app()
 - Key-named columns are always name-checked, even when they hold only one or two distinct values
 
 Scores are combined via noisy-OR aggregation: `score = 1 - prod(1 - weights)`. The composite score maps to confidence tiers: high (>= 0.85), medium (>= 0.55), low (< 0.55).
+
+**Choosing between candidate parents.** A column can fit several tables. In
+Access databases, for example, every `tlk_*` lookup numbers its `id` 1..N, so
+`service_id` fits `tlk_services`, `tlk_sites` and every other lookup. Values
+alone can't choose between them, so names come first, as in SchemaSpy and
+SchemaCrawler:
+
+- If the column's name points to one of the tables, that link is kept.
+  Value-only matches to the other tables drop to **low** ("name points to
+  tlk_services").
+- If the name points nowhere and the values fit two or more tables, all of them
+  drop to **low** ("ambiguous: values fit 8 tables").
+- A link whose values mostly aren't in the parent can't rest on format or
+  loose name likeness alone.
+
+Low links are hidden by default. Tick "Show low confidence" on the Relationships
+tab, or "Show low-confidence links" in the ERD, to review them.
+
+### Declared vs detected relationships
+
+- **Declared** relationships come from a schema file, a database connection, or
+  the relationships stored inside an Access file (read with Jackcess when rJava
+  is installed, else with mdbtools' `mdb-export`).
+- **Detected** ones are inferred from the data.
+
+Declared links and detected ones are shown differently everywhere:
+
+- **Relationships tab:** a sortable **Source** column (declared / manual /
+  ✓ confirmed / ? to review) and a Source filter.
+- **ERD Diagram:** declared lines have no chip; confirmed lines show ✓, manual
+  lines show M, and unreviewed detected lines are grey with a ?.
+- **Network overview:** declared edges are drawn thick.
+
+In the sidebar, **Relationships to show** picks *Declared + detected* (the
+default, useful when documentation is incomplete), *Declared only* or *Detected
+only*. It applies to all views and exports.
+
+**Hide detected links on columns that already have a declared one** keeps
+documented columns clean while undocumented ones are still inferred. A detected
+link that duplicates a declared one appears once, as declared ("also detected").
 
 ### ERD Diagram tab
 

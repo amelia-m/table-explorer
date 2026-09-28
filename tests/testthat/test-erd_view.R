@@ -218,3 +218,72 @@ test_that("large-schema 'Keys only' default isn't taken for a user choice", {
     }
   )
 })
+
+# ── Declared vs detected ─────────────────────────────────────
+
+src_rel <- function(from_col, to_table, by, confirmed = FALSE, score = 0.9) {
+  list(
+    from_table = "tbl_visits", from_col = from_col, to_table = to_table,
+    to_col = "id", detected_by = by, confidence = "high", score = score,
+    confirmed = confirmed
+  )
+}
+
+test_that("rel_source tells declared, manual, confirmed and detected apart", {
+  expect_equal(rel_source(src_rel("a", "t", "schema")), "declared")
+  expect_equal(rel_source(src_rel("a", "t", "manual")), "manual")
+  expect_equal(rel_source(src_rel("a", "t", "naming", confirmed = TRUE)), "confirmed")
+  expect_equal(rel_source(src_rel("a", "t", "cardinality")), "detected")
+})
+
+test_that("a detected link that is also declared shows once, as declared", {
+  declared <- list(src_rel("service_id", "tlk_services", "schema", score = 1))
+  auto <- list(
+    src_rel("service_id", "tlk_services", "naming", score = 0.87),
+    src_rel("service_id", "tlk_sites", "cardinality"),
+    src_rel("site_id", "tlk_sites", "naming")
+  )
+  both <- combine_relationships(auto, list(), declared)
+  keys <- vapply(both, rel_key, "")
+  expect_equal(sum(keys == "tbl_visits|service_id|tlk_services|id"), 1)
+  kept <- both[[which(keys == "tbl_visits|service_id|tlk_services|id")]]
+  expect_equal(rel_source(kept), "declared")
+  expect_equal(kept$also_detected, 0.87)
+  # Other detected links, even on the declared column, stay by default
+  expect_length(both, 3)
+  # ... unless hidden on columns that have a declared link
+  trimmed <- combine_relationships(auto, list(), declared, hide_detected_on_declared = TRUE)
+  expect_setequal(
+    vapply(trimmed, rel_key, ""),
+    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+  )
+})
+
+test_that("source filters keep declared or detected links", {
+  rels <- list(
+    src_rel("a", "t1", "schema"),
+    src_rel("b", "t2", "manual"),
+    src_rel("c", "t3", "naming", confirmed = TRUE),
+    src_rel("d", "t4", "cardinality")
+  )
+  src <- function(x) vapply(x, rel_source, "")
+  expect_equal(src(filter_rel_sources(rels, "declared")), c("declared", "manual"))
+  expect_equal(src(filter_rel_sources(rels, "detected")), c("confirmed", "detected"))
+  expect_length(filter_rel_sources(rels, "both"), 4)
+})
+
+test_that("links without a score (manual) give no null ELK properties", {
+  manual <- list(
+    from_table = "orders", from_col = "customer_id", to_table = "customers",
+    to_col = "customer_id", detected_by = "manual"
+  )
+  m <- erd_model(
+    erd_fixture()[c("customers", "orders")],
+    list(manual),
+    list(customers = "customer_id", orders = "order_id")
+  )
+  g <- erd_elk_graph(erd_view(m))
+  props <- g$edges[[1]]$properties
+  expect_false(any(vapply(props, function(v) is.null(v) || anyNA(v), logical(1))))
+  expect_equal(props$provenance, "manual")
+})

@@ -26,6 +26,8 @@
   var FONT = "'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif";
 
   var states = {}; // container id -> render state
+  // Chip at the middle of a line, by where the link came from
+  var CHIPS = { inferred: "?", confirmed: "\u2713", manual: "M" };
   window.erdStates = states; // for tests
 
   // ── helpers ────────────────────────────────────────────────
@@ -278,11 +280,13 @@
       };
       drawMarker(g, pts[0], into(pts[0], src), kinds.child, color, th.bg);
       drawMarker(g, pts[pts.length - 1], into(pts[pts.length - 1], tgt), kinds.parent, color, th.bg);
-      if (pr.provenance === "inferred") {
+      // Source chip: none for declared, ✓ confirmed, M manual, ? to review
+      var mark = CHIPS[pr.provenance];
+      if (mark) {
         var mid = pointAtHalf(pts);
         var chip = el("g", { class: "erd-chip" }, g);
         el("circle", { cx: mid.x, cy: mid.y, r: 7, fill: th.bg, stroke: color, "stroke-width": 1 }, chip);
-        text(chip, mid.x, mid.y + 3.5, "?", {
+        text(chip, mid.x, mid.y + 3.5, mark, {
           fill: color, "font-size": 10, "font-weight": 700, "text-anchor": "middle",
         });
       }
@@ -309,7 +313,7 @@
         '" stroke-width="1.4"' + (dash ? ' stroke-dasharray="6 4"' : "") + "/>" +
         (chip
           ? '<circle cx="22" cy="8" r="6" fill="' + th.bg + '" stroke="' + color +
-            '"/><text x="22" y="11" font-size="9" font-weight="700" text-anchor="middle" fill="' + color + '">?</text>'
+            '"/><text x="22" y="11" font-size="9" font-weight="700" text-anchor="middle" fill="' + color + '">' + chip + "</text>"
           : "") +
         "</svg>"
       );
@@ -332,7 +336,12 @@
       '<div class="erd-legend-group"><div class="erd-legend-head">Lines</div>' +
       item(line(false, th.text), "identifying (FK is part of the PK)") +
       item(line(true, th.text), "non-identifying") +
-      item(line(false, th.muted, true), "inferred, not yet confirmed") +
+      "</div>" +
+      '<div class="erd-legend-group"><div class="erd-legend-head">Source</div>' +
+      item(line(false, th.text), "declared (schema, database or Access)") +
+      item(line(false, th.text, "\u2713"), "detected, confirmed by you") +
+      item(line(false, th.text, "M"), "added manually") +
+      item(line(false, th.muted, "?"), "detected, not yet reviewed") +
       "</div>" +
       '<div class="erd-legend-group"><div class="erd-legend-head">Columns</div>' +
       item('<b style="color:' + th.pk + '">PK</b>', "primary key") +

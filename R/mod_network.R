@@ -62,7 +62,7 @@ mod_network_ui <- function(id) {
         div(
           class = "legend-item",
           div(class = "legend-dot", style = "background:#67E8F9;"),
-          "schema"
+          "declared (thick)"
         ),
         div(
           class = "legend-item",

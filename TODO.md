@@ -11,11 +11,11 @@
 - [ ] ERD redesign: see `docs/erd-redesign-plan.md` (steps 1-2 done: model,
       exports, ERD Diagram tab; next: data dictionary, dbt constraints,
       session diff, lints).
-- [ ] Detection noise on Access-style schemas: when every `tlk_*` lookup
-      numbers its `id` 1..N, value-only signals (identical values) match a
-      lookup FK such as `service_id` to *every* lookup, not just
-      `tlk_services`. Consider: when a column has a naming match, don't also
-      propose value-only matches to other targets (or rank them lower).
+- [x] Detection noise on Access-style schemas (lookups sharing ids 1..N):
+      names now choose between parents that values can't tell apart, and
+      Access files' declared relationships are read.
+- [ ] (Maybe later) Read Access lookup-field `RowSource` queries as a second
+      declared source (the Lookup Wizard already stores a relationship).
 
 ## Reference: ERD design examples
 
