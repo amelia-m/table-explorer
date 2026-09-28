@@ -69,6 +69,13 @@ mod_erd_ui <- function(id) {
           options = list(placeholder = "All areas")
         ),
         radioButtons(
+          ns("ref_links"),
+          "Lookup links",
+          choices = c("Lines" = "lines", "Labels" = "labels"),
+          selected = "lines",
+          inline = TRUE
+        ),
+        radioButtons(
           ns("direction"),
           "Layout",
           choices = c("Left → right" = "RIGHT", "Top → down" = "DOWN"),
@@ -164,6 +171,21 @@ mod_erd_server <- function(
       user_detail() %||%
         if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
     })
+    # Lookup links: labels by default for large schemas, same handling of
+    # the server's own radio updates as the detail level
+    user_ref <- reactiveVal(NULL)
+    auto_ref <- reactiveVal(NULL)
+    observeEvent(input$ref_links, {
+      if (identical(input$ref_links, auto_ref())) {
+        auto_ref(NULL)
+      } else {
+        user_ref(input$ref_links)
+      }
+    }, ignoreInit = TRUE)
+    ref_links_rv <- reactive({
+      user_ref() %||%
+        if (length(model_rv()$tables) > erd_large_schema) "labels" else "lines"
+    })
 
     model_rv <- reactive({
       tbls <- tables_rv()
@@ -198,6 +220,10 @@ mod_erd_server <- function(
         auto_detail(detail_rv())
         updateRadioButtons(session, "detail", selected = detail_rv())
       }
+      if (is.null(user_ref()) && !identical(ref_links_rv(), isolate(input$ref_links))) {
+        auto_ref(ref_links_rv())
+        updateRadioButtons(session, "ref_links", selected = ref_links_rv())
+      }
     })
 
     view_rv <- reactive({
@@ -218,7 +244,9 @@ mod_erd_server <- function(
       graph <- erd_elk_graph(
         v,
         detail = v$detail,
-        direction = input$direction %||% "RIGHT"
+        direction = input$direction %||% "RIGHT",
+        ref_labels = identical(ref_links_rv(), "labels"),
+        side = TRUE
       )
       session$sendCustomMessage(
         "erd-render",

@@ -84,7 +84,7 @@
     return JSON.stringify({
       o: g.layoutOptions,
       n: g.children.map(function (n) {
-        return [n.id, n.width, n.height, (n.ports || []).map(function (p) {
+        return [n.id, n.width, n.height, (n.properties || {}).side || "", (n.ports || []).map(function (p) {
           return [p.id, p.x, p.y];
         })];
       }),
@@ -230,9 +230,11 @@
         "text-decoration": c.pk ? "underline" : null,
       });
       name.setAttribute("class", "erd-col");
-      text(g, n.width - 8, y + 14, (c.type || "") + (c.nullable ? " ∅" : ""), {
+      var typeStr = (c.type || "") + (c.nullable ? " ∅" : "");
+      text(g, n.width - 8, y + 14, typeStr, {
         fill: th.type, "font-size": 10, "text-anchor": "end",
       });
+      if (c.refs && c.refs.length) drawRefLabel(g, c.refs, n.width - 14 - typeStr.length * 6, y, row, th);
     });
     if (!cols.length) {
       text(g, GUTTER, head + 14, pr.hiddenColumns ? "(" + pr.hiddenColumns + " columns hidden)" : "(no columns)", {
@@ -247,6 +249,64 @@
       }, g);
     }
     return g;
+  }
+
+  // A link to a reference table drawn as a label on the FK row. Styled like a
+  // line would be: full ink when declared/confirmed/manual, muted and dashed
+  // with a "?" when detected and not yet reviewed.
+  function drawRefLabel(g, refs, right, y, row, th) {
+    var ref = refs[0];
+    var inferred = ref.provenance === "inferred";
+    var color = inferred ? th.muted : th.text;
+    var mark = CHIPS[ref.provenance];
+    var label = "\u2192 " + ref.table + (refs.length > 1 ? " +" + (refs.length - 1) : "") + (mark ? " " + mark : "");
+    var w = label.length * 5.4 + 12;
+    var pg = el("g", {
+      class: "erd-ref erd-prov-" + ref.provenance,
+      "data-key": ref.key,
+      "data-ref": ref.table,
+    }, g);
+    var title = el("title", {}, pg);
+    title.textContent = "links to " + ref.table + "." + ref.col + " (" + ref.provenance +
+      (inferred && ref.confidence ? ", " + ref.confidence : "") + ") \u2014 click for details";
+    el("rect", {
+      x: right - w, y: y + 3, width: w, height: row - 6, rx: (row - 6) / 2,
+      fill: th.bg, stroke: color, "stroke-width": 1,
+      "stroke-dasharray": inferred ? "3 2" : null,
+    }, pg);
+    text(pg, right - w + 6, y + 13.5, label, { fill: color, "font-size": 9.5 });
+  }
+
+  // Tables with no lines go in a column to the right of the layout, lookups
+  // (linked only by labels) first, then unlinked tables, each sorted by name
+  var SIDE_GROUPS = [
+    ["lookups", "Lookups (linked by label)"],
+    ["unlinked", "Unlinked tables"],
+  ];
+  function placeSide(out, sideNodes) {
+    out.sideHeadings = [];
+    if (!sideNodes.length) return;
+    var x = out.children.length ? (out.width || 0) + 60 : 0;
+    var y = 0, maxW = 0;
+    SIDE_GROUPS.forEach(function (grp) {
+      var ns = sideNodes
+        .filter(function (n) { return n.properties.side === grp[0]; })
+        .sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+      if (!ns.length) return;
+      out.sideHeadings.push({ x: x, y: y + 12, text: grp[1] + " (" + ns.length + ")" });
+      y += 22;
+      ns.forEach(function (n) {
+        out.children.push({
+          id: n.id, x: x, y: y, width: n.width, height: n.height,
+          ports: [], properties: n.properties,
+        });
+        y += n.height + 12;
+        maxW = Math.max(maxW, n.width);
+      });
+      y += 18;
+    });
+    out.width = x + maxW;
+    out.height = Math.max(out.height || 0, y - 30);
   }
 
   function drawEdge(parent, e, nodes, th) {
@@ -342,6 +402,11 @@
       item(line(false, th.text, "\u2713"), "detected, confirmed by you") +
       item(line(false, th.text, "M"), "added manually") +
       item(line(false, th.muted, "?"), "detected, not yet reviewed") +
+      item(
+        '<svg width="44" height="16"><rect x="1" y="2" width="42" height="12" rx="6" fill="' + th.bg +
+          '" stroke="' + th.text + '"/><text x="7" y="11" font-size="8" fill="' + th.text + '">\u2192 tlk</text></svg>',
+        "link to a lookup, shown as a label"
+      ) +
       "</div>" +
       '<div class="erd-legend-group"><div class="erd-legend-head">Columns</div>' +
       item('<b style="color:' + th.pk + '">PK</b>', "primary key") +
@@ -379,6 +444,11 @@
     // Invisible backdrop so Fit keeps the margin (lines can run along the edge)
     el("rect", { class: "erd-backdrop", width: W, height: H, fill: "none" }, vp);
     var root = el("g", { transform: "translate(" + PAD + "," + PAD + ")" }, vp);
+    (L.sideHeadings || []).forEach(function (h) {
+      text(root, h.x, h.y, h.text, {
+        class: "erd-side-heading", fill: th.type, "font-size": 11, "font-weight": 700,
+      });
+    });
     var nodesG = el("g", { class: "erd-nodes" }, root);
     var edgesG = el("g", { class: "erd-edges" }, root);
     var nodes = {};
@@ -460,7 +530,7 @@
 
   function markSelected(st) {
     if (!st.svg) return;
-    st.svg.querySelectorAll(".erd-edge").forEach(function (g) {
+    st.svg.querySelectorAll(".erd-edge, .erd-ref").forEach(function (g) {
       g.classList.toggle("erd-selected", g.getAttribute("data-key") === st.selectedRel);
     });
     st.svg.querySelectorAll(".erd-node").forEach(function (g) {
@@ -492,9 +562,33 @@
       });
     }
     var edges = Array.prototype.slice.call(svg.querySelectorAll(".erd-edge"));
+    var refs = Array.prototype.slice.call(svg.querySelectorAll(".erd-ref"));
+    var nodeHover = {}; // table -> its card's hover highlight
+    refs.forEach(function (r) {
+      var key = r.getAttribute("data-key");
+      r.addEventListener("mouseenter", function (ev) {
+        ev.stopPropagation();
+        highlight([r.closest(".erd-node").getAttribute("data-table"), r.getAttribute("data-ref")], [key]);
+      });
+      // Back on the card: restore the card's own highlight
+      r.addEventListener("mouseleave", function () {
+        var hover = nodeHover[r.closest(".erd-node").getAttribute("data-table")];
+        if (hover) hover();
+      });
+      r.addEventListener("click", function (ev) {
+        if (!isClick(ev)) return;
+        ev.stopPropagation();
+        st.selectedRel = key;
+        st.selectedTable = null;
+        markSelected(st);
+        if (window.Shiny && st.relInput) {
+          Shiny.setInputValue(st.relInput, key, { priority: "event" });
+        }
+      });
+    });
     svg.querySelectorAll(".erd-node").forEach(function (g) {
       var t = g.getAttribute("data-table");
-      g.addEventListener("mouseenter", function () {
+      nodeHover[t] = function () {
         var tables = [t], keys = [];
         edges.forEach(function (e) {
           var f = e.getAttribute("data-from"), to = e.getAttribute("data-to");
@@ -503,8 +597,15 @@
             tables.push(f, to);
           }
         });
+        // Label links count too: a card's labels, and the labels pointing at it
+        refs.forEach(function (r) {
+          var owner = r.closest(".erd-node").getAttribute("data-table");
+          var target = r.getAttribute("data-ref");
+          if (owner === t || target === t) tables.push(owner, target);
+        });
         highlight(tables, keys);
-      });
+      };
+      g.addEventListener("mouseenter", nodeHover[t]);
       g.addEventListener("mouseleave", clear);
       g.addEventListener("click", function (ev) {
         if (!isClick(ev)) return;
@@ -617,8 +718,11 @@
     if (st.busy) stopWorker(st);
     var elk = st.elk || (st.elk = makeElk());
     st.busy = true;
+    var sideNodes = graph.children.filter(function (n) { return (n.properties || {}).side; });
+    var mainGraph = JSON.parse(JSON.stringify(graph));
+    mainGraph.children = mainGraph.children.filter(function (n) { return !(n.properties || {}).side; });
     return elk
-      .layout(JSON.parse(JSON.stringify(graph)))
+      .layout(mainGraph)
       .then(function (out) {
         if (token !== st.token) return st; // a newer render superseded this one
         st.busy = false;
@@ -630,6 +734,7 @@
         var eById = {};
         graph.edges.forEach(function (e) { eById[e.id] = e; });
         out.edges.forEach(function (e) { e.properties = eById[e.id].properties; });
+        placeSide(out, sideNodes);
         st.layout = out;
         st.sig = sig;
         st.layoutMs = performance.now() - t0;

@@ -325,26 +325,60 @@ generate_elk_json <- function(tables, rels, pks, composite_pks = NULL) {
 # detail: "all" columns, "keys" (only key/linked columns; a view already
 # trims these) or "names" (header only; ports sit on the header).
 # direction: ELK direction, "RIGHT" (left to right) or "DOWN".
-erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
+# ref_labels: links to reference tables (lookups, code tables) become a label
+#   on the FK row ("-> tlk_providers") instead of a line. Not with "names",
+#   which has no rows to put them on.
+# side: tables left without lines (unlinked ones, and lookups whose links are
+#   all labels) are flagged for a column beside the diagram instead of the
+#   layout: properties$side is "lookups" or "unlinked".
+erd_elk_graph <- function(
+  model,
+  detail = "all",
+  direction = "RIGHT",
+  ref_labels = FALSE,
+  side = FALSE
+) {
   colors <- erd_area_colors(model)
   row_h <- erd_elk_row_height
   head_h <- erd_elk_header_height
   names_only <- identical(detail, "names")
 
+  is_label <- vapply(model$rels, function(r) {
+    isTRUE(ref_labels) && !names_only &&
+      !identical(r$from_table, r$to_table) &&
+      isTRUE(model$tables[[r$to_table]]$is_reference)
+  }, logical(1))
+  line_idx <- which(!is_label)
+  line_rels <- model$rels[line_idx]
+  label_rels <- model$rels[is_label]
+
   out_cols <- split(
-    vapply(model$rels, `[[`, character(1), "from_col"),
-    vapply(model$rels, `[[`, character(1), "from_table")
+    vapply(line_rels, `[[`, character(1), "from_col"),
+    vapply(line_rels, `[[`, character(1), "from_table")
   )
   in_cols <- split(
-    vapply(model$rels, function(r) r$to_col %||% r$from_col, character(1)),
-    vapply(model$rels, `[[`, character(1), "to_table")
+    vapply(line_rels, function(r) r$to_col %||% r$from_col, character(1)),
+    vapply(line_rels, `[[`, character(1), "to_table")
   )
+  # Labels per child table and column
+  labels_for <- function(tname, col) {
+    Filter(function(r) r$from_table == tname && r$from_col == col, label_rels)
+  }
+  on_lines <- unique(unlist(lapply(line_rels, function(r) c(r$from_table, r$to_table))))
+  label_parents <- unique(vapply(label_rels, `[[`, character(1), "to_table"))
 
   children <- lapply(model$tables, function(t) {
     cols <- t$columns
+    label_text <- vapply(seq_len(nrow(cols)), function(i) {
+      ls <- labels_for(t$name, cols$name[i])
+      if (length(ls) == 0) "" else paste0("-> ", ls[[1]]$to_table, if (length(ls) > 1) " +1" else "")
+    }, character(1))
     width <- max(
       160,
-      8 * max(nchar(c(t$name, if (!names_only) paste(cols$name, cols$type)))) + 60
+      8 * max(nchar(c(
+        t$name,
+        if (!names_only) paste(cols$name, cols$type, label_text)
+      ))) + 60
     )
     port <- function(i, dir) {
       east <- identical(dir, "out")
@@ -377,7 +411,16 @@ erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
           list()
         } else {
           lapply(seq_len(nrow(cols)), function(i) {
-            list(
+            refs <- lapply(labels_for(t$name, cols$name[i]), function(r) {
+              list(
+                key = rel_key(r),
+                table = r$to_table,
+                col = r$to_col %||% r$from_col,
+                provenance = r$provenance,
+                confidence = r$confidence %||% ""
+              )
+            })
+            col <- list(
               name = cols$name[i],
               type = cols$type[i],
               nullable = cols$nullable[i],
@@ -385,13 +428,23 @@ erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
               fk = if (is.na(cols$fk_index[i])) NULL else cols$fk_index[i],
               uk = cols$uk[i]
             )
+            if (length(refs)) col$refs <- refs
+            Filter(Negate(is.null), col)
           })
+        },
+        # Only set for tables beside the layout: elkjs rejects null values
+        side = if (isTRUE(side) && !t$name %in% on_lines) {
+          if (t$name %in% label_parents) "lookups" else "unlinked"
         }
       )
     )
   })
+  children <- lapply(children, function(n) {
+    n$properties <- Filter(Negate(is.null), n$properties)
+    n
+  })
 
-  edges <- lapply(seq_along(model$rels), function(i) {
+  edges <- lapply(line_idx, function(i) {
     r <- model$rels[[i]]
     to_col <- r$to_col %||% r$from_col
     e <- list(

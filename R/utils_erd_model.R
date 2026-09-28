@@ -269,6 +269,27 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   })
   names(tbl_models) <- tnames
 
+  # ── Reference tables ──────────────────────────────────────
+  # Small code/lookup tables that many rows point at (statuses, countries,
+  # tlk_ lookups). The diagram can show links to them as labels instead of
+  # lines. Not tied to Access names: a leaf parent (referenced, no FKs of its
+  # own) that is named like a lookup, shaped like one, or is a narrow table
+  # referenced by 3+ tables.
+  for (t in tnames) {
+    parents_of <- vapply(Filter(function(r) r$from_table == t, rels), `[[`, "", "to_table")
+    children <- unique(vapply(Filter(function(r) r$to_table == t, rels), `[[`, "", "from_table"))
+    children <- setdiff(children, t)
+    df <- tables[[t]]
+    leaf_parent <- length(children) > 0 && length(setdiff(parents_of, t)) == 0
+    # Shape: at most 500 rows and 4 columns (the referenced key is unique by
+    # definition, so no need to find it again)
+    tbl_models[[t]]$is_reference <- leaf_parent && (
+      is_lookup_name(t) ||
+        (nrow(df) <= 500 && ncol(df) <= 4) ||
+        (length(children) >= 3 && ncol(df) <= 6)
+    )
+  }
+
   # ── Subject areas ──────────────────────────────────────────
   # Lookups and orphans get their own groups; the rest are connected
   # components over links between non-lookup tables (lookups would otherwise
