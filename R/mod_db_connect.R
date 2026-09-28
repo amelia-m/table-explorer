@@ -149,7 +149,7 @@ mod_db_connect_server <- function(
         })
         db_meta_rv(meta)
         if (length(meta$fks) > 0) {
-          schema_rels_rv(c(schema_rels_rv(), meta$fks))
+          schema_rels_rv(merge_declared_rels(schema_rels_rv(), meta$fks))
         }
         showNotification(
           paste0("Connected! Found ", length(meta$tables), " table(s)."),

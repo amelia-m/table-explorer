@@ -82,6 +82,11 @@
     .rel-status { font-family: "IBM Plex Mono", monospace; font-size: 11px; white-space: nowrap; }
     .rel-status-confirmed { color: var(--success); font-weight: 600; }
     .rel-status-review { color: var(--text-secondary); }
+    .rel-status-declared { color: var(--accent); font-weight: 600; }
+    .rel-status-manual { color: var(--text-primary); font-weight: 600; }
+    .rel-toolbar-filters { display: inline-flex; align-items: center; gap: 12px; }
+    .rel-toolbar-filters .form-group { margin: 0; }
+    .rel-toolbar-filters .checkbox { margin: 0; font-size: 12px; }
     table.dataTable.rel-dt td { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 
     /* ── Header ───────────────────────────────────────────────── */

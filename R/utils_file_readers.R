@@ -84,7 +84,14 @@ read_table_file <- function(path, name, notify_fn = message) {
       ".mdb" = ,
       ".accdb" = {
         tbls <- read_access_db(path, notify_fn)
-        list(tables = tbls)
+        list(
+          tables = tbls,
+          relationships = if (length(tbls) > 0) {
+            access_relationships(path, notify_fn)
+          } else {
+            list()
+          }
+        )
       },
 
       {
@@ -471,6 +478,137 @@ ensure_ucanaccess_jars <- function(jar_dir, notify_fn) {
     vapply(ucanaccess_jars, `[[`, character(1), "file")
   )
   all(file.exists(jar_paths))
+}
+
+# ── Declared relationships in Access files ───────────────────
+# Access keeps every relationship (enforced or not; the Lookup Wizard makes
+# unenforced ones) in the MSysRelationships system table: one row per column
+# pair, szObject/szColumn = child (FK) side, szReferencedObject/Column =
+# parent, grbit bit 1 = one-to-one, bit 2 = integrity not enforced.
+# Read it with Jackcess (already in the UCanAccess jar set, via rJava) or
+# with mdbtools' mdb-export; either way the rows go through
+# access_relationship_rels().
+
+access_relationships <- function(path, notify_fn = message) {
+  rows <- access_relationship_rows_jackcess(path)
+  if (is.null(rows)) {
+    rows <- access_relationship_rows_mdbtools(path)
+  }
+  if (is.null(rows)) {
+    notify_fn(paste0(
+      "Relationships declared in ",
+      basename(path),
+      " could not be read (needs Java with rJava, or mdbtools), so they ",
+      "will be inferred from the data instead."
+    ))
+    return(list())
+  }
+  access_relationship_rels(rows)
+}
+
+# rows: data frame with szRelationship, grbit, icolumn, szObject, szColumn,
+# szReferencedObject, szReferencedColumn (MSysRelationships layout)
+access_relationship_rels <- function(rows) {
+  if (is.null(rows) || nrow(rows) == 0) {
+    return(list())
+  }
+  rows <- rows[!grepl("^MSys", rows$szObject) & !grepl("^MSys", rows$szReferencedObject), , drop = FALSE]
+  lapply(seq_len(nrow(rows)), function(i) {
+    grbit <- suppressWarnings(as.integer(rows$grbit[i]))
+    if (is.na(grbit)) grbit <- 0L
+    enforced <- bitwAnd(grbit, 2L) == 0L
+    list(
+      from_table = janitor::make_clean_names(rows$szObject[i]),
+      from_col = janitor::make_clean_names(rows$szColumn[i]),
+      to_table = janitor::make_clean_names(rows$szReferencedObject[i]),
+      to_col = janitor::make_clean_names(rows$szReferencedColumn[i]),
+      detected_by = "schema",
+      confidence = "high",
+      score = 1.0,
+      signals = list(schema = 1.0),
+      reasons = if (enforced) {
+        "declared in Access (integrity enforced)"
+      } else {
+        "declared in Access (not enforced, e.g. a lookup field)"
+      },
+      one_to_one = bitwAnd(grbit, 1L) != 0L
+    )
+  })
+}
+
+access_relationship_rows_mdbtools <- function(path) {
+  if (!nzchar(Sys.which("mdb-export"))) {
+    return(NULL)
+  }
+  out <- tryCatch(
+    suppressWarnings(system2(
+      "mdb-export",
+      c(shQuote(path), "MSysRelationships"),
+      stdout = TRUE,
+      stderr = FALSE
+    )),
+    error = function(e) NULL
+  )
+  if (is.null(out) || length(out) == 0 || !is.null(attr(out, "status"))) {
+    return(NULL)
+  }
+  tryCatch(
+    utils::read.csv(text = out, stringsAsFactors = FALSE, check.names = FALSE),
+    error = function(e) NULL
+  )
+}
+
+access_relationship_rows_jackcess <- function(path) {
+  if (!requireNamespace("rJava", quietly = TRUE)) {
+    return(NULL)
+  }
+  jar_dir <- access_jar_dir()
+  jar_paths <- file.path(jar_dir, vapply(ucanaccess_jars, `[[`, character(1), "file"))
+  jar_paths <- jar_paths[file.exists(jar_paths)]
+  if (!any(grepl("jackcess", jar_paths))) {
+    return(NULL)
+  }
+  tryCatch(
+    {
+      rJava::.jinit()
+      rJava::.jaddClassPath(jar_paths)
+      builder <- rJava::J("com.healthmarketscience.jackcess.DatabaseBuilder")
+      db <- builder$open(rJava::.jnew("java/io/File", normalizePath(path)))
+      on.exit(try(db$close(), silent = TRUE), add = TRUE)
+      rels <- db$getRelationships()
+      out <- list()
+      for (i in seq_len(rels$size()) - 1L) {
+        r <- rels$get(i)
+        # Jackcess names the parent ("one") side "from"
+        parent_cols <- r$getFromColumns()
+        child_cols <- r$getToColumns()
+        # Same bits as MSysRelationships.grbit: 1 = one-to-one, 2 = not enforced
+        flags <- as.integer(r$isOneToOne()) + 2L * as.integer(!r$hasReferentialIntegrity())
+        for (j in seq_len(child_cols$size()) - 1L) {
+          out[[length(out) + 1]] <- data.frame(
+            szRelationship = r$getName(),
+            grbit = flags,
+            icolumn = j,
+            szObject = r$getToTable()$getName(),
+            szColumn = child_cols$get(j)$getName(),
+            szReferencedObject = r$getFromTable()$getName(),
+            szReferencedColumn = parent_cols$get(j)$getName(),
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+      if (length(out) == 0) {
+        out <- list(data.frame(
+          szRelationship = character(0), grbit = integer(0),
+          icolumn = integer(0), szObject = character(0),
+          szColumn = character(0), szReferencedObject = character(0),
+          szReferencedColumn = character(0)
+        ))
+      }
+      do.call(rbind, out)
+    },
+    error = function(e) NULL
+  )
 }
 
 read_access_db <- function(path, notify_fn = message) {

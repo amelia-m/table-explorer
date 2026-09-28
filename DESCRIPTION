@@ -39,6 +39,7 @@ Suggests:
     bigrquery,
     stringdist,
     RJDBC,
+    rJava,
     RODBC,
     yaml
 Config/testthat/edition: 3

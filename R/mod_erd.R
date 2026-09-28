@@ -75,6 +75,17 @@ mod_erd_ui <- function(id) {
           selected = "RIGHT",
           inline = TRUE
         ),
+        selectInput(
+          ns("sources"),
+          "Sources",
+          choices = c(
+            "Declared + detected" = "both",
+            "Declared only" = "declared",
+            "Detected only" = "detected"
+          ),
+          selected = "both",
+          width = "180px"
+        ),
         checkboxInput(ns("show_low"), "Show low-confidence links", FALSE),
         div(
           class = "erd-buttons",
@@ -157,7 +168,8 @@ mod_erd_server <- function(
     model_rv <- reactive({
       tbls <- tables_rv()
       req(length(tbls) > 0)
-      erd_model(tbls, rels_rv(), pk_map_rv(), composite_pk_map_rv())
+      rels <- filter_rel_sources(rels_rv(), input$sources %||% "both")
+      erd_model(tbls, rels, pk_map_rv(), composite_pk_map_rv())
     })
 
     # Keep the focus / area choices in step with the loaded tables
@@ -327,6 +339,9 @@ mod_erd_server <- function(
                 r$provenance,
                 if (identical(r$provenance, "inferred") && !is.null(r$score)) {
                   sprintf(" · %s %d%%", r$confidence, round(100 * r$score))
+                },
+                if (!is.null(r$also_detected) && !is.na(r$also_detected)) {
+                  sprintf(" · also detected (%d%%)", round(100 * r$also_detected))
                 }
               ),
               if (length(r$reasons)) tags$dt("Evidence"),

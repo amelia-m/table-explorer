@@ -53,22 +53,60 @@ mod_relationships_server <- function(
     })
 
     # ---- Review summary + bulk actions ----
+    # Rows shown: source filter, and low confidence only when asked for
+    shown_rels_rv <- reactive({
+      rels <- rels_rv()
+      src <- input$source_filter %||% "all"
+      if (!identical(src, "all")) {
+        rels <- Filter(function(r) rel_source(r) == src, rels)
+      }
+      if (!isTRUE(input$show_low)) {
+        rels <- Filter(function(r) !identical(r$confidence, "low"), rels)
+      }
+      rels
+    })
+
     output$relationships_summary <- renderUI({
       rels <- rels_rv()
-      n_conf <- sum(vapply(rels, function(r) isTRUE(r$confirmed), logical(1)))
+      src <- vapply(rels, rel_source, character(1))
       n_supp <- length(false_positives_rv())
+      n_low <- sum(vapply(rels, function(r) identical(r$confidence, "low"), logical(1)))
+      count <- function(k) sum(src == k)
       div(
         class = "rel-toolbar",
         span(
           class = "rel-toolbar-counts",
           sprintf(
-            "%d relationship%s · %d confirmed · %d to review",
+            "%d relationship%s · %d declared · %d manual · %d confirmed · %d to review",
             length(rels),
             if (length(rels) == 1) "" else "s",
-            n_conf,
-            length(rels) - n_conf
+            count("declared"),
+            count("manual"),
+            count("confirmed"),
+            count("detected")
           ),
           if (n_supp > 0) sprintf(" · %d suppressed", n_supp)
+        ),
+        span(
+          class = "rel-toolbar-filters",
+          selectInput(
+            session$ns("source_filter"),
+            NULL,
+            choices = c(
+              "All sources" = "all",
+              "Declared" = "declared",
+              "Manual" = "manual",
+              "Confirmed" = "confirmed",
+              "Detected (to review)" = "detected"
+            ),
+            selected = isolate(input$source_filter) %||% "all",
+            width = "190px"
+          ),
+          checkboxInput(
+            session$ns("show_low"),
+            sprintf("Show low confidence (%d)", n_low),
+            value = isTRUE(isolate(input$show_low))
+          )
         ),
         span(
           class = "rel-toolbar-actions",
@@ -100,7 +138,7 @@ mod_relationships_server <- function(
 
     # Row data for the table, in the same order as rels_rv()
     rel_rows <- reactive({
-      rels <- rels_rv()
+      rels <- shown_rels_rv()
       if (length(rels) == 0) {
         return(NULL)
       }
@@ -108,6 +146,7 @@ mod_relationships_server <- function(
       data.frame(
         key = vapply(rels, rel_key, character(1)),
         confirmed = vapply(rels, function(r) isTRUE(r$confirmed), logical(1)),
+        source = vapply(rels, rel_source, character(1)),
         from_table = vapply(rels, `[[`, character(1), "from_table"),
         from_col = vapply(rels, `[[`, character(1), "from_col"),
         to_table = vapply(rels, `[[`, character(1), "to_table"),
@@ -185,11 +224,14 @@ mod_relationships_server <- function(
     output$rel_table <- DT::renderDT({
       rows <- rel_rows()
       req(rows)
-      status <- ifelse(
-        rows$confirmed,
-        "<span class=\"rel-status rel-status-confirmed\">✓ confirmed</span>",
-        "<span class=\"rel-status rel-status-review\">to review</span>"
+      source_badge <- c(
+        declared = "<span class=\"rel-status rel-status-declared\">declared</span>",
+        manual = "<span class=\"rel-status rel-status-manual\">manual</span>",
+        confirmed = "<span class=\"rel-status rel-status-confirmed\">✓ confirmed</span>",
+        detected = "<span class=\"rel-status rel-status-review\">? to review</span>"
       )
+      status <- unname(source_badge[rows$source])
+      source_rank <- match(rows$source, names(source_badge))
       method <- sprintf(
         "<span class=\"rel-method m-%s\">%s</span>",
         htmltools::htmlEscape(rows$method),
@@ -205,7 +247,9 @@ mod_relationships_server <- function(
         seq_len(nrow(rows)),
         function(i) {
           paste0(
-            if (rows$confirmed[i]) {
+            if (rows$source[i] %in% c("declared", "manual")) {
+              ""
+            } else if (rows$confirmed[i]) {
               .row_button("unconfirm_rel", rows$key[i], "undo", "", "Unconfirm")
             } else {
               .row_button(
@@ -228,7 +272,8 @@ mod_relationships_server <- function(
         character(1)
       )
       df <- data.frame(
-        Status = status,
+        Source = status,
+        source_rank = as.character(source_rank),
         `From table` = rows$from_table,
         `From column` = rows$from_col,
         `To table` = rows$to_table,
@@ -256,7 +301,7 @@ mod_relationships_server <- function(
       DT::datatable(
         df,
         rownames = FALSE,
-        escape = setdiff(names(df), c("Status", "Method", "Actions")),
+        escape = setdiff(names(df), c("Source", "Method", "Actions")),
         selection = list(mode = "multiple", target = "row"),
         filter = "top",
         options = list(
@@ -270,8 +315,10 @@ mod_relationships_server <- function(
             # Sort Confidence by rank (high > medium > low), not alphabetically
             list(targets = idx("Confidence"), orderData = idx("conf_rank")),
             list(targets = idx("Score %"), orderData = idx("score_sort")),
+            # Source sorts declared, manual, confirmed, then to review
+            list(targets = idx("Source"), orderData = c(idx("source_rank"), idx("score_sort"))),
             list(
-              targets = c(idx("conf_rank"), idx("score_sort")),
+              targets = c(idx("conf_rank"), idx("score_sort"), idx("source_rank")),
               visible = FALSE,
               searchable = FALSE
             ),
@@ -343,6 +390,7 @@ mod_relationships_server <- function(
           from_col = "",
           to_table = "",
           to_col = "",
+          source = "",
           detected_by = "",
           confidence = "",
           score = numeric(0),
@@ -366,7 +414,8 @@ mod_relationships_server <- function(
             } else {
               ""
             },
-            detected_by = r$detected_by,
+            source = rel_source(r),
+            detected_by = r$detected_by %||% "",
             confidence = if (!is.null(r$confidence)) r$confidence else "",
             score = if (!is.null(r$score)) r$score else NA_real_,
             signals = if (!is.null(r$signals)) {

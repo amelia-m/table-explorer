@@ -310,3 +310,50 @@ test_that("detect_app_export recognises this app's CSV exports", {
   )
   expect_null(detect_app_export(mapping))
 })
+
+# ── Relationships declared in Access files ───────────────────
+
+msys_rows <- function() {
+  data.frame(
+    szRelationship = c("svc", "site", "sys"),
+    grbit = c(0L, 2L, 0L),
+    ccolumn = 1L,
+    icolumn = 0L,
+    szObject = c("tbl Visits", "tbl Visits", "MSysNavPaneGroups"),
+    szColumn = c("ServiceID", "SiteID", "GroupID"),
+    szReferencedObject = c("tlk_services", "tlk_sites", "MSysNavPaneGroupCategories"),
+    szReferencedColumn = c("ID", "ID", "Id"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("MSysRelationships rows become declared links with cleaned names", {
+  rels <- access_relationship_rels(msys_rows())
+  expect_length(rels, 2)
+  expect_equal(
+    vapply(rels, rel_key, ""),
+    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+  )
+  expect_true(all(vapply(rels, `[[`, "", "detected_by") == "schema"))
+  expect_match(rels[[1]]$reasons, "integrity enforced")
+  expect_match(rels[[2]]$reasons, "not enforced")
+  expect_length(access_relationship_rels(msys_rows()[0, ]), 0)
+})
+
+test_that("relationships are read from a real .accdb with mdbtools", {
+  skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
+  path <- test_path("fixtures", "declared_rels.accdb")
+  rels <- access_relationships(path, notify_fn = function(...) NULL)
+  expect_setequal(
+    vapply(rels, rel_key, ""),
+    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+  )
+})
+
+test_that("declared links are cleaned and de-duplicated when merged", {
+  a <- list(from_table = "Orders", from_col = "CustomerID", to_table = "Customers", to_col = "ID")
+  merged <- merge_declared_rels(list(), list(a, a))
+  expect_length(merged, 1)
+  expect_equal(rel_key(merged[[1]]), "orders|customer_id|customers|id")
+  expect_length(merge_declared_rels(merged, list(a)), 1)
+})

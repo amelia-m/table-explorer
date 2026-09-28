@@ -394,7 +394,7 @@ erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
   edges <- lapply(seq_along(model$rels), function(i) {
     r <- model$rels[[i]]
     to_col <- r$to_col %||% r$from_col
-    list(
+    e <- list(
       id = paste0("rel", i),
       sources = list(paste0(r$from_table, ".", r$from_col, ":out")),
       targets = list(paste0(r$to_table, ".", to_col, ":in")),
@@ -412,9 +412,15 @@ erd_elk_graph <- function(model, detail = "all", direction = "RIGHT") {
         provenance = r$provenance,
         detectedBy = r$detected_by %||% "",
         confidence = r$confidence %||% "",
-        score = r$score %||% NA
+        score = r$score
       )
     )
+    # elkjs rejects null property values, so leave empty ones out
+    e$properties <- Filter(
+      function(v) !is.null(v) && !(length(v) == 1 && is.na(v)),
+      e$properties
+    )
+    e
   })
 
   list(

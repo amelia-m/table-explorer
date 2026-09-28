@@ -134,13 +134,18 @@ app_server <- function(input, output, session) {
         null_pattern = FALSE
       )
     } else {
+      # The method dropdown decides which families run; the signal
+      # checkboxes then pick within the content family
+      use_naming <- !identical(method, "content")
+      use_content <- !identical(method, "naming")
       list(
-        naming = isTRUE(settings$naming),
-        value_overlap = isTRUE(settings$value_overlap),
-        cardinality = isTRUE(settings$cardinality),
-        format = isTRUE(settings$format),
-        distribution = isTRUE(settings$distribution),
-        null_pattern = isTRUE(settings$null_pattern)
+        naming = identical(method, "naming") ||
+          (use_naming && isTRUE(settings$naming)),
+        value_overlap = use_content && isTRUE(settings$value_overlap),
+        cardinality = use_content && isTRUE(settings$cardinality),
+        format = use_content && isTRUE(settings$format),
+        distribution = use_content && isTRUE(settings$distribution),
+        null_pattern = use_content && isTRUE(settings$null_pattern)
       )
     }
 
@@ -241,13 +246,20 @@ app_server <- function(input, output, session) {
     } else {
       fk_cache$scanned_sig <- sig
     }
-    fk_cache$result <- sort_rels(c(kept, found))
+    # Re-weigh parents across old and new links: a new table can hold the
+    # parent an older column's name points to
+    fk_cache$result <- sort_rels(resolve_fk_parents(c(kept, found)))
     fk_cache$result
   })
 
   # ── Combined relationships ────────────────────────────────────
   all_rels_rv <- reactive({
-    raw <- c(auto_rels_rv(), manual_rels_rv(), schema_rels_rv())
+    raw <- combine_relationships(
+      auto_rels_rv(),
+      manual_rels_rv(),
+      schema_rels_rv(),
+      hide_detected_on_declared = isTRUE(detection$hide_detected_on_declared())
+    )
     suppressed <- false_positives_rv()
     overrides <- conf_overrides_rv()
     confirmed <- confirmed_rels_rv()
@@ -285,10 +297,11 @@ app_server <- function(input, output, session) {
 
   visible_rels_rv <- reactive({
     keep <- names(visible_tables_rv())
-    Filter(
+    rels <- Filter(
       function(r) r$from_table %in% keep && r$to_table %in% keep,
       all_rels_rv()
     )
+    filter_rel_sources(rels, detection$rel_sources())
   })
 
   # ── has_tables output (used by conditionalPanel in ERD tab) ──
@@ -348,6 +361,7 @@ app_server <- function(input, output, session) {
     detect_method = detection$detect_method,
     min_confidence = reactive(
       detection$detection_settings_rv()$min_conf %||% "medium"
-    )
+    ),
+    rel_sources = detection$rel_sources
   )
 }

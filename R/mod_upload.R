@@ -112,6 +112,8 @@ mod_upload_server <- function(
       notify_fn <- function(msg) {
         errors <<- c(errors, msg)
       }
+      # Relationships declared inside the files (Access databases)
+      declared <- list()
 
       all_results <- withProgress(message = "Reading files...", value = 0, {
         lapply(seq_len(n_files), function(i) {
@@ -123,6 +125,9 @@ mod_upload_server <- function(
             {
               result <- read_table_file(fpath, fname, notify_fn)
               raw_tbls <- result$tables
+              if (length(result$relationships) > 0) {
+                declared <<- c(declared, result$relationships)
+              }
               # Skip this app's own CSV exports: loading them as data adds a
               # bogus table and doesn't restore anything
               for (tname in names(raw_tbls)) {
@@ -197,6 +202,17 @@ mod_upload_server <- function(
           duration = 8
         )
         return()
+      }
+      if (length(declared) > 0) {
+        schema_rels_rv(merge_declared_rels(schema_rels_rv(), declared))
+        showNotification(
+          sprintf(
+            "Read %d relationship(s) declared in the database file.",
+            length(declared)
+          ),
+          type = "message",
+          duration = 6
+        )
       }
 
       new_files <- list()
@@ -562,12 +578,17 @@ mod_upload_server <- function(
       }
 
       if (length(result$relationships) > 0) {
-        clean_rels <- lapply(result$relationships, function(r) {
-          r$from_table <- janitor::make_clean_names(r$from_table)
-          r$to_table <- janitor::make_clean_names(r$to_table)
+        # A schema import replaces earlier schema-file links (links read from
+        # database files and connections stay)
+        from_file <- lapply(result$relationships, function(r) {
+          r$origin <- "schema_file"
           r
         })
-        schema_rels_rv(clean_rels)
+        others <- Filter(
+          function(r) !identical(r$origin, "schema_file"),
+          schema_rels_rv()
+        )
+        schema_rels_rv(merge_declared_rels(others, from_file))
         showNotification(
           paste0(
             "Schema imported: ",
