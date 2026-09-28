@@ -301,6 +301,8 @@ test_that("detect_app_export recognises this app's CSV exports", {
   expect_equal(detect_app_export(rels), "relationships list")
   rels$status <- "confirmed"
   expect_equal(detect_app_export(rels), "relationships list")
+  rels$source <- "detected"
+  expect_equal(detect_app_export(rels), "relationships list")
   expect_equal(detect_app_export(details), "table details")
   expect_null(detect_app_export(data.frame(customer_id = 1:3, name = "a")))
   # A real mapping table sharing some export column names is still data
