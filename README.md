@@ -190,8 +190,18 @@ vendored in `inst/app/www/vendor/`.
   grey with a `?` chip; confirmed, declared and manual ones are drawn in
   full ink. Low-confidence links are hidden unless "Show low-confidence
   links" is on. The legend under the diagram explains the ends and badges.
-- **Large schemas**: over 40 tables it opens in "Keys only" and suggests
-  picking a focus table. Views with more than 600 relationships ask you to
+- **Lookup links**: "Labels" shows a link to a reference table as a tag on
+  the FK row (`→ tlk_providers`) instead of a line, which removes most of the
+  clutter in hub-and-lookup schemas.
+  - Reference tables are found by shape and use, not only by `tlk_`-style
+    names: a table other tables point at, with no FKs of its own, that is
+    named like a lookup, is small (≤ 500 rows, ≤ 4 columns), or is referenced
+    by 3+ tables and has ≤ 6 columns.
+  - Clicking a tag opens the relationship, as a line would.
+  - Tables left without lines are listed down the right-hand side, split
+    into lookups and unlinked tables.
+- **Large schemas**: over 40 tables it opens in "Keys only" with lookup
+  labels, and suggests picking a focus table. Views with more than 600 relationships ask you to
   narrow them first (focus, subject area or minimum confidence), with a
   "Draw anyway" button.
 - **Downloads**: the SVG / PNG buttons save the current view with its

@@ -239,6 +239,17 @@ Access-style schema.
   - The hops slider runs 1-3 plus "all" (4); the focus neighbourhood shows
     every relationship among the tables it keeps.
 
+- **Large-schema follow-ups (after the user's 52-table Access database):**
+  - Done: links to reference tables can be shown as labels on the FK row
+    ("Lookup links: Labels", the default above 40 tables).
+    - Reference tables are found generically: a leaf parent that is named
+      like a lookup, has at most 500 rows and 4 columns, or is referenced
+      by 3+ tables with at most 6 columns.
+  - Done: tables without lines are listed down the right-hand side, split
+    into lookups and unlinked tables.
+  - Later: use the width (ELK layer wrapping plus a target aspect ratio).
+  - Later: open large schemas focused on the most-connected table.
+
 ## Open questions (resolved above, kept for context)
 
 - Is the renderer choice acceptable? It means vendoring elkjs (~1.5 MB)

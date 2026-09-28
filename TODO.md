@@ -16,6 +16,13 @@
       Access files' declared relationships are read.
 - [ ] (Maybe later) Read Access lookup-field `RowSource` queries as a second
       declared source (the Lookup Wizard already stores a relationship).
+- [ ] (Maybe later) ERD, large schemas: **use the width**. ELK layer
+      wrapping (`elk.layered.wrapping.strategy = MULTI_EDGE`) with
+      `elk.aspectRatio` from the canvas, so hub-and-spoke schemas aren't one
+      tall column.
+- [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
+      tables, start focused on the most-connected table with 2 hops instead
+      of drawing everything.
 
 ## Reference: ERD design examples
 
