@@ -809,3 +809,12 @@ test_that("format and loose name likeness can't carry a link without shared valu
   rels <- detect_fks(tbls, "both", "medium")
   expect_length(Filter(function(r) r$from_col == "amount", rels), 0)
 })
+
+test_that("is_lookup_table re-checks a table whose content changed", {
+  a <- data.frame(id = 1:5, label = letters[1:5])
+  b <- data.frame(id = c(1L, 1L, 2L, 3L, 4L), label = letters[1:5])
+  expect_true(is_lookup_table("statuses_x", a))
+  # Same name and shape, but the key is no longer unique
+  expect_false(is_lookup_table("statuses_x", b))
+  expect_true(is_lookup_table("statuses_x", a))
+})

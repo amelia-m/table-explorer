@@ -250,7 +250,14 @@ is_lookup_name <- function(tname) {
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {
-  key <- paste("k", tname, nrow(df), ncol(df), sep = "\r")
+  # The answer depends on column names and on which columns are unique, so
+  # key on the content, not just the shape (small tables are cheap to hash;
+  # larger ones fail the size test and never reach it)
+  key <- paste(
+    "k", tname, nrow(df), ncol(df),
+    if (nrow(df) <= 500 && ncol(df) <= 4) rlang::hash(df) else paste(names(df), collapse = ","),
+    sep = "\r"
+  )
   hit <- .lookup_cache[[key]]
   if (!is.null(hit)) {
     return(hit)

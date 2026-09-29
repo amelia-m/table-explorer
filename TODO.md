@@ -20,6 +20,10 @@
       wrapping (`elk.layered.wrapping.strategy = MULTI_EDGE`) with
       `elk.aspectRatio` from the canvas, so hub-and-spoke schemas aren't one
       tall column.
+- [ ] Lints / data-quality panel (Phase 4 in `docs/erd-redesign-plan.md`):
+      tables without a PK, orphan tables, FKs whose values are missing from
+      the parent (share of orphaned rows), nullable PK-like columns, and
+      duplicate links into the same parent.
 - [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
       tables, start focused on the most-connected table with 2 hops instead
       of drawing everything.
