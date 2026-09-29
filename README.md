@@ -22,10 +22,11 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **ERD Diagram** | Standard physical ERD: table cards with PK/FK/UK badges, types and nullable marks; lines run from the FK row to the PK row with crow's-foot ends (elkjs layout, orthogonal routing). Focus a table with a hops slider, detail levels (all columns / keys only / names only), subject-area filter, left→right or top→down layout, pan/zoom, click a line to confirm or suppress it, SVG/PNG download |
 | **Network overview** | The force-directed visNetwork graph (drag, zoom, hover tooltips; force/hierarchical/circular layouts), good for spotting clusters |
 | **Table Details** | Per-table column summary with type, non-null count, unique values, PK/FK flags, table size |
+| **Data Dictionary tab** | One row per column: type, missing %, unique count, PK/FK/UK, what it references (and whether that link is declared, confirmed or detected), example values (left out for columns that look personal, e.g. `email`, `phone`, `name`). Add a description per table and a description and business name per column; edits are saved with the session and flow into the dbt, DBML and Mermaid exports. Download as CSV or Markdown |
 | **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
 | **Manual overrides** | Add relationships auto-detection misses |
-| **Exports** | Relationships CSV (with review status), dbt schema.yml, Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), session save/restore (JSON) |
+| **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
 ### Architecture (golem package)

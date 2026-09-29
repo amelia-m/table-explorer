@@ -20,6 +20,9 @@ app_server <- function(input, output, session) {
   # Relationships the user confirmed, keyed by rel_key(). Stored whole so a
   # confirmed link stays even if a later scan no longer finds it.
   confirmed_rels_rv <- reactiveVal(list())
+  # Data dictionary edits: descriptions and business names, keyed "table"
+  # or "table|column"; saved with the session
+  dictionary_rv <- reactiveVal(list())
 
   # FK detection cache (mutable env, shared across modules)
   fk_cache <- new.env(parent = emptyenv())
@@ -346,6 +349,15 @@ app_server <- function(input, output, session) {
     confirmed_rels_rv
   )
 
+  mod_dictionary_server(
+    "dictionary",
+    visible_tables_rv,
+    visible_rels_rv,
+    pk_map_rv,
+    composite_pk_map_rv,
+    dictionary_rv
+  )
+
   mod_name_changes_server("name_changes", rename_log_rv)
 
   mod_export_server(
@@ -362,6 +374,7 @@ app_server <- function(input, output, session) {
     min_confidence = reactive(
       detection$detection_settings_rv()$min_conf %||% "medium"
     ),
-    rel_sources = detection$rel_sources
+    rel_sources = detection$rel_sources,
+    dictionary_rv = dictionary_rv
   )
 }

@@ -6,12 +6,59 @@
 
 # ── dbt schema.yml generator ──────────────────────────────────
 
-generate_dbt_yaml <- function(tables, rels, pks, composite_pks = NULL) {
-  lines <- c("version: 2", "", "models:")
+# dictionary: descriptions from the data dictionary (see
+#   build_data_dictionary), written as dbt `description:` fields.
+# constraints: also emit dbt >= 1.9 `constraints:` for primary keys and for
+#   declared, manual or confirmed foreign keys. Unreviewed detected links
+#   stay as relationships tests only.
+generate_dbt_yaml <- function(
+  tables,
+  rels,
+  pks,
+  composite_pks = NULL,
+  dictionary = list(),
+  constraints = FALSE
+) {
+  # Constraints need one primary key per table: the model's choice among
+  # the candidate keys
+  # dbt only applies constraints when the model's contract is enforced, and
+  # an enforced contract needs a data_type for every column. The model also
+  # resolves FK target columns (a link that names only the parent table
+  # points at the parent's key).
+  m <- if (isTRUE(constraints)) erd_model(tables, rels, pks, composite_pks)
+  model_pk <- if (!is.null(m)) {
+    lapply(m$tables, function(t) t$columns$name[t$columns$pk])
+  } else {
+    list()
+  }
+  dbt_type <- c(
+    int = "integer", float = "float", string = "varchar", date = "date",
+    datetime = "timestamp", bool = "boolean"
+  )
+  yq <- function(x) paste0("\"", gsub("([\"\\\\])", "\\\\\\1", gsub("[\r\n]+", " ", x)), "\"")
+  lines <- c(
+    "version: 2",
+    if (!is.null(m)) {
+      c(
+        "# Constraints need an enforced contract. data_type values are generic",
+        "# (integer, float, varchar, date, timestamp, boolean): adjust them to",
+        "# your warehouse's types if needed."
+      )
+    },
+    "",
+    "models:"
+  )
 
   for (tname in names(tables)) {
     df <- tables[[tname]]
     lines <- c(lines, paste0("  - name: ", tname))
+    t_desc <- dict_entry(dictionary, tname)$description
+    if (nzchar(t_desc)) {
+      lines <- c(lines, paste0("    description: ", yq(t_desc)))
+    }
+    if (!is.null(m)) {
+      lines <- c(lines, "    config:", "      contract:", "        enforced: true")
+    }
     lines <- c(lines, "    columns:")
 
     pk_cols <- pks[[tname]]
@@ -27,6 +74,33 @@ generate_dbt_yaml <- function(tables, rels, pks, composite_pks = NULL) {
 
     for (col in names(df)) {
       lines <- c(lines, paste0("      - name: ", col))
+      c_desc <- dict_entry(dictionary, tname, col)$description
+      if (nzchar(c_desc)) {
+        lines <- c(lines, paste0("        description: ", yq(c_desc)))
+      }
+      if (!is.null(m)) {
+        mcols <- m$tables[[tname]]$columns
+        ctype <- mcols$type[match(col, mcols$name)]
+        lines <- c(lines, paste0("        data_type: ", dbt_type[[ctype %||% "string"]] %||% "varchar"))
+        cons <- character(0)
+        if (length(model_pk[[tname]]) == 1 && col %in% model_pk[[tname]]) {
+          cons <- c(cons, "          - type: primary_key")
+        }
+        m_fks <- Filter(function(r) r$from_table == tname && r$from_col == col, m$rels)
+        for (r in m_fks) {
+          if (!rel_source(r) %in% c("declared", "manual", "confirmed")) next
+          to_col <- r$to_col
+          cons <- c(
+            cons,
+            "          - type: foreign_key",
+            paste0("            to: ref('", r$to_table, "')"),
+            paste0("            to_columns: [", to_col, "]")
+          )
+        }
+        if (length(cons) > 0) {
+          lines <- c(lines, "        constraints:", cons)
+        }
+      }
 
       tests <- character(0)
       if (col %in% pk_cols) {
@@ -121,7 +195,7 @@ erd_area_colors <- function(model) {
 # remain visible as "PK, FK" columns. Output is sorted so diffs stay
 # meaningful.
 
-generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
+generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL, dictionary = list()) {
   model <- erd_model(tables, rels, pks, composite_pks)
   lines <- c(
     "erDiagram",
@@ -144,7 +218,13 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
         if (!is.na(cols$fk_index[i])) "FK",
         if (cols$uk[i]) "UK"
       )
-      comment <- if (isTRUE(cols$nullable[i])) " \"nullable\"" else ""
+      # Attribute comments are double-quoted strings, so no double quotes inside
+      note <- c(
+        gsub("\"", "'", gsub("[\r\n]+", " ", dict_entry(dictionary, t$name, cols$name[i])$description)),
+        if (isTRUE(cols$nullable[i])) "nullable"
+      )
+      note <- note[nzchar(note)]
+      comment <- if (length(note)) paste0(" \"", paste(note, collapse = "; "), "\"") else ""
       lines <- c(
         lines,
         paste0(
@@ -198,8 +278,10 @@ generate_mermaid_erd <- function(tables, rels, pks, composite_pks = NULL) {
 # Keeps what Mermaid can't: not null, notes, composite PK indexes, subject
 # area TableGroups and header colours, muted colour for inferred refs.
 
-generate_dbml <- function(tables, rels, pks, composite_pks = NULL) {
+generate_dbml <- function(tables, rels, pks, composite_pks = NULL, dictionary = list()) {
   model <- erd_model(tables, rels, pks, composite_pks)
+  # Escape backslashes first so a trailing "\" can't escape the closing quote
+  dq <- function(x) gsub("'", "\\\\'", gsub("\\", "\\\\", gsub("[\r\n]+", " ", x), fixed = TRUE))
   colors <- erd_area_colors(model)
   lines <- character(0)
 
@@ -215,10 +297,12 @@ generate_dbml <- function(tables, rels, pks, composite_pks = NULL) {
     )
     single_pk <- sum(cols$pk) == 1
     for (i in seq_len(nrow(cols))) {
+      c_desc <- dict_entry(dictionary, t$name, cols$name[i])$description
       settings <- c(
         if (cols$pk[i] && single_pk) "pk",
         if (cols$uk[i]) "unique",
-        if (isFALSE(cols$nullable[i])) "not null"
+        if (isFALSE(cols$nullable[i])) "not null",
+        if (nzchar(c_desc)) sprintf("note: '%s'", dq(c_desc))
       )
       lines <- c(
         lines,
@@ -249,11 +333,14 @@ generate_dbml <- function(tables, rels, pks, composite_pks = NULL) {
     }
     lines <- c(
       lines,
-      sprintf(
-        "  Note: '%s; %s rows'",
-        t$role,
-        format(t$n_rows, big.mark = ",")
-      ),
+      {
+        facts <- sprintf("%s; %s rows", t$role, format(t$n_rows, big.mark = ","))
+        t_desc <- dict_entry(dictionary, t$name)$description
+        sprintf(
+          "  Note: '%s'",
+          if (nzchar(t_desc)) sprintf("%s (%s)", dq(t_desc), facts) else facts
+        )
+      },
       "}",
       ""
     )
@@ -507,7 +594,8 @@ save_session_json <- function(
   manual_rels,
   schema_rels,
   settings = list(),
-  review = list()
+  review = list(),
+  dictionary = list()
 ) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
@@ -533,10 +621,15 @@ save_session_json <- function(
     schema_relationships = schema_rels,
     settings = settings,
     # User review decisions: confirmed relationships and suppressed keys
-    review = review
+    review = review,
+    # Data dictionary edits (descriptions, business names), keyed
+    # "table" or "table|column"
+    dictionary = dictionary
   )
 
-  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  # na = "null": numeric NAs would otherwise be written as the string "NA"
+  # and turn the whole column into text on restore
+  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
 }
 
 restore_session_json <- function(json_text) {
@@ -547,7 +640,8 @@ restore_session_json <- function(json_text) {
       manual_relationships = list(),
       schema_relationships = list(),
       settings = list(),
-      review = list()
+      review = list(),
+      dictionary = list()
     ))
   }
 
@@ -560,8 +654,14 @@ restore_session_json <- function(json_text) {
       tdata <- session$tables[[tname]]
       if (length(tdata) > 0) {
         # tdata is a named list of columns (each column is a list of values)
+        # Missing values come back from JSON as null; keep them as NA so
+        # every column keeps its length
         col_list <- lapply(tdata, function(col) {
-          if (is.list(col)) unlist(col) else col
+          if (is.list(col)) {
+            unlist(lapply(col, function(v) if (is.null(v)) NA else v))
+          } else {
+            col
+          }
         })
         df <- tryCatch(
           as.data.frame(col_list, stringsAsFactors = FALSE),
@@ -578,6 +678,166 @@ restore_session_json <- function(json_text) {
     manual_relationships = session$manual_relationships %||% list(),
     schema_relationships = session$schema_relationships %||% list(),
     settings = session$settings %||% list(),
-    review = session$review %||% list()
+    review = session$review %||% list(),
+    dictionary = session$dictionary %||% list()
   )
+}
+
+# ── Data dictionary ───────────────────────────────────────────
+# One row per column with what the data says (type, nullability, keys,
+# what it references) and what people add (description, business name).
+# `dictionary` holds the edits: a named list keyed "table" (table-level) or
+# "table|column", each entry list(description, business_name).
+
+dict_key <- function(table, column = NULL) {
+  if (is.null(column)) table else paste(table, column, sep = "|")
+}
+
+dict_entry <- function(dictionary, table, column = NULL) {
+  e <- dictionary[[dict_key(table, column)]] %||% list()
+  list(
+    description = e$description %||% "",
+    business_name = e$business_name %||% ""
+  )
+}
+
+# Example values are left out for columns whose name suggests personal data
+dict_sensitive_re <- paste0(
+  "(^|_)(ssn|sin|password|passwd|pwd|dob|birth|birthdate|email|e_mail|",
+  "phone|mobile|cell|address|street|zip|postcode|first_name|last_name|",
+  "full_name|surname|name)(_|$)"
+)
+
+build_data_dictionary <- function(
+  tables,
+  rels,
+  pks,
+  composite_pks = NULL,
+  dictionary = list(),
+  examples = TRUE
+) {
+  empty <- data.frame(
+    table = character(0), table_description = character(0),
+    column = character(0), position = integer(0), type = character(0),
+    nullable = logical(0), pct_missing = numeric(0), n_unique = integer(0),
+    keys = character(0), references = character(0), reference_source = character(0),
+    examples = character(0), description = character(0),
+    business_name = character(0), stringsAsFactors = FALSE
+  )
+  if (length(tables) == 0) {
+    return(empty)
+  }
+  # Documentation lists links worth relying on: low-confidence detected
+  # links (demoted or ambiguous) stay out
+  rels <- Filter(function(r) {
+    !(rel_source(r) == "detected" && identical(r$confidence, "low"))
+  }, rels %||% list())
+  model <- erd_model(tables, rels, pks, composite_pks)
+  rows <- lapply(model$tables, function(t) {
+    df <- tables[[t$name]]
+    cols <- t$columns
+    t_desc <- dict_entry(dictionary, t$name)$description
+    out_rels <- Filter(function(r) r$from_table == t$name, model$rels)
+    lapply(seq_len(nrow(cols)), function(i) {
+      cn <- cols$name[i]
+      v <- df[[cn]]
+      n <- length(v)
+      refs <- Filter(function(r) r$from_col == cn, out_rels)
+      ex <- ""
+      if (isTRUE(examples) && !grepl(dict_sensitive_re, clean_name(cn)) && n > 0) {
+        vals <- unique(as.character(v[!is.na(v)]))
+        vals <- vals[nzchar(trimws(vals))]
+        vals <- substr(head(vals, 3), 1, 30)
+        ex <- paste(vals, collapse = ", ")
+      }
+      e <- dict_entry(dictionary, t$name, cn)
+      data.frame(
+        table = t$name,
+        table_description = t_desc,
+        column = cn,
+        position = match(cn, names(df)),
+        type = cols$type[i],
+        nullable = isTRUE(cols$nullable[i]),
+        pct_missing = if (n > 0) round(100 * mean(is.na(v)), 1) else NA_real_,
+        n_unique = if (n > 0) length(unique(v[!is.na(v)])) else NA_integer_,
+        keys = paste(c(
+          if (cols$pk[i]) "PK",
+          if (!is.na(cols$fk_index[i])) paste0("FK", cols$fk_index[i]),
+          if (cols$uk[i]) "UK"
+        ), collapse = ", "),
+        references = paste(vapply(refs, function(r) {
+          paste0(r$to_table, ".", r$to_col %||% r$from_col)
+        }, ""), collapse = "; "),
+        reference_source = paste(vapply(refs, rel_source, ""), collapse = "; "),
+        examples = ex,
+        description = e$description,
+        business_name = e$business_name,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  rows <- unlist(rows, recursive = FALSE)
+  if (length(rows) == 0) {
+    return(empty)
+  }
+  dd <- do.call(rbind, rows)
+  dd <- dd[order(dd$table, dd$position), , drop = FALSE]
+  rownames(dd) <- NULL
+  dd
+}
+
+# Markdown: one section per table, with its description, a column table and
+# what it links to
+generate_data_dictionary_md <- function(dd, title = "Data dictionary") {
+  cell <- function(x) {
+    x <- ifelse(is.na(x), "", as.character(x))
+    gsub("\n", " ", gsub("|", "\\|", x, fixed = TRUE))
+  }
+  lines <- c(paste0("# ", title), "")
+  if (nrow(dd) == 0) {
+    return(paste(c(lines, "_No tables loaded._"), collapse = "\n"))
+  }
+  lines <- c(lines, sprintf("%d tables, %d columns.", length(unique(dd$table)), nrow(dd)), "")
+  for (t in unique(dd$table)) {
+    d <- dd[dd$table == t, , drop = FALSE]
+    lines <- c(lines, paste0("## ", t), "")
+    if (nzchar(d$table_description[1])) {
+      lines <- c(lines, cell(d$table_description[1]), "")
+    }
+    lines <- c(
+      lines,
+      "| Column | Business name | Type | Keys | Nullable | Missing % | Unique | Description | Examples |",
+      "|---|---|---|---|---|---|---|---|---|"
+    )
+    for (i in seq_len(nrow(d))) {
+      lines <- c(lines, paste0(
+        "| ", paste(c(
+          paste0("`", cell(d$column[i]), "`"),
+          cell(d$business_name[i]),
+          cell(d$type[i]),
+          cell(d$keys[i]),
+          if (d$nullable[i]) "yes" else "no",
+          cell(d$pct_missing[i]),
+          cell(d$n_unique[i]),
+          cell(d$description[i]),
+          cell(d$examples[i])
+        ), collapse = " | "), " |"
+      ))
+    }
+    linked <- d[nzchar(d$references), , drop = FALSE]
+    if (nrow(linked) > 0) {
+      lines <- c(lines, "", "**References**", "")
+      for (i in seq_len(nrow(linked))) {
+        tgt <- strsplit(linked$references[i], "; ", fixed = TRUE)[[1]]
+        src <- strsplit(linked$reference_source[i], "; ", fixed = TRUE)[[1]]
+        for (j in seq_along(tgt)) {
+          lines <- c(lines, sprintf(
+            "- `%s` → `%s` (%s)", linked$column[i], tgt[j], src[j] %||% ""
+          ))
+        }
+      }
+    }
+    lines <- c(lines, "")
+  }
+  paste(lines, collapse = "\n")
 }
