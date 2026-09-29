@@ -62,6 +62,7 @@ app_ui <- function(request) {
           tabPanel("Network overview", mod_network_ui("network")),
           tabPanel("Table Details", mod_table_details_ui("table_details")),
           tabPanel("Relationships", mod_relationships_ui("relationships")),
+          tabPanel("Data Dictionary", mod_dictionary_ui("dictionary")),
           tabPanel("Name Changes", mod_name_changes_ui("name_changes")),
           tabPanel("Export", mod_export_ui("export"))
         )

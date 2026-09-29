@@ -438,3 +438,10 @@
     .erd-orphans summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
     .erd-orphan { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border-sub); color: var(--accent); padding: 3px 2px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
     .erd-orphan:hover { background: var(--tbl-row-hover); }
+
+    /* ── Data dictionary tab ─────────────────────────────────── */
+    .dict-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .dict-downloads { display: flex; gap: 8px; margin-bottom: 15px; }
+    .dict-hint { font-size: 12px; color: var(--text-secondary); margin: 4px 0 10px; }
+    table.dict-dt td.dict-editable { border-left: 1px dashed var(--border-sub); cursor: text; min-width: 160px; }
+    table.dict-dt td.dict-editable:hover { background: var(--tbl-row-hover); }

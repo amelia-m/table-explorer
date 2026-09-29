@@ -249,6 +249,12 @@ Access-style schema.
     into lookups and unlinked tables.
   - Later: use the width (ELK layer wrapping plus a target aspect ratio).
   - Later: open large schemas focused on the most-connected table.
+- **Data dictionary (done):**
+  - a Data Dictionary tab with editable descriptions and business names, saved
+    with the session;
+  - CSV and Markdown exports;
+  - descriptions carried into dbt, DBML and Mermaid;
+  - optional dbt 1.9 constraints for PKs and declared/confirmed FKs.
 
 ## Open questions (resolved above, kept for context)
 

@@ -411,3 +411,147 @@ test_that("dbt emits a relationships test for every FK on a column", {
   expect_true(grepl("ref('a')", yml, fixed = TRUE))
   expect_true(grepl("ref('b')", yml, fixed = TRUE))
 })
+
+# ── Data dictionary ───────────────────────────────────────────
+
+dict_tables <- function() {
+  list(
+    customers = data.frame(
+      customer_id = 1:4,
+      email = c("a@x.io", "b@x.io", NA, "d@x.io"),
+      tier = c("gold", "silver", "gold", "bronze"),
+      stringsAsFactors = FALSE
+    ),
+    orders = data.frame(
+      order_id = 1:6,
+      customer_id = c(1L, 2L, 1L, NA, 3L, 4L),
+      amount = c(10.5, 20, 30, 15.5, 1, 2)
+    )
+  )
+}
+dict_rels <- function(by = "schema") {
+  list(list(
+    from_table = "orders", from_col = "customer_id", to_table = "customers",
+    to_col = "customer_id", detected_by = by, confidence = "high", score = 1
+  ))
+}
+dict_pks <- function() list(customers = "customer_id", orders = "order_id")
+
+test_that("build_data_dictionary describes every column", {
+  dd <- build_data_dictionary(dict_tables(), dict_rels(), dict_pks())
+  expect_equal(nrow(dd), 6)
+  expect_equal(dd$table, c(rep("customers", 3), rep("orders", 3)))
+  row <- dd[dd$table == "orders" & dd$column == "customer_id", ]
+  expect_equal(row$keys, "FK1")
+  expect_equal(row$references, "customers.customer_id")
+  expect_equal(row$reference_source, "declared")
+  expect_true(row$nullable)
+  expect_equal(row$pct_missing, round(100 / 6, 1))
+  expect_equal(row$n_unique, 4)
+  expect_equal(dd$keys[dd$column == "order_id"], "PK")
+  # Examples, except for columns that look personal
+  expect_equal(dd$examples[dd$column == "tier"], "gold, silver, bronze")
+  expect_equal(dd$examples[dd$column == "email"], "")
+  expect_equal(build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), examples = FALSE)$examples[3], "")
+})
+
+test_that("dictionary edits are merged into the dictionary and its Markdown", {
+  edits <- list(
+    customers = list(description = "People who buy | things"),
+    "customers|tier" = list(description = "Loyalty tier", business_name = "Tier")
+  )
+  dd <- build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  expect_equal(dd$description[dd$column == "tier"], "Loyalty tier")
+  expect_equal(dd$business_name[dd$column == "tier"], "Tier")
+  expect_equal(unique(dd$table_description[dd$table == "customers"]), "People who buy | things")
+  md <- generate_data_dictionary_md(dd)
+  expect_match(md, "## customers", fixed = TRUE)
+  expect_match(md, "## orders", fixed = TRUE)
+  expect_match(md, "People who buy \\| things", fixed = TRUE)
+  expect_match(md, "| `tier` | Tier |", fixed = TRUE)
+  expect_match(md, "`customer_id` → `customers.customer_id` (declared)", fixed = TRUE)
+  expect_identical(md, generate_data_dictionary_md(dd))
+  expect_match(generate_data_dictionary_md(dd[0, ]), "No tables loaded")
+})
+
+test_that("descriptions reach dbt, DBML and Mermaid", {
+  edits <- list(
+    orders = list(description = "Each \"order\" placed"),
+    "orders|amount" = list(description = "Total in GBP")
+  )
+  y <- generate_dbt_yaml(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  expect_match(y, "    description: \"Each \\\"order\\\" placed\"", fixed = TRUE)
+  expect_match(y, "        description: \"Total in GBP\"", fixed = TRUE)
+  expect_false(grepl("constraints:", y))
+  dbml <- generate_dbml(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  expect_match(dbml, "note: 'Total in GBP'", fixed = TRUE)
+  expect_match(dbml, "Note: 'Each \"order\" placed (", fixed = TRUE)
+  mmd <- generate_mermaid_erd(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  expect_match(mmd, "amount \"Total in GBP\"", fixed = TRUE)
+})
+
+test_that("dbt constraints cover PKs and reviewed FKs only", {
+  y <- generate_dbt_yaml(dict_tables(), dict_rels("schema"), dict_pks(), constraints = TRUE)
+  expect_match(y, "- type: primary_key", fixed = TRUE)
+  expect_match(y, "- type: foreign_key\n            to: ref('customers')\n            to_columns: [customer_id]", fixed = TRUE)
+  detected <- generate_dbt_yaml(dict_tables(), dict_rels("naming"), dict_pks(), constraints = TRUE)
+  expect_false(grepl("foreign_key", detected))
+  confirmed <- dict_rels("naming")
+  confirmed[[1]]$confirmed <- TRUE
+  expect_match(generate_dbt_yaml(dict_tables(), confirmed, dict_pks(), constraints = TRUE), "foreign_key", fixed = TRUE)
+})
+
+test_that("sessions keep dictionary edits; older sessions still load", {
+  edits <- list("orders|amount" = list(description = "Total", business_name = "Order total"))
+  js <- save_session_json(dict_tables(), list(), list(), list(), dictionary = edits)
+  back <- restore_session_json(js)
+  expect_equal(back$dictionary[["orders|amount"]]$business_name, "Order total")
+  old <- save_session_json(dict_tables(), list(), list(), list())
+  old <- sub(',\\s*"dictionary": \\[\\]', "", old)
+  expect_equal(restore_session_json(old)$dictionary, list())
+})
+
+test_that("sessions with missing values restore with their NAs", {
+  js <- save_session_json(dict_tables(), list(), list(), list())
+  back <- restore_session_json(js)
+  expect_equal(nrow(back$tables$customers), 4)
+  expect_true(is.na(back$tables$customers$email[3]))
+  expect_true(is.na(back$tables$orders$customer_id[4]))
+  expect_true(is.numeric(back$tables$orders$customer_id))
+})
+
+test_that("dbt constraints pick one primary key when several columns are unique", {
+  t <- list(orders = data.frame(order_id = 1:3, ref = c("a", "b", "c"), stringsAsFactors = FALSE))
+  y <- generate_dbt_yaml(t, list(), list(orders = c("order_id", "ref")), constraints = TRUE)
+  expect_equal(lengths(regmatches(y, gregexpr("primary_key", y))), 1)
+  expect_match(y, "- name: order_id\n        data_type: integer\n        constraints:\n          - type: primary_key", fixed = TRUE)
+})
+
+test_that("the dictionary leaves out low-confidence detected links", {
+  low <- dict_rels("naming")
+  low[[1]]$confidence <- "low"
+  dd <- build_data_dictionary(dict_tables(), low, dict_pks())
+  expect_equal(dd$references[dd$table == "orders" & dd$column == "customer_id"], "")
+  declared_low <- dict_rels("schema")
+  declared_low[[1]]$confidence <- "low"
+  dd2 <- build_data_dictionary(dict_tables(), declared_low, dict_pks())
+  expect_equal(dd2$references[dd2$table == "orders" & dd2$column == "customer_id"], "customers.customer_id")
+})
+
+test_that("dbt constraints come with an enforced contract and the parent's key", {
+  rels <- dict_rels("schema")
+  rels[[1]]$from_col <- "customer_id"
+  rels[[1]]$to_col <- "" # names only the parent table
+  y <- generate_dbt_yaml(dict_tables(), rels, dict_pks(), constraints = TRUE)
+  expect_match(y, "    config:\n      contract:\n        enforced: true", fixed = TRUE)
+  expect_match(y, "- name: amount\n        data_type: float", fixed = TRUE)
+  expect_match(y, "- name: tier\n        data_type: varchar", fixed = TRUE)
+  expect_match(y, "to: ref('customers')\n            to_columns: [customer_id]", fixed = TRUE)
+  expect_false(grepl("contract", generate_dbt_yaml(dict_tables(), rels, dict_pks())))
+})
+
+test_that("DBML notes escape backslashes and quotes", {
+  d <- list("orders|amount" = list(description = "ends with \\"))
+  dbml <- generate_dbml(dict_tables(), dict_rels(), dict_pks(), dictionary = d)
+  expect_match(dbml, "note: 'ends with \\\\'", fixed = TRUE)
+})
