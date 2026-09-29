@@ -283,30 +283,51 @@
     ["lookups", "Lookups (linked by label)"],
     ["unlinked", "Unlinked tables"],
   ];
-  function placeSide(out, sideNodes) {
+  // aspect: the canvas's width / height, so the side area wraps into columns
+  // shaped like the screen instead of one tall strip (e.g. while nothing is
+  // linked yet, every table is here)
+  function placeSide(out, sideNodes, aspect) {
     out.sideHeadings = [];
     if (!sideNodes.length) return;
-    var x = out.children.length ? (out.width || 0) + 60 : 0;
-    var y = 0, maxW = 0;
+    var GAP_X = 24, GAP_Y = 12, HEAD = 22;
+    var hasMain = out.children.length > 0;
+    var area = sideNodes.reduce(function (a, n) {
+      return a + (n.width + GAP_X) * (n.height + GAP_Y);
+    }, 0);
+    var target = Math.sqrt(area / (aspect || 1.6));
+    var colMax = Math.max(hasMain ? out.height || 0 : 0, target, 120);
+    var x0 = hasMain ? (out.width || 0) + 60 : 0;
+    var x = x0, y = 0, colW = 0, bottom = 0;
+    function newColumn() {
+      x += colW + GAP_X;
+      y = 0;
+      colW = 0;
+    }
     SIDE_GROUPS.forEach(function (grp) {
       var ns = sideNodes
         .filter(function (n) { return n.properties.side === grp[0]; })
         .sort(function (a, b) { return a.id < b.id ? -1 : 1; });
       if (!ns.length) return;
-      out.sideHeadings.push({ x: x, y: y + 12, text: grp[1] + " (" + ns.length + ")" });
-      y += 22;
+      // Each group starts a column of its own, under its heading
+      if (colW > 0) newColumn();
+      out.sideHeadings.push({ x: x, y: 12, text: grp[1] + " (" + ns.length + ")" });
+      y = HEAD;
       ns.forEach(function (n) {
+        if (y > HEAD && y + n.height > colMax) {
+          newColumn();
+          y = HEAD;
+        }
         out.children.push({
           id: n.id, x: x, y: y, width: n.width, height: n.height,
           ports: [], properties: n.properties,
         });
-        y += n.height + 12;
-        maxW = Math.max(maxW, n.width);
+        y += n.height + GAP_Y;
+        colW = Math.max(colW, n.width);
+        bottom = Math.max(bottom, y - GAP_Y);
       });
-      y += 18;
     });
-    out.width = x + maxW;
-    out.height = Math.max(out.height || 0, y - 30);
+    out.width = x + colW;
+    out.height = Math.max(out.height || 0, bottom);
   }
 
   function drawEdge(parent, e, nodes, th) {
@@ -734,7 +755,9 @@
         var eById = {};
         graph.edges.forEach(function (e) { eById[e.id] = e; });
         out.edges.forEach(function (e) { e.properties = eById[e.id].properties; });
-        placeSide(out, sideNodes);
+        var box = document.getElementById(id);
+        var aspect = box && box.offsetWidth && box.offsetHeight ? box.offsetWidth / box.offsetHeight : 1.6;
+        placeSide(out, sideNodes, aspect);
         st.layout = out;
         st.sig = sig;
         st.layoutMs = performance.now() - t0;
