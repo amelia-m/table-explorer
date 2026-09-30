@@ -326,6 +326,7 @@ parse_schema_file <- function(path, name, notify_fn = message) {
 
   tables <- list()
   relationships <- list()
+  primary_keys <- list()
 
   # Parse tables from schema + extract inline FK definitions
   if (!is.null(schema$tables)) {
@@ -349,6 +350,15 @@ parse_schema_file <- function(path, name, notify_fn = message) {
           names(df) <- col_names
           tables[[tname]] <- df
         }
+        # Primary keys: a table-level primary_key list, or columns marked
+        # primary_key / pk: true
+        pk <- unlist(tdef$primary_key %||% tdef$primary_keys)
+        if (is.null(pk) || is.logical(pk)) {
+          pk <- unlist(lapply(cols, function(c) {
+            if (isTRUE(c$primary_key) || isTRUE(c$pk)) c$name
+          }))
+        }
+        if (length(pk) > 0) primary_keys[[tname]] <- as.character(pk)
         # Extract inline foreign_key definitions
         for (cdef in cols) {
           fk <- cdef$foreign_key
@@ -393,7 +403,7 @@ parse_schema_file <- function(path, name, notify_fn = message) {
     }
   }
 
-  list(tables = tables, relationships = relationships)
+  list(tables = tables, relationships = relationships, primary_keys = primary_keys)
 }
 
 # ── data-dict YAML ─────────────────────────────────────────────
@@ -417,6 +427,7 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
   txt <- function(x) if (is.null(x)) "" else trimws(paste(as.character(unlist(x)), collapse = " "))
   tables <- list()
   dictionary <- list()
+  primary_keys <- list()
   add_entry <- function(key, def, column = FALSE) {
     e <- list()
     for (f in c("label", "description", "details")) {
@@ -426,13 +437,20 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       if (nzchar(txt(def$units))) e$units <- txt(def$units)
       if (!is.null(def$values)) e$values <- dict_format_values(def$values)
       if (identical(def$display, "restricted")) {
-        e$private <- TRUE
+        e[["private"]] <- TRUE
         e$private_source <- "import"
       }
     }
     if (length(e)) dictionary[[key]] <<- e
   }
-  for (tdef in schema$tables %||% list()) {
+  table_defs <- schema$tables %||% list()
+  # A single-table dictionary is documented at the top level (spec S16)
+  if (length(table_defs) == 1) {
+    for (f in c("label", "description", "details")) {
+      table_defs[[1]][[f]] <- table_defs[[1]][[f]] %||% schema[[f]]
+    }
+  }
+  for (tdef in table_defs) {
     tname <- tdef$name
     if (is.null(tname) || !nzchar(tname)) next
     add_entry(dict_key(tname), tdef)
@@ -443,7 +461,12 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       # Empty columns of the declared type, so a re-export keeps the types
       cols[[cn]] <- data_dict_empty_column(cdef$type)
       add_entry(dict_key(tname, cn), cdef, column = TRUE)
+      if ("primary_key" %in% unlist(cdef$constraints)) {
+        primary_keys[[tname]] <- c(primary_keys[[tname]], cn)
+      }
     }
+    # A data-dict file lists every key, so a table without one has none
+    if (is.null(primary_keys[[tname]])) primary_keys[tname] <- list(character(0))
     tables[[tname]] <- if (length(cols)) {
       as.data.frame(cols, stringsAsFactors = FALSE, check.names = FALSE)
     } else {
@@ -490,7 +513,12 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       skipped
     ))
   }
-  list(tables = tables, relationships = relationships, dictionary = dictionary)
+  list(
+    tables = tables,
+    relationships = relationships,
+    dictionary = dictionary,
+    primary_keys = primary_keys
+  )
 }
 
 # Add imported dictionary entries (keyed by the imported names, cleaned the
@@ -503,11 +531,18 @@ merge_dictionary <- function(current, imported) {
     # would be made unique ("status|status_2")
     ck <- paste(vapply(parts, janitor::make_clean_names, ""), collapse = "|")
     e <- current[[ck]] %||% list()
-    for (f in names(imported[[k]])) {
+    # The user's own Private / Not private choice wins; a file that marks a
+    # column restricted still overrides an automatic flag the user rejected
+    decided <- !is.null(e[["private"]])
+    for (f in setdiff(names(imported[[k]]), "private_source")) {
+      if (f == "private" && decided) next
       have <- e[[f]]
       empty <- is.null(have) || (is.character(have) && !nzchar(have))
       if (f == "label" && !is.null(e$business_name) && nzchar(e$business_name)) empty <- FALSE
-      if (empty) e[[f]] <- imported[[k]][[f]]
+      if (empty) {
+        e[[f]] <- imported[[k]][[f]]
+        if (f == "private") e$private_source <- imported[[k]]$private_source
+      }
     }
     current[[ck]] <- e
   }

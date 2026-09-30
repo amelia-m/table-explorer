@@ -755,3 +755,180 @@ test_that("imported entries for a column named like its table land on it", {
   merged <- merge_dictionary(list(), list("status|status" = list(label = "Status")))
   expect_equal(names(merged), "status|status")
 })
+
+dd_doc <- function(...) yaml::yaml.load(generate_data_dict_yaml(...), handlers = list(int = function(x) as.numeric(x)))
+dd_cols <- function(tdef) setNames(tdef$columns, vapply(tdef$columns, `[[`, "", "name"))
+
+test_that("a single-table data-dict round trip keeps its docs and primary key", {
+  skip_if_not_installed("yaml")
+  t <- list(people = data.frame(code = c("a", "b"), note = c("x", NA), stringsAsFactors = FALSE))
+  d <- list(people = list(label = "People", description = "All the people"))
+  f <- tempfile(fileext = ".yaml")
+  writeLines(generate_data_dict_yaml(t, list(), list(people = "code"), dictionary = d), f)
+  back <- parse_schema_file(f, "dd.yaml")
+  expect_equal(back$dictionary$people$label, "People")
+  expect_equal(back$dictionary$people$description, "All the people")
+  expect_equal(back$primary_keys, list(people = "code"))
+  # Re-export from the imported (empty) tables with the declared key
+  pks <- apply_declared_pks(list(people = character(0)), merge_declared_pks(list(), back$primary_keys), back$tables)
+  doc <- dd_doc(back$tables, back$relationships, pks, dictionary = back$dictionary)
+  cols <- dd_cols(doc$tables[[1]])
+  expect_equal(cols$code$constraints, "primary_key")
+  # Nothing is known about missing values in a table without rows
+  expect_null(cols$note$constraints)
+  expect_equal(doc$label, "People")
+})
+
+test_that("JSON/YAML schema files declare primary keys", {
+  f <- tempfile(fileext = ".json")
+  writeLines('{"tables":[{"name":"A","columns":[{"name":"Code","primary_key":true},{"name":"x"}]},
+    {"name":"b","primary_key":["k1","k2"],"columns":[{"name":"k1"},{"name":"k2"}]}]}', f)
+  s <- parse_schema_file(f, "s.json")
+  expect_equal(s$primary_keys, list(A = "Code", b = c("k1", "k2")))
+  pks <- merge_declared_pks(list(), s$primary_keys)
+  expect_equal(pks, list(a = "code", b = c("k1", "k2")))
+  tabs <- list(a = data.frame(code = 1, x = 2), b = data.frame(k1 = 1, k2 = 2))
+  expect_equal(apply_declared_pks(list(a = "x", b = "k1"), pks, tabs), list(a = structure("code", declared = TRUE), b = character(0)))
+  expect_equal(apply_declared_composite_pks(list(a = NULL, b = NULL), pks, tabs)$b, list(c("k1", "k2")))
+})
+
+test_that("data-dict joins: non-key targets become todos, duplicates collapse", {
+  skip_if_not_installed("yaml")
+  t <- list(
+    a = data.frame(a_id = 1:3, ref = c("x", "y", "x"), b_id = c(1L, 2L, 2L), stringsAsFactors = FALSE),
+    b = data.frame(b_id = 1:2, ref = c("x", "y"), stringsAsFactors = FALSE),
+    c = data.frame(k1 = c(1L, 1L), k2 = 1:2, n = 1:2)
+  )
+  rels <- list(
+    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "schema"),
+    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "manual"),
+    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "naming", confidence = "high", score = 0.9),
+    list(from_table = "b", from_col = "ref", to_table = "a", to_col = "ref", detected_by = "manual"),
+    list(from_table = "a", from_col = "a_id", to_table = "c", to_col = "k1", detected_by = "manual")
+  )
+  doc <- dd_doc(t, rels, list(a = "a_id", b = "b_id"), composite_pks = list(c = list(c("k1", "k2"))))
+  expect_equal(vapply(doc$relationships, `[[`, "", "join"), "a.b_id = b.b_id")
+  expect_null(doc$relationships[[1]]$description)
+  expect_false(grepl("a.b_id = b.b_id", doc$todo, fixed = TRUE))
+  expect_match(doc$todo, "- b.ref = a.ref (manual)", fixed = TRUE)
+  expect_match(doc$todo, "- a.a_id = c.k1 (manual)", fixed = TRUE)
+})
+
+test_that("data-dict spec edge cases", {
+  skip_if_not_installed("yaml")
+  t <- list(
+    e = data.frame(),
+    x = data.frame(
+      id = 1:3,
+      status = c(1L, 2L, 1L),
+      blank = c("", " ", ""),
+      val = c(1, Inf, 3),
+      day = as.Date(c("2024-01-02", "2024-03-04", NA)),
+      at = as.POSIXct(c("2024-01-02 03:04:05", "2024-01-03 00:00:00", NA), tz = "UTC"),
+      stringsAsFactors = FALSE
+    )
+  )
+  d <- list("x|status" = list(values = "1 = Open; 2 = Closed; = Bad; 1 = Dup"))
+  doc <- dd_doc(t, list(), list(x = "id"), dictionary = d)
+  expect_equal(length(doc$tables), 1)
+  expect_match(doc$todo, "Tables with no columns, left out: e", fixed = TRUE)
+  cols <- dd_cols(doc$tables[[1]])
+  expect_equal(cols$status$type, "number")
+  expect_null(cols$status$values)
+  expect_match(cols$status$details, "Allowed values: 1 = Open; 2 = Closed", fixed = TRUE)
+  expect_equal(cols$blank$examples, "(withheld)")
+  expect_equal(unlist(cols$val$examples), c(1, 3))
+  expect_equal(unlist(cols$day$range), c("2024-01-02", "2024-03-04"))
+  expect_equal(unlist(cols$at$range), c("2024-01-02T03:04:05Z", "2024-01-03T00:00:00Z"))
+  expect_equal(dict_parse_values("1 = Open; = Bad; 1 = Dup; 2"), list("1" = "Open", "2" = "2"))
+})
+
+test_that("data-dict: one-to-one joins, and aliases that avoid table names", {
+  skip_if_not_installed("yaml")
+  t <- list(
+    child = data.frame(id = 1:3, boss = c(NA, 1L, 1L)),
+    parent = data.frame(id = 1:2),
+    profile = data.frame(child_id = 1:3, bio = c("a", "b", "c"), stringsAsFactors = FALSE)
+  )
+  rels <- list(
+    list(from_table = "child", from_col = "boss", to_table = "child", to_col = "id", detected_by = "schema"),
+    list(from_table = "profile", from_col = "child_id", to_table = "child", to_col = "id", detected_by = "schema")
+  )
+  doc <- dd_doc(t, rels, list(child = "id", parent = "id", profile = "child_id"))
+  joins <- vapply(doc$relationships, `[[`, "", "join")
+  expect_true("child_.boss = parent_.id" %in% joins)
+  self <- doc$relationships[[match("child_.boss = parent_.id", joins)]]
+  expect_equal(self$aliases, list(child_ = "child", parent_ = "child"))
+  one <- doc$relationships[[match("profile.child_id = child.id", joins)]]
+  expect_equal(one$cardinality, "one-to-one")
+})
+
+test_that("data-dict import: one-to-many joins with aliases", {
+  skip_if_not_installed("yaml")
+  f <- tempfile(fileext = ".yaml")
+  writeLines(c(
+    "$version: 0.1.0",
+    "tables:",
+    "  - name: otters",
+    "    columns:",
+    "      - {name: otter_no, type: number(id), constraints: [primary_key]}",
+    "      - {name: pup_number, type: number(id)}",
+    "relationships:",
+    "  - join: mother.otter_no = pup.pup_number",
+    "    aliases: {mother: otters, pup: otters}",
+    "    cardinality: one-to-many"
+  ), f)
+  back <- parse_schema_file(f, "o.yaml")
+  r <- back$relationships[[1]]
+  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("otters", "pup_number", "otters", "otter_no"))
+  expect_equal(back$primary_keys, list(otters = "otter_no"))
+  # A table the file gives no key has none while it has no rows
+  f2 <- tempfile(fileext = ".yaml")
+  writeLines(c("$version: 0.1.0", "tables:", "  - name: log", "    columns:", "      - {name: log_id, type: number(id)}"), f2)
+  b2 <- parse_schema_file(f2, "l.yaml")
+  expect_equal(b2$primary_keys, list(log = character(0)))
+  pks <- merge_declared_pks(list(), b2$primary_keys)
+  expect_equal(apply_declared_pks(list(log = "log_id"), pks, b2$tables), list(log = structure(character(0), declared = TRUE)))
+  expect_equal(apply_declared_pks(list(log = "log_id"), pks, list(log = data.frame(log_id = 1:2))), list(log = "log_id"))
+})
+
+test_that("sessions keep declared keys; an old business_name session restores end to end", {
+  js <- save_session_json(dict_tables(), list(), list(), list(), declared_pks = list(orders = "order_id", c = c("a", "b")))
+  expect_equal(restore_session_json(js)$declared_pks, list(orders = "order_id", c = c("a", "b")))
+  old <- save_session_json(dict_tables(), list(), list(), list(),
+    dictionary = list("orders|amount" = list(business_name = "Order total")))
+  back <- restore_session_json(old)
+  dd <- build_data_dictionary(back$tables, list(), dict_pks(), dictionary = back$dictionary)
+  expect_equal(dd$label[dd$column == "amount"], "Order total")
+})
+
+test_that("declared primary keys win over detection's filters and composite keys", {
+  t <- list(ps = data.frame(
+    sku = c(1.5, 2.5, 3.5), product_id = c(1L, 1L, 2L), supplier_id = c(1L, 2L, 1L)
+  ))
+  rels <- list(
+    list(from_table = "ps", from_col = "product_id", to_table = "p", to_col = "id"),
+    list(from_table = "ps", from_col = "supplier_id", to_table = "s", to_col = "id")
+  )
+  t$p <- data.frame(id = 1:2)
+  t$s <- data.frame(id = 1:2)
+  declared <- list(ps = "sku")
+  pks <- apply_declared_pks(list(ps = character(0), p = "id", s = "id"), declared, t)
+  comp <- apply_declared_composite_pks(list(ps = list(c("product_id", "supplier_id"))), declared, t)
+  m <- erd_model(t, rels, pks, comp)
+  expect_equal(m$tables$ps$columns$name[m$tables$ps$columns$pk], "sku")
+  expect_equal(merge_declared_pks(list(), list(Orders = c("ID", "ID"))), list(orders = "id"))
+})
+
+test_that("sessions keep empty tables and column types", {
+  t <- list(
+    empty = data.frame(a = integer(0), b = character(0), stringsAsFactors = FALSE),
+    d = data.frame(day = as.Date(c("2024-01-02", NA)), n = c(1L, 2L))
+  )
+  back <- restore_session_json(save_session_json(t, list(), list(), list()))$tables
+  expect_equal(names(back$empty), c("a", "b"))
+  expect_equal(nrow(back$empty), 0)
+  expect_true(is.integer(back$empty$a))
+  expect_s3_class(back$d$day, "Date")
+  expect_true(is.na(back$d$day[2]))
+})

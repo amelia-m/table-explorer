@@ -162,12 +162,18 @@ mod_dictionary_server <- function(
       commit(d)
     }
 
-    # Set (or, with NULL, clear) a flag on several columns at once
+    # Set (or, with NULL, clear) a flag on several columns at once. A choice
+    # that lets values show is stamped with the data it was made for (see
+    # privacy_holds() in utils_privacy.R).
     write_flag <- function(keys, field, value) {
       d <- dictionary_rv()
+      stamp_field <- c(private = "public_for", hide_examples = "examples_for")[[field]]
       for (k in keys) {
         e <- d[[k]] %||% list()
         e[[field]] <- value
+        parts <- strsplit(k, "|", fixed = TRUE)[[1]]
+        values <- tables_rv()[[parts[1]]][[paste(parts[-1], collapse = "|")]]
+        e[[stamp_field]] <- if (isFALSE(value) && !is.null(values)) privacy_data_hash(values)
         if (identical(field, "private")) e$private_source <- NULL
         d[[k]] <- if (dict_entry_empty(e)) NULL else e
       }
@@ -375,8 +381,12 @@ mod_dictionary_server <- function(
     })
 
     # ── Table description ────────────────────────────────────
+    # The table the description box was drawn for: switching tables while
+    # typing must not save the text onto the newly selected table
+    desc_table <- reactiveVal("")
     output$table_desc_ui <- renderUI({
       tn <- input$table %||% ""
+      desc_table(tn)
       if (!nzchar(tn)) {
         return(NULL)
       }
@@ -391,12 +401,13 @@ mod_dictionary_server <- function(
       )
     })
     observeEvent(input$table_desc, {
-      tn <- input$table %||% ""
-      req(nzchar(tn))
+      tn <- desc_table()
+      req(nzchar(tn), tn %in% names(tables_rv()))
       if (!identical(input$table_desc, dict_entry(dictionary_rv(), tn)$description)) {
         write_entry(dict_key(tn), "description", input$table_desc)
       }
-    }, ignoreInit = TRUE)
+    # Runs before the box is redrawn for a newly selected table
+    }, ignoreInit = TRUE, priority = 10)
 
     # ── The table ────────────────────────────────────────────
     output$dict_ui <- renderUI({
