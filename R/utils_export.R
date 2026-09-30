@@ -1117,7 +1117,13 @@ generate_data_dict_yaml <- function(
         ex <- dict_examples(v)
         examples <- if (is.numeric(v)) {
           x <- as.numeric(ex)
-          as.list(if (all(x == round(x))) as.integer(x) else x)
+          if (all(x == round(x))) {
+            # Whole numbers written as such (not 1.0 or 9.8765432e+09),
+            # including ones too large for an R integer
+            lapply(format(x, scientific = FALSE, trim = TRUE), structure, class = "verbatim")
+          } else {
+            as.list(x)
+          }
         } else {
           as.list(ex)
         }
@@ -1126,6 +1132,8 @@ generate_data_dict_yaml <- function(
         examples <- dict_placeholder_examples(v, row$format)
         todo <- c(todo, if (row$private) {
           "Examples are placeholders: real values withheld (private column)."
+        } else if (length(present) == 0) {
+          "Examples are placeholders: no data was loaded for this column."
         } else {
           "Examples are placeholders: real values withheld in Table Relationship Explorer."
         })
