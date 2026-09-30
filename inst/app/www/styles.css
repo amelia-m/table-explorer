@@ -445,3 +445,20 @@
     .dict-hint { font-size: 12px; color: var(--text-secondary); margin: 4px 0 10px; }
     table.dict-dt td.dict-editable { border-left: 1px dashed var(--border-sub); cursor: text; min-width: 160px; }
     table.dict-dt td.dict-editable:hover { background: var(--tbl-row-hover); }
+    .dict-filters { display: flex; gap: 12px; flex-wrap: wrap; }
+    .dict-review-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--warn); border-left-width: 4px; border-radius: 4px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; color: var(--text-primary); }
+    .dict-settings { margin-bottom: 10px; font-size: 13px; }
+    .dict-settings summary { cursor: pointer; color: var(--accent); }
+    .dict-settings-body { padding: 8px 0 0 12px; }
+    .dict-pattern-row { display: flex; align-items: flex-end; gap: 8px; }
+    .dict-pattern-row .form-group { flex: 1; }
+    .dict-pattern-row .btn { margin-bottom: 15px; }
+    .dict-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+    .dict-row-actions .dict-hint { margin: 0; }
+    table.dict-dt td.dict-muted { color: var(--text-secondary); font-size: 12px; }
+    table.dict-dt td.dict-range { min-width: 170px; }
+    table.dict-dt td.dict-privacy { min-width: 200px; }
+    table.dict-dt td.dict-examples { min-width: 180px; }
+    .dict-review-scroll { max-height: 60vh; overflow-y: auto; }
+    .dict-review-table .radio-inline { margin-right: 6px; }
+    .dict-review-table .form-group { margin: 0; }

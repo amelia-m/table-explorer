@@ -320,6 +320,10 @@ parse_schema_file <- function(path, name, notify_fn = message) {
     }
   )
 
+  if (is.list(schema) && !is.null(schema[["$version"]])) {
+    return(parse_data_dict_schema(schema, notify_fn))
+  }
+
   tables <- list()
   relationships <- list()
 
@@ -390,6 +394,107 @@ parse_schema_file <- function(path, name, notify_fn = message) {
   }
 
   list(tables = tables, relationships = relationships)
+}
+
+# ── data-dict YAML ─────────────────────────────────────────────
+# A data-dict.yaml file (https://data-dict.tidyverse.org/; see
+# generate_data_dict_yaml() in utils_export.R): tables and columns, joins as
+# declared relationships, and labels, descriptions, details, units, allowed
+# values and display: restricted as dictionary entries.
+parse_data_dict_schema <- function(schema, notify_fn = message) {
+  txt <- function(x) if (is.null(x)) "" else trimws(paste(as.character(unlist(x)), collapse = " "))
+  tables <- list()
+  dictionary <- list()
+  add_entry <- function(key, def, column = FALSE) {
+    e <- list()
+    for (f in c("label", "description", "details")) {
+      if (nzchar(txt(def[[f]]))) e[[f]] <- txt(def[[f]])
+    }
+    if (column) {
+      if (nzchar(txt(def$units))) e$units <- txt(def$units)
+      if (!is.null(def$values)) e$values <- dict_format_values(def$values)
+      if (identical(def$display, "restricted")) {
+        e$private <- TRUE
+        e$private_source <- "import"
+      }
+    }
+    if (length(e)) dictionary[[key]] <<- e
+  }
+  for (tdef in schema$tables %||% list()) {
+    tname <- tdef$name
+    if (is.null(tname) || !nzchar(tname)) next
+    add_entry(dict_key(tname), tdef)
+    col_names <- character(0)
+    for (cdef in tdef$columns %||% list()) {
+      cn <- cdef$name
+      if (is.null(cn) || !nzchar(cn)) next
+      col_names <- c(col_names, cn)
+      add_entry(dict_key(tname, cn), cdef, column = TRUE)
+    }
+    df <- as.data.frame(matrix(nrow = 0, ncol = length(col_names)), stringsAsFactors = FALSE)
+    names(df) <- col_names
+    tables[[tname]] <- df
+  }
+
+  relationships <- list()
+  skipped <- 0L
+  for (rdef in schema$relationships %||% list()) {
+    m <- regmatches(
+      rdef$join %||% "",
+      regexec("^\\s*([^.\\s]+)\\.([^=\\s]+)\\s*=\\s*([^.\\s]+)\\.([^=\\s]+)\\s*$", rdef$join %||% "", perl = TRUE)
+    )[[1]]
+    if (length(m) != 5) {
+      skipped <- skipped + 1L
+      next
+    }
+    aliases <- rdef$aliases %||% list()
+    side <- function(x) aliases[[x]] %||% x
+    left <- list(table = side(m[2]), col = m[3])
+    right <- list(table = side(m[4]), col = m[5])
+    # The link points from the "many" side to the "one" side
+    if (identical(rdef$cardinality, "one-to-many")) {
+      tmp <- left
+      left <- right
+      right <- tmp
+    }
+    relationships[[length(relationships) + 1]] <- list(
+      from_table = left$table,
+      from_col = left$col,
+      to_table = right$table,
+      to_col = right$col,
+      detected_by = "schema",
+      confidence = "high",
+      score = 1.0,
+      signals = list(schema = 1.0),
+      reasons = "declared in data-dict"
+    )
+  }
+  if (skipped > 0) {
+    notify_fn(sprintf(
+      "%d data-dict relationship(s) skipped: only joins of the form a.x = b.y are read.",
+      skipped
+    ))
+  }
+  list(tables = tables, relationships = relationships, dictionary = dictionary)
+}
+
+# Add imported dictionary entries (keyed by the imported names, cleaned the
+# way table and column names are) without overwriting non-empty user edits
+merge_dictionary <- function(current, imported) {
+  current <- current %||% list()
+  for (k in names(imported)) {
+    parts <- strsplit(k, "|", fixed = TRUE)[[1]]
+    ck <- paste(janitor::make_clean_names(parts), collapse = "|")
+    e <- current[[ck]] %||% list()
+    for (f in names(imported[[k]])) {
+      have <- e[[f]]
+      empty <- is.null(have) || (is.character(have) && !nzchar(have))
+      if (f == "label" && !is.null(e$business_name) && nzchar(e$business_name)) empty <- FALSE
+      if (empty) e[[f]] <- imported[[k]][[f]]
+    }
+    current[[ck]] <- e
+  }
+  current
 }
 
 # ── App export detection ─────────────────────────────────────
