@@ -14,7 +14,7 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 |---|---|
 | **File support** | CSV, TSV, Excel (xlsx/xlsm/xls), ODS, Parquet, JSON, NDJSON, SPSS, SAS, Stata, RDS, RData, Access (.mdb/.accdb) |
 | **Database connectors** | PostgreSQL, MySQL, SQL Server, SQLite, Snowflake, BigQuery, Redshift, Oracle |
-| **Schema import** | JSON/YAML schema files with inline PK/FK annotations |
+| **Schema import** | JSON/YAML schema files: tables and columns, foreign keys (inline `foreign_key` or a `relationships` list) and primary keys (`primary_key: true` on a column, or a table-level `primary_key` list); and data-dict YAML files. Declared primary keys (also read from database connections) take precedence over detection and are saved with the session |
 | **7-signal FK detection** | Naming conventions, fuzzy name similarity, value overlap, cardinality, format fingerprint, distribution similarity, null-pattern correlation |
 | **Confidence scoring** | Noisy-OR composite scoring with low/medium/high confidence tiers; filter by minimum confidence |
 | **Signal toggles** | Enable/disable individual signals; changes take effect on "Run Detection" button click |
@@ -22,11 +22,13 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **ERD Diagram** | Standard physical ERD: table cards with PK/FK/UK badges, types and nullable marks; lines run from the FK row to the PK row with crow's-foot ends (elkjs layout, orthogonal routing). Focus a table with a hops slider, detail levels (all columns / keys only / names only), subject-area filter, left→right or top→down layout, pan/zoom, click a line to confirm or suppress it, SVG/PNG download |
 | **Network overview** | The force-directed visNetwork graph (drag, zoom, hover tooltips; force/hierarchical/circular layouts), good for spotting clusters |
 | **Table Details** | Per-table column summary with type, non-null count, unique values, PK/FK flags, table size |
-| **Data Dictionary tab** | One row per column: type, missing %, unique count, PK/FK/UK, what it references (and whether that link is declared, confirmed or detected), example values (left out for columns that look personal, e.g. `email`, `phone`, `name`). Add a description per table and a description and business name per column; edits are saved with the session and flow into the dbt, DBML and Mermaid exports. Download as CSV or Markdown |
+| **Data Dictionary tab** | One row per column: type, format (email, phone, ISO date, code, free text…), missing %, unique count, text lengths or value range, PK/FK/UK, what it references (and whether that link is declared, confirmed or detected), privacy and example values. Add a label, description, units, allowed values (`A = Active; I = Inactive`) and details per column, and a description per table. Edits are saved with the session. Descriptions also go into the dbt, DBML and Mermaid exports; labels, units, allowed values and details go into the CSV, Markdown and data-dict YAML. Download as CSV, Markdown or data-dict YAML (these follow "Hide empty tables") |
+| **Privacy** | Columns whose name (`email`, `dob`, `mrn`, `zip5`…) or values (emails, phone numbers, SSNs) suggest personal data are flagged and treated as private until you review them: a banner and a review dialog (which never shows values) let you confirm or reject each flag. You can also mark columns private yourself (select rows → Private), give name patterns that are always private (`*_name, dob*, patients.notes`), hide examples without calling a column private, or turn examples off (hiding examples leaves the value range of a non-private number or date column visible; mark it private to hide that too). Private columns keep their type, format, counts and text lengths but show no example values or value range, and are exported as `display: restricted`. A "not private", "not personal" or "show examples" choice holds only for the data it was made for: if a table is replaced (overwrite, reload, new upload) that column goes back to private until you decide again; removing tables drops those choices. **A saved session holds all the loaded data, private columns included** |
+| **data-dict YAML** | Export and import the [data-dict](https://data-dict.tidyverse.org/) format (spec 0.1.0, written in plain R; the data-dict tool isn't needed). Exports carry types, labels, descriptions, units, allowed values, constraints, examples, and declared/manual/confirmed relationships as joins; unconfirmed detected links, and links to a column that isn't a single-column key, go under `todo`. Import Schema reads data-dict files back: tables (with their column types), primary keys, joins (as declared links) and dictionary entries, without overwriting your own edits or privacy decisions |
 | **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
 | **Manual overrides** | Add relationships auto-detection misses |
-| **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown), session save/restore (JSON, including dictionary edits) |
+| **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown / data-dict YAML), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
 ### Architecture (golem package)
@@ -46,12 +48,14 @@ R/
   mod_table_details.R    Per-table column summary
   mod_relationships.R    Relationships tab
   mod_name_changes.R     Name changes / rename log tab
-  mod_export.R           Export panel (CSV, dbt YAML, Mermaid, DBML, ELK, session)
+  mod_dictionary.R       Data Dictionary tab (edits, privacy review)
+  mod_export.R           Export panel (CSV, dbt YAML, Mermaid, DBML, ELK, dictionary, session)
   utils_inference.R      7-signal PK/FK detection engine
   utils_file_readers.R   Multi-format file parser (18 formats)
   utils_db_connectors.R  Database connection, introspection, loading
   utils_erd_model.R      Shared ERD model: types, key badges, cardinality, roles
-  utils_export.R         dbt YAML, Mermaid ERD, DBML, ELK JSON, session JSON
+  utils_export.R         dbt YAML, Mermaid ERD, DBML, ELK JSON, data dictionary, data-dict YAML, session JSON
+  utils_privacy.R        Personal-data flags, review state and name patterns
   utils_vis.R            ERD network builder (build_network)
   utils_helpers.R        Shared helpers (%||%)
 inst/
@@ -62,7 +66,7 @@ dev/
   01_start.R             One-time project setup
   02_dev.R               Development helpers
   03_deploy.R            Deployment helpers
-tests/testthat/          Unit tests (~100 cases across 4 suites)
+tests/testthat/          Unit tests (~1,000 expectations across 7 suites)
 ```
 
 **Reactive data flow between modules:**

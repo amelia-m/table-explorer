@@ -25,7 +25,8 @@ if (!requireNamespace("tableexplorer", quietly = TRUE)) {
       "utils_erd_model.R",
       "utils_file_readers.R",
       "utils_db_connectors.R",
-      "utils_export.R"
+      "utils_export.R",
+      "utils_privacy.R"
     )
     for (f in r_files) {
       source(file.path(pkg_root, "R", f))

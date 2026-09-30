@@ -20,6 +20,11 @@
       wrapping (`elk.layered.wrapping.strategy = MULTI_EDGE`) with
       `elk.aspectRatio` from the canvas, so hub-and-spoke schemas aren't one
       tall column.
+- [ ] (Maybe later) Validate exported data-dict YAML with the data-dict
+      command-line tool (`datadict::dd_validate_data()`, Suggests only). It
+      downloads a binary at run time and validates Parquet files only, and
+      the spec is pre-1.0 (0.1.0), so it stays optional. The export is
+      checked against the spec's rules by hand for now.
 - [ ] Lints / data-quality panel (Phase 4 in `docs/erd-redesign-plan.md`):
       tables without a PK, orphan tables, FKs whose values are missing from
       the parent (share of orphaned rows), nullable PK-like columns, and

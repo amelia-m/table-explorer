@@ -325,8 +325,7 @@ format_fingerprint <- function(col, sample_size = 200) {
   }
   vals <- as.character(vals)
   if (length(vals) > sample_size) {
-    set.seed(42)
-    vals <- sample(vals, sample_size)
+    vals <- with_local_seed(42, sample(vals, sample_size))
   }
   for (fp in format_patterns) {
     hits <- sum(grepl(fp$pattern, vals, ignore.case = TRUE, perl = TRUE))
@@ -346,13 +345,11 @@ column_profile <- function(v, sample_cap = 5000) {
   uniq <- unique(vals)
   uniq_sample <- uniq
   if (length(uniq_sample) > sample_cap) {
-    set.seed(42)
-    uniq_sample <- uniq_sample[sample(length(uniq_sample), sample_cap)]
+    uniq_sample <- uniq_sample[with_local_seed(42, sample(length(uniq_sample), sample_cap))]
   }
   count_vals <- vals
   if (length(count_vals) > sample_cap) {
-    set.seed(42)
-    count_vals <- count_vals[sample(length(count_vals), sample_cap)]
+    count_vals <- count_vals[with_local_seed(42, sample(length(count_vals), sample_cap))]
   }
   counts <- table(count_vals)
   list(

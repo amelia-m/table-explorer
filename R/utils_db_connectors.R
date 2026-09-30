@@ -191,6 +191,7 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.key_column_usage kcu ",
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
+            "  AND tc.table_name = kcu.table_name ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
             "AND tc.table_schema = '",
             schema,
@@ -202,6 +203,7 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.key_column_usage kcu ",
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
+            "  AND tc.table_name = kcu.table_name ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
             "AND tc.table_schema = DATABASE()"
           ),
@@ -211,13 +213,16 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.key_column_usage kcu ",
             "  ON tc.constraint_name = kcu.constraint_name ",
             "  AND tc.table_schema = kcu.table_schema ",
+            "  AND tc.table_name = kcu.table_name ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
             "AND tc.table_schema = '",
             schema,
             "'"
           )
         )
-        pk_df <- DBI::dbGetQuery(conn, q)
+        # Every MySQL primary key constraint is named PRIMARY, hence the
+        # table_name join; key columns in their declared order
+        pk_df <- DBI::dbGetQuery(conn, paste0(q, " ORDER BY tc.table_name, kcu.ordinal_position"))
         if (nrow(pk_df) > 0) {
           split(pk_df[[2]], pk_df[[1]])
         } else {
