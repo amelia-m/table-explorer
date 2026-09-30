@@ -401,6 +401,18 @@ parse_schema_file <- function(path, name, notify_fn = message) {
 # generate_data_dict_yaml() in utils_export.R): tables and columns, joins as
 # declared relationships, and labels, descriptions, details, units, allowed
 # values and display: restricted as dictionary entries.
+data_dict_empty_column <- function(type) {
+  type <- type %||% "string"
+  if (startsWith(type, "number")) return(numeric(0))
+  switch(
+    type,
+    boolean = logical(0),
+    date = as.Date(character(0)),
+    datetime = as.POSIXct(character(0), tz = "UTC"),
+    character(0)
+  )
+}
+
 parse_data_dict_schema <- function(schema, notify_fn = message) {
   txt <- function(x) if (is.null(x)) "" else trimws(paste(as.character(unlist(x)), collapse = " "))
   tables <- list()
@@ -424,16 +436,19 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
     tname <- tdef$name
     if (is.null(tname) || !nzchar(tname)) next
     add_entry(dict_key(tname), tdef)
-    col_names <- character(0)
+    cols <- list()
     for (cdef in tdef$columns %||% list()) {
       cn <- cdef$name
       if (is.null(cn) || !nzchar(cn)) next
-      col_names <- c(col_names, cn)
+      # Empty columns of the declared type, so a re-export keeps the types
+      cols[[cn]] <- data_dict_empty_column(cdef$type)
       add_entry(dict_key(tname, cn), cdef, column = TRUE)
     }
-    df <- as.data.frame(matrix(nrow = 0, ncol = length(col_names)), stringsAsFactors = FALSE)
-    names(df) <- col_names
-    tables[[tname]] <- df
+    tables[[tname]] <- if (length(cols)) {
+      as.data.frame(cols, stringsAsFactors = FALSE, check.names = FALSE)
+    } else {
+      data.frame()
+    }
   }
 
   relationships <- list()
@@ -484,7 +499,9 @@ merge_dictionary <- function(current, imported) {
   current <- current %||% list()
   for (k in names(imported)) {
     parts <- strsplit(k, "|", fixed = TRUE)[[1]]
-    ck <- paste(janitor::make_clean_names(parts), collapse = "|")
+    # One name at a time: cleaned together, a column named like its table
+    # would be made unique ("status|status_2")
+    ck <- paste(vapply(parts, janitor::make_clean_names, ""), collapse = "|")
     e <- current[[ck]] %||% list()
     for (f in names(imported[[k]])) {
       have <- e[[f]]

@@ -727,3 +727,31 @@ test_that("sessions keep privacy choices and reviews", {
   expect_equal(dict_privacy(back$dictionary, "customers", "email", dict_tables()$customers$email)$status, "not_personal")
   expect_equal(dict_settings(back$dictionary), list(private_patterns = "*_id", examples = "off"))
 })
+
+test_that("imported data-dict tables keep their types for a re-export", {
+  skip_if_not_installed("yaml")
+  f <- tempfile(fileext = ".yaml")
+  writeLines(generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks()), f)
+  back <- parse_schema_file(f, "data-dict.yaml")
+  expect_true(is.numeric(back$tables$orders$amount))
+  expect_true(is.character(back$tables$customers$tier))
+  doc <- yaml::yaml.load(generate_data_dict_yaml(back$tables, back$relationships, dd_yaml_pks()))
+  types <- unlist(lapply(doc$tables, function(t) vapply(t$columns, `[[`, "", "type")))
+  expect_false("boolean" %in% types)
+})
+
+test_that("large whole-number examples are written in full", {
+  skip_if_not_installed("yaml")
+  t <- list(p = data.frame(id = c(9876543210, 9876543211, 9876543212)))
+  y <- generate_data_dict_yaml(t, list(), list(p = "id"))
+  expect_match(y, "- 9876543210", fixed = TRUE)
+  expect_false(grepl(".na", y, fixed = TRUE))
+  # R's yaml reader turns large ints into NA unless told to read them as doubles
+  doc <- yaml::yaml.load(y, handlers = list(int = function(x) as.numeric(x)))
+  expect_equal(doc$tables[[1]]$columns[[1]]$examples[[1]], 9876543210)
+})
+
+test_that("imported entries for a column named like its table land on it", {
+  merged <- merge_dictionary(list(), list("status|status" = list(label = "Status")))
+  expect_equal(names(merged), "status|status")
+})
