@@ -81,7 +81,8 @@ mod_db_connect_server <- function(
   all_tables_rv,
   rename_log_rv,
   schema_rels_rv,
-  table_meta_rv
+  table_meta_rv,
+  declared_pks_rv = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     db_conn_rv <- reactiveVal(NULL)
@@ -150,6 +151,9 @@ mod_db_connect_server <- function(
         db_meta_rv(meta)
         if (length(meta$fks) > 0) {
           schema_rels_rv(merge_declared_rels(schema_rels_rv(), meta$fks))
+        }
+        if (length(meta$pks) > 0 && !is.null(declared_pks_rv)) {
+          declared_pks_rv(merge_declared_pks(declared_pks_rv(), meta$pks))
         }
         showNotification(
           paste0("Connected! Found ", length(meta$tables), " table(s)."),

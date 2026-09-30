@@ -23,6 +23,9 @@ app_server <- function(input, output, session) {
   # Data dictionary edits: labels, descriptions and privacy choices, keyed "table"
   # or "table|column"; saved with the session
   dictionary_rv <- reactiveVal(list())
+  # Primary keys stated by schema files and databases, table -> columns;
+  # they win over detection
+  declared_pks_rv <- reactiveVal(list())
 
   # FK detection cache (mutable env, shared across modules)
   fk_cache <- new.env(parent = emptyenv())
@@ -38,7 +41,8 @@ app_server <- function(input, output, session) {
     schema_rels_rv,
     table_meta_rv,
     fk_cache,
-    dictionary_rv = dictionary_rv
+    dictionary_rv = dictionary_rv,
+    declared_pks_rv = declared_pks_rv
   )
   manual_rels_rv <- upload_out$manual_rels_rv
 
@@ -48,7 +52,8 @@ app_server <- function(input, output, session) {
     all_tables_rv,
     rename_log_rv,
     schema_rels_rv,
-    table_meta_rv
+    table_meta_rv,
+    declared_pks_rv = declared_pks_rv
   )
 
   # ── Detection module (returns settings + strategy) ───────────
@@ -63,22 +68,28 @@ app_server <- function(input, output, session) {
     } else {
       detection$detect_method()
     }
-    setNames(
-      lapply(names(tbls), function(t) detect_pks(tbls[[t]], t, method)),
-      names(tbls)
+    apply_declared_pks(
+      setNames(
+        lapply(names(tbls), function(t) detect_pks(tbls[[t]], t, method)),
+        names(tbls)
+      ),
+      declared_pks_rv(),
+      tbls
     )
   })
 
   composite_pk_map_rv <- reactive({
     tbls <- all_tables_rv()
-    if (!detection$enable_composite_pk()) {
-      return(setNames(vector("list", length(tbls)), names(tbls)))
+    detected <- if (!detection$enable_composite_pk()) {
+      setNames(vector("list", length(tbls)), names(tbls))
+    } else {
+      req(length(tbls) > 0)
+      setNames(
+        lapply(names(tbls), function(t) detect_composite_pks(tbls[[t]], t)),
+        names(tbls)
+      )
     }
-    req(length(tbls) > 0)
-    setNames(
-      lapply(names(tbls), function(t) detect_composite_pks(tbls[[t]], t)),
-      names(tbls)
-    )
+    apply_declared_composite_pks(detected, declared_pks_rv(), tbls)
   })
 
   # ── FK detection with incremental cache ──────────────────────
@@ -155,8 +166,7 @@ app_server <- function(input, output, session) {
 
     sampled_tbls <- lapply(tbls, function(df) {
       if (nrow(df) > 10000) {
-        set.seed(42)
-        df[sample(nrow(df), 10000), , drop = FALSE]
+        df[with_local_seed(42, sample(nrow(df), 10000)), , drop = FALSE]
       } else {
         df
       }
@@ -376,6 +386,7 @@ app_server <- function(input, output, session) {
       detection$detection_settings_rv()$min_conf %||% "medium"
     ),
     rel_sources = detection$rel_sources,
-    dictionary_rv = dictionary_rv
+    dictionary_rv = dictionary_rv,
+    declared_pks_rv = declared_pks_rv
   )
 }

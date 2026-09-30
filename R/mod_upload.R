@@ -37,7 +37,7 @@ mod_upload_ui <- function(id) {
     # Right above the table list so it is visible without scrolling past it
     checkboxInput(
       ns("hide_empty_tables"),
-      "Hide empty tables (0 rows) in ERD, details & relationships",
+      "Hide empty tables (0 rows) in ERD, details, relationships & dictionary",
       value = FALSE
     ),
     uiOutput(ns("loaded_tables_ui")),
@@ -96,7 +96,8 @@ mod_upload_server <- function(
   schema_rels_rv,
   table_meta_rv,
   fk_cache,
-  dictionary_rv = NULL
+  dictionary_rv = NULL,
+  declared_pks_rv = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     pending_conflicts_rv <- reactiveVal(list())
@@ -583,6 +584,9 @@ mod_upload_server <- function(
       if (length(result$dictionary) > 0 && !is.null(dictionary_rv)) {
         dictionary_rv(merge_dictionary(dictionary_rv(), result$dictionary))
       }
+      if (length(result$primary_keys) > 0 && !is.null(declared_pks_rv)) {
+        declared_pks_rv(merge_declared_pks(declared_pks_rv(), result$primary_keys))
+      }
 
       if (length(result$relationships) > 0) {
         # A schema import replaces earlier schema-file links (links read from
@@ -631,6 +635,9 @@ mod_upload_server <- function(
       table_meta_rv(meta)
       log <- rename_log_rv()
       rename_log_rv(log[log$source != nm, , drop = FALSE])
+      # Decisions that let the old data's values show don't carry over to
+      # whatever is loaded under this name next
+      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv(), nm))
       showNotification(paste0("Removed: ", nm), type = "message", duration = 3)
     })
 
@@ -647,6 +654,9 @@ mod_upload_server <- function(
       ))
       fk_cache$result <- list()
       fk_cache$scanned_sig <- character(0)
+      # Labels, descriptions and private-name patterns stay; "not private"
+      # choices and rejected flags go, so new data starts on the safe side
+      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv()))
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

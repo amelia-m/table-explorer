@@ -176,3 +176,70 @@ filter_rel_sources <- function(rels, sources = "both") {
     rels
   }
 }
+
+# Run code with a fixed random seed without changing the session's random
+# state (sampling for detection and privacy checks must be repeatable, but
+# must not reset other code's random numbers)
+with_local_seed <- function(seed, code) {
+  had <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  old <- if (had) get(".Random.seed", envir = globalenv(), inherits = FALSE)
+  on.exit(
+    if (had) {
+      assign(".Random.seed", old, envir = globalenv())
+    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(".Random.seed", envir = globalenv())
+    },
+    add = TRUE
+  )
+  set.seed(seed)
+  code
+}
+
+# ── Declared primary keys ─────────────────────────────────────
+# Primary keys a schema file or database states, as list(table = columns).
+# They win over detection, which needs rows to test uniqueness (an imported
+# schema has none).
+
+merge_declared_pks <- function(existing, new) {
+  out <- existing %||% list()
+  for (t in names(new %||% list())) {
+    cols <- as.character(unlist(new[[t]]))
+    cols <- unique(cols[!is.na(cols) & nzchar(cols)])
+    # An empty entry states "no primary key" (a data-dict table without one)
+    out[clean_name(t)] <- list(
+      unique(vapply(cols, clean_name, "", USE.NAMES = FALSE))
+    )
+  }
+  out
+}
+
+# One declared column replaces the detected candidates; several are a
+# composite key (see apply_declared_composite_pks). "No primary key" holds
+# only while the table has no rows: with data, detection may find one.
+apply_declared_pks <- function(pk_map, declared, tables) {
+  for (t in intersect(names(declared %||% list()), names(tables))) {
+    cols <- intersect(declared[[t]], names(tables[[t]]))
+    if (length(declared[[t]]) == 0) {
+      if (nrow(tables[[t]]) == 0) pk_map[t] <- list(structure(character(0), declared = TRUE))
+    } else if (length(cols) == length(declared[[t]])) {
+      # Several columns: the key comes from the composite map
+      pk_map[t] <- list(if (length(cols) == 1) structure(cols, declared = TRUE) else character(0))
+    }
+  }
+  pk_map
+}
+
+# A declared key also replaces detected composite keys, so a table's
+# declared single-column key isn't swapped for a detected combination
+apply_declared_composite_pks <- function(composite_map, declared, tables) {
+  for (t in intersect(names(declared %||% list()), names(tables))) {
+    cols <- intersect(declared[[t]], names(tables[[t]]))
+    if (length(cols) != length(declared[[t]])) next
+    if (length(cols) >= 2) {
+      composite_map[t] <- list(list(cols))
+    } else if (length(cols) == 1 || nrow(tables[[t]]) == 0) {
+      composite_map[t] <- list(list())
+    }
+  }
+  composite_map
+}

@@ -32,6 +32,19 @@ privacy_phrases <- c(
 
 # A name word followed by one of these describes the data rather than
 # holding it: address_type, email_verified, name_count
+# "name" after one of these names a thing, not a person: product_name,
+# company_name, city_name
+privacy_entity_words <- c(
+  "product", "company", "org", "organization", "organisation", "category",
+  "file", "table", "column", "field", "city", "country", "state", "county",
+  "brand", "item", "site", "program", "programme", "service", "vendor",
+  "supplier", "school", "project", "event", "facility", "department", "dept",
+  "unit", "team", "group", "store", "branch", "business", "agency", "plan",
+  "course", "campaign", "region", "location", "place", "street", "host",
+  "server", "app", "model", "feature", "type", "status", "tag", "role",
+  "code", "domain", "sheet", "report"
+)
+
 privacy_qualifiers <- c(
   "type", "types", "category", "kind", "count", "cnt", "flag", "status",
   "format", "verified", "valid", "length", "len", "source", "changed", "updated"
@@ -48,19 +61,47 @@ privacy_value_patterns <- list(
 )
 privacy_value_threshold <- 0.8
 
-# NULL when nothing suggests personal data, else list(reason)
+# NULL when nothing suggests personal data, else list(reason). Cached by
+# column name and content: the dictionary asks again for every column on
+# every edit, and the value checks scan the whole column.
+.privacy_guess_cache <- new.env(parent = emptyenv())
+
 privacy_guess <- function(column, values = NULL) {
-  # true/false columns hold flags about people, not details of them
-  if (is.logical(values)) {
+  if (is.null(values)) {
+    return(privacy_guess_uncached(column))
+  }
+  key <- paste0(column, "\r", rlang::hash(values))
+  hit <- .privacy_guess_cache[[key]]
+  if (!is.null(hit)) {
+    return(hit$guess)
+  }
+  if (length(.privacy_guess_cache) > 5000) {
+    rm(list = ls(.privacy_guess_cache), envir = .privacy_guess_cache)
+  }
+  guess <- privacy_guess_uncached(column, values)
+  assign(key, list(guess = guess), envir = .privacy_guess_cache)
+  guess
+}
+
+privacy_guess_uncached <- function(column, values = NULL) {
+  # true/false columns hold flags about people, not details of them (an
+  # all-missing column also reads as logical; its name still counts)
+  if (is.logical(values) && any(!is.na(values))) {
     return(NULL)
   }
   cn <- clean_name(column)
   parts <- sub("\\d+$", "", strsplit(cn, "_", fixed = TRUE)[[1]])
-  qualified <- c(parts[-1] %in% privacy_qualifiers, FALSE)
-  hit_word <- intersect(parts[!qualified], privacy_words)
+  n <- length(parts)
+  # A word followed anywhere later by a qualifier describes the data
+  # (address_type, zip_code_type); "name" after an entity word names a
+  # thing (product_name)
+  qualified <- vapply(seq_len(n), function(i) any(parts[-seq_len(i)] %in% privacy_qualifiers), logical(1))
+  entity <- parts == "name" & c(FALSE, parts[-n] %in% privacy_entity_words)
+  hit_word <- intersect(parts[!qualified & !entity], privacy_words)
+  qual_re <- paste0("_(.*_)?(", paste(privacy_qualifiers, collapse = "|"), ")(_|$)")
   hit_phrase <- privacy_phrases[vapply(privacy_phrases, function(p) {
-    grepl(paste0("(^|_)", p, "(\\d*)(_|$)"), cn) &&
-      !grepl(paste0("(^|_)", p, "\\d*_(", paste(privacy_qualifiers, collapse = "|"), ")(_|$)"), cn)
+    m <- regexpr(paste0("(^|_)", p, "\\d*(_|$)"), cn)
+    m > 0 && !grepl(qual_re, substring(cn, m + attr(m, "match.length") - 1L))
   }, logical(1))]
   hits <- c(hit_phrase, hit_word)
   if (length(hits) > 0) {
@@ -71,8 +112,7 @@ privacy_guess <- function(column, values = NULL) {
     v <- trimws(v[nzchar(trimws(v))])
     if (length(v) > 0) {
       if (length(v) > 500) {
-        set.seed(7)
-        v <- sample(v, 500)
+        v <- with_local_seed(7, sample(v, 500))
       }
       for (p in privacy_value_patterns) {
         share <- mean(grepl(p$pattern, v, perl = TRUE))
@@ -85,17 +125,50 @@ privacy_guess <- function(column, values = NULL) {
   NULL
 }
 
-# Glob patterns ("*_name, dob*, mrn, clients.notes") as one regex test
+# Glob patterns ("*_name, dob*, mrn, clients.notes"): a pattern with a dot
+# matches "table.column", any other only the column name
 privacy_pattern_match <- function(patterns, table, column) {
   pats <- trimws(strsplit(patterns %||% "", ",", fixed = TRUE)[[1]])
   pats <- pats[nzchar(pats)]
   if (length(pats) == 0) {
     return(FALSE)
   }
-  targets <- c(column, paste(table, column, sep = "."))
   any(vapply(pats, function(p) {
-    any(grepl(utils::glob2rx(tolower(p)), tolower(targets)))
+    target <- if (grepl(".", p, fixed = TRUE)) paste(table, column, sep = ".") else column
+    grepl(utils::glob2rx(tolower(p)), tolower(target))
   }, logical(1)))
+}
+
+# Privacy decisions that let values show; dropped when the data they were
+# made for goes away, so new data starts on the safe side
+privacy_reset <- function(dictionary, tables = NULL) {
+  for (k in setdiff(names(dictionary), ".settings")) {
+    if (!is.null(tables) && !(strsplit(k, "|", fixed = TRUE)[[1]][1] %in% tables)) next
+    e <- dictionary[[k]]
+    if (isFALSE(e[["private"]])) e[["private"]] <- NULL
+    if (isFALSE(e$hide_examples)) e$hide_examples <- NULL
+    e$public_for <- NULL
+    e$examples_for <- NULL
+    if (identical(e$privacy_review$state, "rejected")) e$privacy_review <- NULL
+    dictionary[[k]] <- if (dict_entry_empty(e)) NULL else e
+  }
+  dictionary
+}
+
+# "Not private" and "show examples" let real values show, so they hold only
+# for the data they were chosen for: each carries a hash of the column
+# (public_for, examples_for). New data under the same name (an overwrite, a
+# reload, another upload) goes back to the safe side.
+privacy_data_hash <- function(values) rlang::hash(values)
+
+privacy_holds <- function(stamp, values) {
+  is.null(values) || identical(stamp, privacy_data_hash(values))
+}
+
+# TRUE when the user turned examples on for this column's current data
+dict_examples_forced <- function(dictionary, table, column, values = NULL) {
+  e <- dictionary[[dict_key(table, column)]] %||% list()
+  isFALSE(e$hide_examples) && privacy_holds(e$examples_for, values)
 }
 
 dict_settings <- function(dictionary) {
@@ -116,11 +189,11 @@ dict_privacy <- function(dictionary, table, column, values = NULL) {
   e <- dictionary[[dict_key(table, column)]] %||% list()
   guess <- privacy_guess(column, values)
   reason <- guess$reason %||% ""
-  if (isTRUE(e$private)) {
+  if (isTRUE(e[["private"]])) {
     status <- if (identical(e$private_source, "import")) "imported" else "user_private"
     return(list(private = TRUE, status = status, reason = reason, needs_review = FALSE))
   }
-  if (isFALSE(e$private)) {
+  if (isFALSE(e[["private"]]) && privacy_holds(e$public_for, values)) {
     return(list(private = FALSE, status = "user_public", reason = reason, needs_review = FALSE))
   }
   if (privacy_pattern_match(dict_settings(dictionary)$private_patterns, table, column)) {

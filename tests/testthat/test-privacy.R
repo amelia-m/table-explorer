@@ -27,9 +27,11 @@ test_that("user choices beat patterns, which beat automatic flags", {
   expect_equal(dict_privacy(list(), "t", "email", v)$status, "auto_unreviewed")
   expect_true(dict_privacy(list(), "t", "email", v)$private)
   expect_true(dict_privacy(list(), "t", "email", v)$needs_review)
-  d <- list("t|email" = list(private = FALSE))
+  d <- list("t|email" = list(private = FALSE, public_for = privacy_data_hash(v)))
   expect_equal(dict_privacy(d, "t", "email", v)$status, "user_public")
   expect_false(dict_privacy(d, "t", "email", v)$private)
+  # "Not private" was chosen for other data: back to the automatic flag
+  expect_equal(dict_privacy(d, "t", "email", c("z@x.io", "y@x.io"))$status, "auto_unreviewed")
   d <- list("t|notes" = list(private = TRUE))
   expect_equal(dict_privacy(d, "t", "notes")$status, "user_private")
   d <- list(.settings = list(private_patterns = "*_notes, other.secret"))
@@ -88,10 +90,14 @@ test_that("hide_examples and the examples setting", {
   dd <- build_data_dictionary(tabs, list(), list(t = "id"), dictionary = d)
   expect_equal(dd$examples_note[dd$column == "tier"], "hidden by you")
   expect_false(dd$private[dd$column == "tier"])
-  off <- list(.settings = list(examples = "off"), "t|tier" = list(hide_examples = FALSE))
+  off <- list(.settings = list(examples = "off"), "t|tier" = list(hide_examples = FALSE, examples_for = privacy_data_hash(tabs$t$tier)))
   dd <- build_data_dictionary(tabs, list(), list(t = "id"), dictionary = off)
   expect_equal(dd$examples[dd$column == "tier"], "a, b, c")
   expect_equal(dd$examples_note[dd$column == "id"], "examples off")
+  # New data under the same name: examples go off again
+  tabs2 <- list(t = data.frame(id = 1:3, tier = c("x", "y", "z"), stringsAsFactors = FALSE))
+  dd2 <- build_data_dictionary(tabs2, list(), list(t = "id"), dictionary = off)
+  expect_equal(dd2$examples_note[dd2$column == "tier"], "examples off")
 })
 
 test_that("labels replace business names; older entries still read", {
@@ -100,4 +106,141 @@ test_that("labels replace business names; older entries still read", {
   expect_true(dict_entry_empty(list(label = "", description = "")))
   expect_false(dict_entry_empty(list(private = FALSE)))
   expect_false(dict_entry_empty(list(privacy_review = list(state = "rejected", reason = "x"))))
+})
+
+test_that("'name' after an entity word names a thing; qualifiers anywhere later count", {
+  expect_null(privacy_guess("product_name"))
+  expect_null(privacy_guess("category_name"))
+  expect_null(privacy_guess("company_name"))
+  expect_match(privacy_guess("customer_name")$reason, "name")
+  expect_match(privacy_guess("display_name")$reason, "name")
+  expect_match(privacy_guess("account_name")$reason, "name")
+  expect_match(privacy_guess("name")$reason, "name")
+  expect_null(privacy_guess("zip_code_type"))
+  expect_match(privacy_guess("zip_code")$reason, "zip")
+  # An all-missing column reads as logical, but its name still counts
+  expect_match(privacy_guess("patient_name", c(NA, NA))$reason, "name")
+})
+
+test_that("name patterns match the table only when they say so", {
+  d <- list(.settings = list(private_patterns = "dob*"))
+  expect_equal(dict_privacy(d, "dob_log", "note")$status, "none")
+  expect_equal(dict_privacy(d, "t", "dob_raw")$status, "pattern")
+  d$.settings$private_patterns <- "dob_log.*"
+  expect_equal(dict_privacy(d, "dob_log", "note")$status, "pattern")
+})
+
+test_that("privacy checks leave the session's random numbers alone", {
+  set.seed(1)
+  a <- runif(1)
+  set.seed(1)
+  privacy_guess("x", as.character(1:1000))
+  format_fingerprint(as.character(1:1000))
+  expect_equal(runif(1), a)
+})
+
+test_that("privacy_reset drops decisions that let values show", {
+  d <- list(
+    .settings = list(private_patterns = "x*"),
+    "a|email" = list(private = FALSE, label = "Email"),
+    "a|dob" = list(privacy_review = list(state = "rejected", reason = "r")),
+    "a|ssn" = list(privacy_review = list(state = "confirmed", reason = "r")),
+    "a|tier" = list(hide_examples = FALSE),
+    "b|email" = list(private = FALSE)
+  )
+  r <- privacy_reset(d)
+  expect_equal(r[["a|email"]], list(label = "Email"))
+  expect_null(r[["a|dob"]])
+  expect_equal(r[["a|ssn"]]$privacy_review$state, "confirmed")
+  expect_null(r[["a|tier"]])
+  expect_equal(r$.settings$private_patterns, "x*")
+  one <- privacy_reset(d, "b")
+  expect_null(one[["b|email"]])
+  expect_false(one[["a|email"]]$private)
+})
+
+test_that("an import never overrides the user's own privacy decision", {
+  imported <- list(
+    "t|email" = list(private = TRUE, private_source = "import", label = "Email"),
+    "t|dob" = list(private = TRUE, private_source = "import"),
+    "t|new" = list(private = TRUE, private_source = "import")
+  )
+  current <- list(
+    "t|email" = list(private = FALSE),
+    "t|dob" = list(privacy_review = list(state = "rejected", reason = "r"))
+  )
+  m <- merge_dictionary(current, imported)
+  expect_false(m[["t|email"]][["private"]])
+  expect_null(m[["t|email"]][["private_source"]])
+  expect_equal(m[["t|email"]]$label, "Email")
+  # A rejected automatic flag doesn't block a file that marks it restricted
+  expect_true(m[["t|dob"]][["private"]])
+  expect_equal(dict_privacy(m, "t", "new")$status, "imported")
+})
+
+test_that("Remove all tables resets privacy decisions and declared keys", {
+  all_tables <- reactiveVal(list(t = data.frame(email = "a@x.io")))
+  dict <- reactiveVal(list("t|email" = list(private = FALSE, label = "Email")))
+  pks <- reactiveVal(list(t = "email"))
+  fk_cache <- new.env()
+  testServer(
+    mod_upload_server,
+    args = list(
+      all_tables_rv = all_tables,
+      rename_log_rv = reactiveVal(data.frame()),
+      schema_rels_rv = reactiveVal(list()),
+      table_meta_rv = reactiveVal(list()),
+      fk_cache = fk_cache,
+      dictionary_rv = dict,
+      declared_pks_rv = pks
+    ),
+    {
+      session$setInputs(btn_clear_tables = 1)
+      expect_equal(all_tables(), list())
+      expect_equal(dict()[["t|email"]], list(label = "Email"))
+      # Declared keys describe the source, like declared links: they stay
+      expect_equal(pks(), list(t = "email"))
+    }
+  )
+})
+
+test_that("Dictionary tab: selected rows become private; review decisions save", {
+  tabs <- list(t = data.frame(
+    id = 1:3, email = c("a@x.io", "b@x.io", "c@x.io"), product_code = c("A", "B", "C"),
+    dob = c("x", "y", "z"), stringsAsFactors = FALSE
+  ))
+  dict <- reactiveVal(list())
+  testServer(
+    mod_dictionary_server,
+    args = list(
+      tables_rv = reactive(tabs),
+      rels_rv = reactive(list()),
+      pk_map_rv = reactive(list(t = "id")),
+      composite_pk_map_rv = reactive(list(t = NULL)),
+      dictionary_rv = dict
+    ),
+    {
+      session$setInputs(table = "", show = "all")
+      d <- shown_rv()
+      row <- which(d$column == "product_code")
+      session$setInputs(dict_rows_selected = row)
+      session$setInputs(set_private = 1)
+      expect_true(dict()[["t|product_code"]][["private"]])
+      session$setInputs(set_public = 2)
+      expect_equal(dict()[["t|product_code"]]$public_for, privacy_data_hash(tabs$t$product_code))
+      # Review: email -> not personal, dob -> private
+      q <- queue_rv()
+      expect_equal(q$column, c("email", "dob"))
+      session$setInputs(review = 1)
+      session$setInputs(rv_1 = "rejected", rv_2 = "confirmed")
+      session$setInputs(review_save = 1)
+      expect_equal(dict()[["t|email"]]$privacy_review$state, "rejected")
+      expect_equal(dict()[["t|dob"]]$privacy_review$state, "confirmed")
+      expect_equal(nrow(queue_rv()), 0)
+      # A text edit on a cell lands on the right column
+      d <- shown_rv()
+      session$setInputs(dict_cell_edit = list(row = which(d$column == "id"), col = 12L, value = "Identifier"))
+      expect_equal(dict()[["t|id"]]$label, "Identifier")
+    }
+  )
 })

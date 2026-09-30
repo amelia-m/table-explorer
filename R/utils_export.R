@@ -595,7 +595,8 @@ save_session_json <- function(
   schema_rels,
   settings = list(),
   review = list(),
-  dictionary = list()
+  dictionary = list(),
+  declared_pks = list()
 ) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
@@ -624,12 +625,37 @@ save_session_json <- function(
     review = review,
     # Data dictionary edits (labels, descriptions, privacy), keyed
     # "table" or "table|column"
-    dictionary = dictionary
+    dictionary = dictionary,
+    # Primary keys stated by schema files and databases, table -> columns
+    declared_pks = lapply(declared_pks, as.list),
+    # Column classes, so empty tables and dates come back as they were
+    column_types = lapply(tables, function(df) {
+      as.list(vapply(df, function(col) class(col)[1], ""))
+    })
   )
 
   # na = "null": numeric NAs would otherwise be written as the string "NA"
   # and turn the whole column into text on restore
   jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+}
+
+# A restored column in its saved class; an empty one keeps its type
+session_column <- function(col, type = NULL) {
+  type <- type %||% ""
+  tryCatch(
+    switch(
+      type,
+      integer = as.integer(col),
+      numeric = as.numeric(col),
+      character = ,
+      factor = as.character(col),
+      logical = as.logical(col),
+      Date = as.Date(as.character(col)),
+      POSIXct = as.POSIXct(as.character(col), tz = "UTC"),
+      if (is.null(col)) logical(0) else col
+    ),
+    error = function(e) col
+  )
 }
 
 restore_session_json <- function(json_text) {
@@ -641,7 +667,8 @@ restore_session_json <- function(json_text) {
       schema_relationships = list(),
       settings = list(),
       review = list(),
-      dictionary = list()
+      dictionary = list(),
+      declared_pks = list()
     ))
   }
 
@@ -656,13 +683,15 @@ restore_session_json <- function(json_text) {
         # tdata is a named list of columns (each column is a list of values)
         # Missing values come back from JSON as null; keep them as NA so
         # every column keeps its length
-        col_list <- lapply(tdata, function(col) {
+        types <- session$column_types[[tname]] %||% list()
+        col_list <- lapply(names(tdata), function(cn) {
+          col <- tdata[[cn]]
           if (is.list(col)) {
-            unlist(lapply(col, function(v) if (is.null(v)) NA else v))
-          } else {
-            col
+            col <- unlist(lapply(col, function(v) if (is.null(v)) NA else v))
           }
+          session_column(col, types[[cn]])
         })
+        names(col_list) <- names(tdata)
         df <- tryCatch(
           as.data.frame(col_list, stringsAsFactors = FALSE),
           error = function(e) as.data.frame(tdata, stringsAsFactors = FALSE)
@@ -679,7 +708,8 @@ restore_session_json <- function(json_text) {
     schema_relationships = session$schema_relationships %||% list(),
     settings = session$settings %||% list(),
     review = session$review %||% list(),
-    dictionary = session$dictionary %||% list()
+    dictionary = session$dictionary %||% list(),
+    declared_pks = lapply(session$declared_pks %||% list(), function(x) as.character(unlist(x)))
   )
 }
 
@@ -711,7 +741,7 @@ dict_entry <- function(dictionary, table, column = NULL) {
     units = txt(e$units),
     values = txt(e$values),
     details = txt(e$details),
-    private = if (is.logical(e$private) && length(e$private) == 1 && !is.na(e$private)) e$private else NA,
+    private = if (is.logical(e[["private"]]) && length(e[["private"]]) == 1 && !is.na(e[["private"]])) e[["private"]] else NA,
     hide_examples = if (is.logical(e$hide_examples) && length(e$hide_examples) == 1 && !is.na(e$hide_examples)) e$hide_examples else NA
   )
 }
@@ -719,7 +749,7 @@ dict_entry <- function(dictionary, table, column = NULL) {
 # TRUE when an entry holds nothing worth keeping
 dict_entry_empty <- function(e) {
   texts <- unlist(lapply(c(dict_text_fields, "business_name"), function(f) e[[f]] %||% ""))
-  all(!nzchar(texts)) && is.null(e$private) && is.null(e$hide_examples) &&
+  all(!nzchar(texts)) && is.null(e[["private"]]) && is.null(e$hide_examples) &&
     is.null(e$privacy_review)
 }
 
@@ -820,7 +850,7 @@ build_data_dictionary <- function(
         "private"
       } else if (isTRUE(e$hide_examples)) {
         "hidden by you"
-      } else if (!examples_on && !isFALSE(e$hide_examples)) {
+      } else if (!examples_on && !dict_examples_forced(dictionary, t$name, cn, v)) {
         "examples off"
       } else {
         ""
@@ -990,9 +1020,13 @@ dict_parse_values <- function(txt) {
   if (length(parts) == 0) return(NULL)
   has_label <- grepl("=", parts, fixed = TRUE)
   codes <- trimws(sub("=.*$", "", parts))
-  if (!any(has_label)) return(codes)
   labels <- ifelse(has_label, trimws(sub("^[^=]*=", "", parts)), codes)
-  stats::setNames(as.list(labels), codes)
+  # Codes must be non-empty and distinct (the first label wins)
+  keep <- nzchar(codes) & !duplicated(codes)
+  codes <- codes[keep]
+  if (length(codes) == 0) return(NULL)
+  if (!any(has_label[keep])) return(codes)
+  stats::setNames(as.list(labels[keep]), codes)
 }
 
 # The reverse, for imports
@@ -1032,22 +1066,37 @@ generate_data_dict_yaml <- function(
     stop("Install the 'yaml' package to export data-dict YAML: install.packages('yaml')")
   }
   dd <- build_data_dictionary(tables, rels, pks, composite_pks, dictionary = dictionary)
+  # A table with no columns can't be described (the spec needs at least one)
+  empty_tables <- names(Filter(function(df) ncol(df) == 0, tables))
+  tables <- tables[!names(tables) %in% empty_tables]
   kept <- Filter(function(r) {
     !(rel_source(r) == "detected" && identical(r$confidence, "low"))
   }, rels %||% list())
   model <- erd_model(tables, kept, pks, composite_pks)
-  reviewed <- Filter(function(r) rel_source(r) != "detected", model$rels)
-  unreviewed <- Filter(function(r) rel_source(r) == "detected", model$rels)
+  # One entry per join, keeping the most reviewed source
+  src_rank <- c(declared = 1L, manual = 2L, confirmed = 3L, detected = 4L)
+  mrels <- model$rels
+  if (length(mrels) > 0) {
+    mrels <- mrels[order(src_rank[vapply(mrels, rel_source, "")])]
+    mrels <- mrels[!duplicated(vapply(mrels, rel_key, ""))]
+  }
   # The spec wants a foreign key to point at a primary key, and the "one"
-  # side of a join to be a key or unique
-  key_cols <- unlist(lapply(model$tables, function(t) {
-    c(
-      paste(t$name, t$columns$name[t$columns$pk], sep = "|"),
-      paste(t$name, t$columns$name[t$columns$uk], sep = "|")
-    )
+  # side of a join to be a key or unique. A column of a composite key is
+  # neither on its own.
+  single_pk <- function(t) if (sum(t$columns$pk) == 1) t$columns$name[t$columns$pk] else character(0)
+  pk_cols <- unlist(lapply(model$tables, function(t) {
+    pk <- single_pk(t)
+    if (length(pk)) paste(t$name, pk, sep = "|")
   }))
-  pk_cols <- unlist(lapply(model$tables, function(t) paste(t$name, t$columns$name[t$columns$pk], sep = "|")))
-  reviewed <- Filter(function(r) paste(r$to_table, r$to_col, sep = "|") %in% key_cols, reviewed)
+  key_cols <- c(pk_cols, unlist(lapply(model$tables, function(t) {
+    uk <- t$columns$name[t$columns$uk & !t$columns$pk]
+    if (length(uk)) paste(t$name, uk, sep = "|")
+  })))
+  to_key <- function(r) paste(r$to_table, r$to_col, sep = "|") %in% key_cols
+  reviewed <- Filter(function(r) rel_source(r) != "detected" && to_key(r), mrels)
+  # Reviewed links the spec can't express as a join stay visible as a todo
+  non_key <- Filter(function(r) rel_source(r) != "detected" && !to_key(r), mrels)
+  unreviewed <- Filter(function(r) rel_source(r) == "detected", mrels)
   fk_cols <- unique(unlist(lapply(reviewed, function(r) {
     if (paste(r$to_table, r$to_col, sep = "|") %in% pk_cols) paste(r$from_table, r$from_col, sep = "|")
   })))
@@ -1070,6 +1119,12 @@ generate_data_dict_yaml <- function(
     details <- row$details
     todo <- character(0)
 
+    # The spec's enums hold text; codes for other types go in the details
+    if (!is.null(allowed) && !is.character(v)) {
+      codes <- if (is.list(allowed)) paste(names(allowed), "=", unlist(allowed)) else allowed
+      details <- paste(c(if (nzchar(details)) details, paste0("Allowed values: ", paste(codes, collapse = "; "))), collapse = "\n\n")
+      allowed <- NULL
+    }
     type <- if (!is.null(allowed)) {
       "enum"
     } else if (is.logical(v)) {
@@ -1092,7 +1147,8 @@ generate_data_dict_yaml <- function(
     constraints <- c(
       if (t$columns$pk[i]) "primary_key",
       if (paste(t$name, cn, sep = "|") %in% fk_cols) "foreign_key",
-      if (!t$columns$pk[i] && !isTRUE(t$columns$nullable[i])) "required",
+      # nullable is NA for a table without rows: nothing is known
+      if (!t$columns$pk[i] && isFALSE(t$columns$nullable[i])) "required",
       if (!t$columns$pk[i] && isTRUE(t$columns$uk[i])) "unique"
     )
 
@@ -1111,10 +1167,9 @@ generate_data_dict_yaml <- function(
 
     examples <- NULL
     if (!type %in% c("boolean", "enum") && !needs_range) {
-      show <- !row$private && !isTRUE(dict_entry(dictionary, t$name, cn)$hide_examples) &&
-        (examples_on || isFALSE(dict_entry(dictionary, t$name, cn)$hide_examples))
-      if (show && length(present) > 0) {
-        ex <- dict_examples(v)
+      show <- !nzchar(row$examples_note)
+      ex <- if (show) dict_examples(if (is.numeric(v)) v[is.finite(v)] else v) else character(0)
+      if (length(ex) > 0) {
         examples <- if (is.numeric(v)) {
           x <- as.numeric(ex)
           if (all(x == round(x))) {
@@ -1132,8 +1187,8 @@ generate_data_dict_yaml <- function(
         examples <- dict_placeholder_examples(v, row$format)
         todo <- c(todo, if (row$private) {
           "Examples are placeholders: real values withheld (private column)."
-        } else if (length(present) == 0) {
-          "Examples are placeholders: no data was loaded for this column."
+        } else if (show) {
+          "Examples are placeholders: no values to show (no data loaded, or all blank)."
         } else {
           "Examples are placeholders: real values withheld in Table Relationship Explorer."
         })
@@ -1212,16 +1267,22 @@ generate_data_dict_yaml <- function(
     doc <- doc[c(setdiff(names(doc), "tables"), "tables")]
   }
   if (length(reviewed)) doc$relationships <- lapply(unname(reviewed), rel_yaml)
-  if (length(unreviewed)) {
-    doc$todo <- paste(c(
+  link <- function(r) sprintf("- %s.%s = %s.%s", r$from_table, r$from_col, r$to_table, r$to_col)
+  todo <- c(
+    if (length(unreviewed)) c(
       "Unconfirmed links found by detection (confirm or remove, then move to relationships):",
       vapply(unreviewed, function(r) {
-        sprintf(
-          "- %s.%s = %s.%s (%s confidence)",
-          r$from_table, r$from_col, r$to_table, r$to_col, r$confidence %||% "unknown"
-        )
+        paste0(link(r), " (", r$confidence %||% "unknown", " confidence)")
       }, "")
-    ), collapse = "\n")
-  }
+    ),
+    if (length(non_key)) c(
+      "Links to a column that isn't a single-column key or unique (the spec can't express them as joins):",
+      vapply(non_key, function(r) paste0(link(r), " (", rel_source(r), ")"), "")
+    ),
+    if (length(empty_tables)) paste0(
+      "Tables with no columns, left out: ", paste(empty_tables, collapse = ", ")
+    )
+  )
+  if (length(todo)) doc$todo <- paste(todo, collapse = "\n")
   yaml::as.yaml(doc, indent.mapping.sequence = TRUE, column.major = FALSE)
 }
