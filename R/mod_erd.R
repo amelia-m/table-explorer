@@ -69,11 +69,29 @@ mod_erd_ui <- function(id) {
           options = list(placeholder = "All areas")
         ),
         radioButtons(
+          ns("ref_links"),
+          "Lookup links",
+          choices = c("Lines" = "lines", "Labels" = "labels"),
+          selected = "lines",
+          inline = TRUE
+        ),
+        radioButtons(
           ns("direction"),
           "Layout",
           choices = c("Left → right" = "RIGHT", "Top → down" = "DOWN"),
           selected = "RIGHT",
           inline = TRUE
+        ),
+        selectInput(
+          ns("sources"),
+          "Sources",
+          choices = c(
+            "Declared + detected" = "both",
+            "Declared only" = "declared",
+            "Detected only" = "detected"
+          ),
+          selected = "both",
+          width = "180px"
         ),
         checkboxInput(ns("show_low"), "Show low-confidence links", FALSE),
         div(
@@ -153,11 +171,27 @@ mod_erd_server <- function(
       user_detail() %||%
         if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
     })
+    # Lookup links: labels by default for large schemas, same handling of
+    # the server's own radio updates as the detail level
+    user_ref <- reactiveVal(NULL)
+    auto_ref <- reactiveVal(NULL)
+    observeEvent(input$ref_links, {
+      if (identical(input$ref_links, auto_ref())) {
+        auto_ref(NULL)
+      } else {
+        user_ref(input$ref_links)
+      }
+    }, ignoreInit = TRUE)
+    ref_links_rv <- reactive({
+      user_ref() %||%
+        if (length(model_rv()$tables) > erd_large_schema) "labels" else "lines"
+    })
 
     model_rv <- reactive({
       tbls <- tables_rv()
       req(length(tbls) > 0)
-      erd_model(tbls, rels_rv(), pk_map_rv(), composite_pk_map_rv())
+      rels <- filter_rel_sources(rels_rv(), input$sources %||% "both")
+      erd_model(tbls, rels, pk_map_rv(), composite_pk_map_rv())
     })
 
     # Keep the focus / area choices in step with the loaded tables
@@ -186,6 +220,10 @@ mod_erd_server <- function(
         auto_detail(detail_rv())
         updateRadioButtons(session, "detail", selected = detail_rv())
       }
+      if (is.null(user_ref()) && !identical(ref_links_rv(), isolate(input$ref_links))) {
+        auto_ref(ref_links_rv())
+        updateRadioButtons(session, "ref_links", selected = ref_links_rv())
+      }
     })
 
     view_rv <- reactive({
@@ -206,7 +244,9 @@ mod_erd_server <- function(
       graph <- erd_elk_graph(
         v,
         detail = v$detail,
-        direction = input$direction %||% "RIGHT"
+        direction = input$direction %||% "RIGHT",
+        ref_labels = identical(ref_links_rv(), "labels"),
+        side = TRUE
       )
       session$sendCustomMessage(
         "erd-render",
@@ -327,6 +367,9 @@ mod_erd_server <- function(
                 r$provenance,
                 if (identical(r$provenance, "inferred") && !is.null(r$score)) {
                   sprintf(" · %s %d%%", r$confidence, round(100 * r$score))
+                },
+                if (!is.null(r$also_detected) && !is.na(r$also_detected)) {
+                  sprintf(" · also detected (%d%%)", round(100 * r$also_detected))
                 }
               ),
               if (length(r$reasons)) tags$dt("Evidence"),

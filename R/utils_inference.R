@@ -250,7 +250,14 @@ is_lookup_name <- function(tname) {
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {
-  key <- paste("k", tname, nrow(df), ncol(df), sep = "\r")
+  # The answer depends on column names and on which columns are unique, so
+  # key on the content, not just the shape (small tables are cheap to hash;
+  # larger ones fail the size test and never reach it)
+  key <- paste(
+    "k", tname, nrow(df), ncol(df),
+    if (nrow(df) <= 500 && ncol(df) <= 4) rlang::hash(df) else paste(names(df), collapse = ","),
+    sep = "\r"
+  )
   hit <- .lookup_cache[[key]]
   if (!is.null(hit)) {
     return(hit)
@@ -573,6 +580,7 @@ score_candidate <- function(
   }
 
   # 3. Value overlap
+  ov <- NA_real_
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
     ov <- overlap_from_profiles(p1, p2)
     if (ov >= overlap_high) {
@@ -660,6 +668,17 @@ score_candidate <- function(
     "medium"
   } else {
     "low"
+  }
+  # Values veto: with data on both sides, a link whose values mostly aren't in
+  # the parent can't rest on format or loose name likeness alone
+  if (
+    !is.na(ov) && ov < 0.5 &&
+      !any(names(signals) %in% c("naming_exact", "naming_role", "naming_self")) &&
+      confidence != "low"
+  ) {
+    confidence <- "low"
+    score <- min(score, 0.54)
+    reasons <- c(sprintf("only %.0f%% of values found in the parent", ov * 100), reasons)
   }
 
   list(
@@ -979,7 +998,6 @@ detect_fks <- function(
 
   results <- list()
   seen <- new.env(parent = emptyenv()) # O(1) lookup vs character vector
-  best_scores <- new.env(parent = emptyenv())
 
   # Incremental scan: with focus_tables set, only pairs involving at least one
   # focus table are compared, and `existing` (earlier results for the other
@@ -993,11 +1011,6 @@ detect_fks <- function(
       envir = seen
     )
     col_key <- paste(r$from_table, r$from_col, sep = "|")
-    prev <- best_scores[[col_key]]
-    score <- r$score %||% 0
-    if (is.null(prev) || score > prev) {
-      assign(col_key, score, envir = best_scores)
-    }
     assign(col_key, TRUE, envir = existing_sources)
   }
   in_focus <- function(t) is.null(focus_tables) || t %in% focus_tables
@@ -1189,18 +1202,8 @@ detect_fks <- function(
           next
         }
 
-        # Deduplicate: keep best target per source column
-        col_key <- paste(t1, col1, sep = "|")
-        prev_score <- if (exists(col_key, envir = best_scores)) {
-          get(col_key, envir = best_scores)
-        } else {
-          NULL
-        }
-        if (!is.null(prev_score) && prev_score > best_result$score + 0.05) {
-          next
-        }
-        assign(col_key, best_result$score, envir = best_scores)
-
+        # Candidate parents for this column are weighed against each other
+        # afterwards (resolve_fk_parents), so the scan order doesn't matter
         assign(rel_key, TRUE, envir = seen)
         results[[length(results) + 1]] <- make_rel(
           t1, col1, t2, best_to_col, best_result
@@ -1226,6 +1229,18 @@ detect_fks <- function(
     if (pair_count > max_pairs) break
   }
 
+  # Weigh each column's candidate parents together, including links found
+  # by earlier scans, but return only the new ones
+  if (length(existing) > 0) {
+    link_key <- function(r) {
+      paste(r$from_table, r$from_col, r$to_table, r$to_col %||% "", sep = "|")
+    }
+    old_keys <- vapply(existing, link_key, character(1))
+    resolved <- resolve_fk_parents(c(existing, results))
+    results <- Filter(function(r) !(link_key(r) %in% old_keys), resolved)
+  } else {
+    results <- resolve_fk_parents(results)
+  }
   results <- sort_rels(results)
 
   # Let callers warn that tables late in the scan order were not compared
@@ -1318,6 +1333,95 @@ self_ref_match <- function(t1, col1, df1, pk_cols) {
       detected_by = "naming"
     )
   )
+}
+
+# ── Choosing between candidate parents ───────────────────────
+# A column can match several tables. On Access-style data every tlk_* lookup
+# numbers its id 1..N, so service_id's values fit tlk_services, tlk_sites and
+# every other lookup equally well. Values alone can't choose between them, so
+# names come first (as in SchemaSpy, SchemaCrawler and FK-discovery research):
+#   1. A parent the column's name points to wins; content-only matches to
+#      other tables drop to low ("name points to ...").
+#   2. No name evidence and 2+ parents contain the column's values: all drop
+#      to low ("ambiguous: values fit N tables"), unless one parent's column
+#      name is clearly the closest.
+#   3. Otherwise the best parent is kept and parents scoring more than 0.05
+#      below it are dropped.
+# Demoted links stay (at low) so they can be reviewed. The pass works from
+# each link's original score (base_score / base_confidence), so it can run
+# again over cached plus new results and give the same answer.
+
+fk_name_signals <- c("naming_exact", "naming_role", "naming_self")
+fk_value_fit_signals <- c("cardinality_match", "overlap_high")
+
+resolve_fk_parents <- function(rels) {
+  if (length(rels) < 2) {
+    return(rels)
+  }
+  rels <- lapply(rels, function(r) {
+    if (is.null(r$base_score)) {
+      r$base_score <- r$score %||% 0
+      r$base_confidence <- r$confidence %||% "low"
+      r$base_reasons <- r$reasons %||% character(0)
+    }
+    r$score <- r$base_score
+    r$confidence <- r$base_confidence
+    r$reasons <- r$base_reasons
+    r$demoted <- NULL
+    r
+  })
+  demote <- function(r, why) {
+    r$score <- round(min(r$base_score, 0.54) * 0.9, 3)
+    r$confidence <- "low"
+    r$reasons <- c(why, r$base_reasons)
+    r$demoted <- why
+    r
+  }
+  sig_names <- function(r) names(r$signals %||% list())
+  col_keys <- vapply(rels, function(r) paste(r$from_table, r$from_col, sep = "|"), "")
+  keep <- rep(TRUE, length(rels))
+
+  for (ck in unique(col_keys[duplicated(col_keys)])) {
+    idx <- which(col_keys == ck)
+    named <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_name_signals), logical(1))]
+    if (length(named) > 0) {
+      # 1. The name decides
+      targets <- paste(unique(vapply(rels[named], `[[`, "", "to_table")), collapse = ", ")
+      for (i in setdiff(idx, named)) {
+        rels[[i]] <- demote(rels[[i]], sprintf("name points to %s", targets))
+      }
+      idx <- named
+    } else {
+      fits <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_value_fit_signals), logical(1))]
+      if (length(fits) >= 2) {
+        # 2. Values fit several tables: only a clearly closer name can choose
+        close <- fits[vapply(rels[fits], function(r) "name_sim" %in% sig_names(r), logical(1))]
+        winners <- if (length(close) == 1) close else integer(0)
+        n_fit <- length(fits)
+        fit_names <- vapply(rels[fits], `[[`, "", "to_table")
+        why <- sprintf(
+          "ambiguous: values fit %d tables (%s)",
+          n_fit,
+          paste(head(sort(unique(fit_names)), 6), collapse = ", ")
+        )
+        if (length(winners) == 1) {
+          why <- sprintf("name is closest to %s", rels[[winners]]$to_table)
+        }
+        for (i in setdiff(fits, winners)) {
+          rels[[i]] <- demote(rels[[i]], why)
+        }
+        idx <- c(winners, setdiff(idx, fits))
+      }
+    }
+    # 3. Among the rest, drop parents well below the best one
+    if (length(idx) > 1) {
+      best <- max(vapply(rels[idx], `[[`, numeric(1), "base_score"))
+      for (i in idx) {
+        if (rels[[i]]$base_score < best - 0.05) keep[i] <- FALSE
+      }
+    }
+  }
+  rels[keep]
 }
 
 # Sort relationships by confidence desc, then score desc

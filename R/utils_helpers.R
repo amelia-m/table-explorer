@@ -89,3 +89,90 @@ review_suppress <- function(keys, confirmed_rv, suppressed_rv, notify = TRUE) {
   }
   invisible(keys)
 }
+
+# ── Declared relationships (schema files, databases, Access) ──
+# Tables and columns are loaded with janitor::clean_names(), so declared
+# links must use the same cleaned names to line up with them.
+clean_declared_rels <- function(rels) {
+  lapply(rels, function(r) {
+    for (f in c("from_table", "from_col", "to_table", "to_col")) {
+      v <- r[[f]]
+      if (length(v) == 1 && !is.na(v) && nzchar(v)) {
+        r[[f]] <- janitor::make_clean_names(v)
+      }
+    }
+    r
+  })
+}
+
+# Add declared links to what's there, one entry per relationship
+merge_declared_rels <- function(existing, new) {
+  all <- c(existing %||% list(), clean_declared_rels(new %||% list()))
+  if (length(all) == 0) {
+    return(list())
+  }
+  keys <- vapply(all, rel_key, character(1))
+  all[!duplicated(keys)]
+}
+
+# Where a relationship came from, for display, filtering and export:
+# "declared" (schema file, database constraint, Access), "manual" (added by
+# hand), "confirmed" (a detected link someone reviewed) or "detected".
+rel_source <- function(r) {
+  if (identical(r$detected_by, "schema")) {
+    "declared"
+  } else if (identical(r$detected_by, "manual")) {
+    "manual"
+  } else if (isTRUE(r$confirmed)) {
+    "confirmed"
+  } else {
+    "detected"
+  }
+}
+
+rel_source_labels <- c(
+  declared = "Declared",
+  manual = "Manual",
+  confirmed = "Confirmed",
+  detected = "Detected"
+)
+
+# Declared links win over the same detected link, which is folded into the
+# declared entry ("also detected"). With hide_detected_on_declared, detected
+# links from a column that has a declared link are dropped as well.
+combine_relationships <- function(
+  auto,
+  manual = list(),
+  declared = list(),
+  hide_detected_on_declared = FALSE
+) {
+  declared <- declared %||% list()
+  auto <- auto %||% list()
+  if (length(declared) > 0 && length(auto) > 0) {
+    dkeys <- vapply(declared, rel_key, character(1))
+    akeys <- vapply(auto, rel_key, character(1))
+    for (i in which(akeys %in% dkeys)) {
+      j <- match(akeys[i], dkeys)
+      declared[[j]]$also_detected <- auto[[i]]$score %||% NA_real_
+    }
+    auto <- auto[!akeys %in% dkeys]
+    if (isTRUE(hide_detected_on_declared) && length(auto) > 0) {
+      dcols <- vapply(declared, function(r) paste(r$from_table, r$from_col), "")
+      acols <- vapply(auto, function(r) paste(r$from_table, r$from_col), "")
+      auto <- auto[!acols %in% dcols]
+    }
+  }
+  c(auto, manual %||% list(), declared)
+}
+
+# sources: "both", "declared" (declared + manual) or "detected"
+# (detected + confirmed)
+filter_rel_sources <- function(rels, sources = "both") {
+  if (identical(sources, "declared")) {
+    Filter(function(r) rel_source(r) %in% c("declared", "manual"), rels)
+  } else if (identical(sources, "detected")) {
+    Filter(function(r) rel_source(r) %in% c("detected", "confirmed"), rels)
+  } else {
+    rels
+  }
+}

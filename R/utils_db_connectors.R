@@ -333,5 +333,16 @@ db_load_table <- function(conn, table_name, schema = "", limit = 10000) {
 # ── Close a database connection ───────────────────────────────
 
 db_close <- function(conn) {
-  tryCatch(DBI::dbDisconnect(conn), error = function(e) NULL)
+  # Closing twice is fine: skip closed connections, and don't pass on the
+  # "already disconnected" warning some drivers give
+  valid <- tryCatch(DBI::dbIsValid(conn), error = function(e) FALSE)
+  if (!isTRUE(valid)) {
+    return(invisible(NULL))
+  }
+  tryCatch(
+    DBI::dbDisconnect(conn),
+    error = function(e) NULL,
+    warning = function(w) NULL
+  )
+  invisible(NULL)
 }
