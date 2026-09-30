@@ -95,7 +95,8 @@ mod_upload_server <- function(
   rename_log_rv,
   schema_rels_rv,
   table_meta_rv,
-  fk_cache
+  fk_cache,
+  dictionary_rv = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     pending_conflicts_rv <- reactiveVal(list())
@@ -575,6 +576,12 @@ mod_upload_server <- function(
           prev <- rename_log_rv()
           rename_log_rv(rbind(prev, do.call(rbind, schema_renames)))
         }
+      }
+
+      # Labels, descriptions and privacy from a data-dict file fill in what
+      # the dictionary doesn't have yet; the user's own edits are kept
+      if (length(result$dictionary) > 0 && !is.null(dictionary_rv)) {
+        dictionary_rv(merge_dictionary(dictionary_rv(), result$dictionary))
       }
 
       if (length(result$relationships) > 0) {

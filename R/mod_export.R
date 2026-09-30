@@ -24,7 +24,8 @@ mod_export_ui <- function(id) {
         downloadButton(ns("dl_dbml"), "DBML (.dbml)", class = "dl-btn"),
         downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn"),
         downloadButton(ns("dl_dict_csv"), "Data dictionary (.csv)", class = "dl-btn"),
-        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn")
+        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn"),
+        downloadButton(ns("dl_dict_yaml"), "data-dict (.yaml)", class = "dl-btn")
       ),
       checkboxInput(
         ns("dbt_constraints"),
@@ -157,6 +158,21 @@ mod_export_server <- function(
     output$dl_dict_md <- downloadHandler(
       filename = "data_dictionary.md",
       content = function(file) writeLines(generate_data_dictionary_md(dict_df()), file)
+    )
+    output$dl_dict_yaml <- downloadHandler(
+      filename = "data-dict.yaml",
+      content = function(file) {
+        writeLines(
+          generate_data_dict_yaml(
+            all_tables_rv(),
+            export_rels_rv(),
+            pk_map_rv(),
+            composite_pk_map_rv(),
+            dictionary = dictionary_rv()
+          ),
+          file
+        )
+      }
     )
 
     output$dl_elk <- downloadHandler(

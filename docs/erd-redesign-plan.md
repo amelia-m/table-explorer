@@ -250,8 +250,14 @@ Access-style schema.
   - Later: use the width (ELK layer wrapping plus a target aspect ratio).
   - Later: open large schemas focused on the most-connected table.
 - **Data dictionary (done):**
-  - a Data Dictionary tab with editable descriptions and business names, saved
-    with the session;
+  - a Data Dictionary tab with editable labels, descriptions, units, allowed
+    values and details, saved with the session ("business name" was renamed
+    to label; older sessions still load);
+  - privacy: automatic flags from names and values, reviewed by the user;
+    user-marked private columns and name patterns; private columns keep
+    their metadata but lose examples and ranges;
+  - data-dict YAML (spec 0.1.0) export and import, in plain R; the mapping
+    lives in `generate_data_dict_yaml()` and `parse_data_dict_schema()`;
   - CSV and Markdown exports;
   - descriptions carried into dbt, DBML and Mermaid;
   - optional dbt 1.9 constraints for PKs and declared/confirmed FKs.

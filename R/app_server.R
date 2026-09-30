@@ -20,7 +20,7 @@ app_server <- function(input, output, session) {
   # Relationships the user confirmed, keyed by rel_key(). Stored whole so a
   # confirmed link stays even if a later scan no longer finds it.
   confirmed_rels_rv <- reactiveVal(list())
-  # Data dictionary edits: descriptions and business names, keyed "table"
+  # Data dictionary edits: labels, descriptions and privacy choices, keyed "table"
   # or "table|column"; saved with the session
   dictionary_rv <- reactiveVal(list())
 
@@ -37,7 +37,8 @@ app_server <- function(input, output, session) {
     rename_log_rv,
     schema_rels_rv,
     table_meta_rv,
-    fk_cache
+    fk_cache,
+    dictionary_rv = dictionary_rv
   )
   manual_rels_rv <- upload_out$manual_rels_rv
 

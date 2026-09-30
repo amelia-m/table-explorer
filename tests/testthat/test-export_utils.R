@@ -449,20 +449,30 @@ test_that("build_data_dictionary describes every column", {
   expect_equal(row$pct_missing, round(100 / 6, 1))
   expect_equal(row$n_unique, 4)
   expect_equal(dd$keys[dd$column == "order_id"], "PK")
-  # Examples, except for columns that look personal
-  expect_equal(dd$examples[dd$column == "tier"], "gold, silver, bronze")
+  # Examples spread across the sorted values, except for private columns
+  expect_equal(dd$examples[dd$column == "tier"], "bronze, gold, silver")
+  expect_equal(dd$examples[dd$column == "amount"], "1, 2, 15.5, 20, 30")
   expect_equal(dd$examples[dd$column == "email"], "")
+  expect_equal(dd$examples_note[dd$column == "email"], "private")
+  expect_equal(dd$privacy_status[dd$column == "email"], "auto_unreviewed")
   expect_equal(build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), examples = FALSE)$examples[3], "")
+  # Metadata stays for every column
+  em <- dd[dd$column == "email", ]
+  expect_equal(em$format, "email address")
+  expect_equal(c(em$len_min, em$len_median, em$len_max), c(6, 6, 6))
+  am <- dd[dd$column == "amount", ]
+  expect_equal(c(am$min, am$median, am$max), c("1", "13", "30"))
+  expect_equal(am$format, "decimal")
 })
 
 test_that("dictionary edits are merged into the dictionary and its Markdown", {
   edits <- list(
     customers = list(description = "People who buy | things"),
-    "customers|tier" = list(description = "Loyalty tier", business_name = "Tier")
+    "customers|tier" = list(description = "Loyalty tier", label = "Tier")
   )
   dd <- build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
   expect_equal(dd$description[dd$column == "tier"], "Loyalty tier")
-  expect_equal(dd$business_name[dd$column == "tier"], "Tier")
+  expect_equal(dd$label[dd$column == "tier"], "Tier")
   expect_equal(unique(dd$table_description[dd$table == "customers"]), "People who buy | things")
   md <- generate_data_dictionary_md(dd)
   expect_match(md, "## customers", fixed = TRUE)
@@ -502,10 +512,10 @@ test_that("dbt constraints cover PKs and reviewed FKs only", {
 })
 
 test_that("sessions keep dictionary edits; older sessions still load", {
-  edits <- list("orders|amount" = list(description = "Total", business_name = "Order total"))
+  edits <- list("orders|amount" = list(description = "Total", label = "Order total"))
   js <- save_session_json(dict_tables(), list(), list(), list(), dictionary = edits)
   back <- restore_session_json(js)
-  expect_equal(back$dictionary[["orders|amount"]]$business_name, "Order total")
+  expect_equal(back$dictionary[["orders|amount"]]$label, "Order total")
   old <- save_session_json(dict_tables(), list(), list(), list())
   old <- sub(',\\s*"dictionary": \\[\\]', "", old)
   expect_equal(restore_session_json(old)$dictionary, list())
@@ -554,4 +564,166 @@ test_that("DBML notes escape backslashes and quotes", {
   d <- list("orders|amount" = list(description = "ends with \\"))
   dbml <- generate_dbml(dict_tables(), dict_rels(), dict_pks(), dictionary = d)
   expect_match(dbml, "note: 'ends with \\\\'", fixed = TRUE)
+})
+
+# ── data-dict YAML ────────────────────────────────────────────
+
+dd_yaml_tables <- function() {
+  c(dict_tables(), list(staff = data.frame(staff_id = 1:3, manager_id = c(NA, 1L, 1L))))
+}
+dd_yaml_rels <- function() {
+  c(
+    dict_rels("schema"),
+    list(
+      list(
+        from_table = "staff", from_col = "manager_id", to_table = "staff",
+        to_col = "staff_id", detected_by = "manual", confidence = "high", score = 1
+      ),
+      list(
+        from_table = "orders", from_col = "order_id", to_table = "staff",
+        to_col = "staff_id", detected_by = "naming", confidence = "medium", score = 0.7
+      )
+    )
+  )
+}
+dd_yaml_pks <- function() c(dict_pks(), list(staff = "staff_id"))
+
+test_that("data-dict export follows the spec", {
+  skip_if_not_installed("yaml")
+  edits <- list(
+    customers = list(description = "People", label = "Customers"),
+    "customers|tier" = list(label = "Tier", values = "gold = Gold; silver = Silver; bronze = Bronze"),
+    "orders|amount" = list(units = "GBP", description = "Total")
+  )
+  y <- generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks(), dictionary = edits)
+  doc <- yaml::yaml.load(y)
+  expect_equal(doc[["$version"]], "0.1.0")
+  expect_equal(vapply(doc$tables, `[[`, "", "name"), c("customers", "orders", "staff"))
+  cust <- doc$tables[[1]]
+  expect_equal(cust$label, "Customers")
+  cols <- setNames(cust$columns, vapply(cust$columns, `[[`, "", "name"))
+  expect_equal(cols$customer_id$type, "number(id)")
+  expect_equal(cols$customer_id$constraints, "primary_key")
+  expect_equal(cols$tier$type, "enum")
+  expect_equal(cols$tier$values, list(gold = "Gold", silver = "Silver", bronze = "Bronze"))
+  expect_null(cols$tier$examples)
+  # Private: restricted, placeholder examples, never real values
+  expect_equal(cols$email$display, "restricted")
+  expect_equal(cols$email$examples, "person@example.com")
+  expect_false(grepl("a@x.io", y, fixed = TRUE))
+  ord <- setNames(doc$tables[[2]]$columns, vapply(doc$tables[[2]]$columns, `[[`, "", "name"))
+  expect_equal(ord$amount$type, "number(quantity)")
+  expect_equal(ord$amount$units, "GBP")
+  expect_equal(unlist(ord$amount$range), c(1, 30))
+  expect_equal(ord$customer_id$constraints, "foreign_key")
+  expect_equal(unlist(ord$order_id$examples), c(1, 2, 4, 5, 6))
+  # Relationships: declared and manual; the self-join is aliased
+  joins <- vapply(doc$relationships, `[[`, "", "join")
+  expect_equal(joins, c("orders.customer_id = customers.customer_id", "child.manager_id = parent.staff_id"))
+  expect_equal(doc$relationships[[2]]$aliases, list(child = "staff", parent = "staff"))
+  expect_equal(doc$relationships[[1]]$cardinality, "many-to-one")
+  # Unreviewed detected links are a todo, not a relationship
+  expect_match(doc$todo, "orders.order_id = staff.staff_id (medium confidence)", fixed = TRUE)
+})
+
+test_that("a private number gets an open range; units elsewhere go to details", {
+  skip_if_not_installed("yaml")
+  t <- list(p = data.frame(id = 1:3, weight = c(50, 60, 70), tag = c("a", "b", "c"), stringsAsFactors = FALSE))
+  d <- list("p|weight" = list(units = "kg", private = TRUE), "p|tag" = list(units = "cm"))
+  doc <- yaml::yaml.load(generate_data_dict_yaml(t, list(), list(p = "id"), dictionary = d))
+  cols <- setNames(doc$tables[[1]]$columns, vapply(doc$tables[[1]]$columns, `[[`, "", "name"))
+  expect_equal(unlist(cols$weight$range), c(-Inf, Inf))
+  expect_equal(cols$weight$display, "restricted")
+  expect_null(cols$tag$units)
+  expect_match(cols$tag$details, "Units: cm")
+})
+
+test_that("data-dict files import as tables, declared links and dictionary entries", {
+  skip_if_not_installed("yaml")
+  edits <- list(
+    customers = list(description = "People", label = "Customers"),
+    "customers|tier" = list(label = "Tier", values = "gold = Gold; silver = Silver"),
+    "orders|amount" = list(units = "GBP"),
+    "customers|email" = list(private = TRUE)
+  )
+  f <- tempfile(fileext = ".yaml")
+  writeLines(generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks(), dictionary = edits), f)
+  back <- parse_schema_file(f, "data-dict.yaml")
+  expect_equal(names(back$tables), c("customers", "orders", "staff"))
+  expect_equal(names(back$tables$customers), c("customer_id", "email", "tier"))
+  expect_length(back$relationships, 2)
+  r <- back$relationships[[2]]
+  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("staff", "manager_id", "staff", "staff_id"))
+  expect_equal(rel_source(r), "declared")
+  expect_equal(back$dictionary$customers$label, "Customers")
+  expect_equal(back$dictionary[["customers|tier"]]$values, "gold = Gold; silver = Silver")
+  expect_equal(back$dictionary[["orders|amount"]]$units, "GBP")
+  expect_true(back$dictionary[["customers|email"]]$private)
+  expect_equal(dict_privacy(back$dictionary, "customers", "email")$status, "imported")
+  # Merging keeps what the user already wrote
+  merged <- merge_dictionary(list("customers|tier" = list(label = "Mine")), back$dictionary)
+  expect_equal(merged[["customers|tier"]]$label, "Mine")
+  expect_equal(merged[["customers|tier"]]$values, "gold = Gold; silver = Silver")
+})
+
+test_that("a hand-written data-dict file imports, one-to-many joins included", {
+  skip_if_not_installed("yaml")
+  f <- tempfile(fileext = ".yml")
+  writeLines(c(
+    "$version: 0.1.0",
+    "tables:",
+    "  - name: food",
+    "    description: Each row is a food item.",
+    "    columns:",
+    "      - name: fdc_id",
+    "        label: FoodData Central ID",
+    "        type: number(id)",
+    "        constraints: [primary_key]",
+    "        examples: [167512, 174231]",
+    "      - name: food_category_id",
+    "        type: number(id)",
+    "        constraints: [foreign_key]",
+    "      - name: data_type",
+    "        type: enum",
+    "        values: [foundation, branded]",
+    "  - name: food_category",
+    "    columns:",
+    "      - name: id",
+    "        type: number(id)",
+    "relationships:",
+    "  - join: food_category.id = food.food_category_id",
+    "    cardinality: one-to-many",
+    "  - join: food.x >= food_category.y AND food.x <= food_category.z",
+    "    cardinality: many-to-one"
+  ), f)
+  msgs <- character(0)
+  back <- parse_schema_file(f, "dd.yml", function(m) msgs <<- c(msgs, m))
+  expect_equal(names(back$tables), c("food", "food_category"))
+  r <- back$relationships[[1]]
+  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("food", "food_category_id", "food_category", "id"))
+  expect_length(back$relationships, 1)
+  expect_match(msgs, "1 data-dict relationship")
+  expect_equal(back$dictionary[["food|fdc_id"]]$label, "FoodData Central ID")
+  expect_equal(back$dictionary[["food|data_type"]]$values, "foundation; branded")
+  expect_equal(back$dictionary$food$description, "Each row is a food item.")
+})
+
+test_that("allowed values parse both ways", {
+  expect_equal(dict_parse_values("A = Active; I = Inactive"), list(A = "Active", I = "Inactive"))
+  expect_equal(dict_parse_values("a; b"), c("a", "b"))
+  expect_null(dict_parse_values(" "))
+  expect_equal(dict_format_values(list(A = "Active")), "A = Active")
+  expect_equal(dict_format_values(list("a", "b")), "a; b")
+})
+
+test_that("sessions keep privacy choices and reviews", {
+  edits <- list(
+    "orders|amount" = list(private = TRUE),
+    "customers|email" = list(privacy_review = list(state = "rejected", reason = "name contains \"email\"")),
+    .settings = list(private_patterns = "*_id", examples = "off")
+  )
+  back <- restore_session_json(save_session_json(dict_tables(), list(), list(), list(), dictionary = edits))
+  expect_true(back$dictionary[["orders|amount"]]$private)
+  expect_equal(dict_privacy(back$dictionary, "customers", "email", dict_tables()$customers$email)$status, "not_personal")
+  expect_equal(dict_settings(back$dictionary), list(private_patterns = "*_id", examples = "off"))
 })
