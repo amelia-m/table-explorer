@@ -320,8 +320,13 @@ parse_schema_file <- function(path, name, notify_fn = message) {
     }
   )
 
+  if (is.list(schema) && !is.null(schema[["$version"]])) {
+    return(parse_data_dict_schema(schema, notify_fn))
+  }
+
   tables <- list()
   relationships <- list()
+  primary_keys <- list()
 
   # Parse tables from schema + extract inline FK definitions
   if (!is.null(schema$tables)) {
@@ -345,6 +350,15 @@ parse_schema_file <- function(path, name, notify_fn = message) {
           names(df) <- col_names
           tables[[tname]] <- df
         }
+        # Primary keys: a table-level primary_key list, or columns marked
+        # primary_key / pk: true
+        pk <- unlist(tdef$primary_key %||% tdef$primary_keys)
+        if (is.null(pk) || is.logical(pk)) {
+          pk <- unlist(lapply(cols, function(c) {
+            if (isTRUE(c$primary_key) || isTRUE(c$pk)) c$name
+          }))
+        }
+        if (length(pk) > 0) primary_keys[[tname]] <- as.character(pk)
         # Extract inline foreign_key definitions
         for (cdef in cols) {
           fk <- cdef$foreign_key
@@ -389,7 +403,150 @@ parse_schema_file <- function(path, name, notify_fn = message) {
     }
   }
 
-  list(tables = tables, relationships = relationships)
+  list(tables = tables, relationships = relationships, primary_keys = primary_keys)
+}
+
+# ── data-dict YAML ─────────────────────────────────────────────
+# A data-dict.yaml file (https://data-dict.tidyverse.org/; see
+# generate_data_dict_yaml() in utils_export.R): tables and columns, joins as
+# declared relationships, and labels, descriptions, details, units, allowed
+# values and display: restricted as dictionary entries.
+data_dict_empty_column <- function(type) {
+  type <- type %||% "string"
+  if (startsWith(type, "number")) return(numeric(0))
+  switch(
+    type,
+    boolean = logical(0),
+    date = as.Date(character(0)),
+    datetime = as.POSIXct(character(0), tz = "UTC"),
+    character(0)
+  )
+}
+
+parse_data_dict_schema <- function(schema, notify_fn = message) {
+  txt <- function(x) if (is.null(x)) "" else trimws(paste(as.character(unlist(x)), collapse = " "))
+  tables <- list()
+  dictionary <- list()
+  primary_keys <- list()
+  add_entry <- function(key, def, column = FALSE) {
+    e <- list()
+    for (f in c("label", "description", "details")) {
+      if (nzchar(txt(def[[f]]))) e[[f]] <- txt(def[[f]])
+    }
+    if (column) {
+      if (nzchar(txt(def$units))) e$units <- txt(def$units)
+      if (!is.null(def$values)) e$values <- dict_format_values(def$values)
+      if (identical(def$display, "restricted")) {
+        e[["private"]] <- TRUE
+        e$private_source <- "import"
+      }
+    }
+    if (length(e)) dictionary[[key]] <<- e
+  }
+  table_defs <- schema$tables %||% list()
+  # A single-table dictionary is documented at the top level (spec S16)
+  if (length(table_defs) == 1) {
+    for (f in c("label", "description", "details")) {
+      table_defs[[1]][[f]] <- table_defs[[1]][[f]] %||% schema[[f]]
+    }
+  }
+  for (tdef in table_defs) {
+    tname <- tdef$name
+    if (is.null(tname) || !nzchar(tname)) next
+    add_entry(dict_key(tname), tdef)
+    cols <- list()
+    for (cdef in tdef$columns %||% list()) {
+      cn <- cdef$name
+      if (is.null(cn) || !nzchar(cn)) next
+      # Empty columns of the declared type, so a re-export keeps the types
+      cols[[cn]] <- data_dict_empty_column(cdef$type)
+      add_entry(dict_key(tname, cn), cdef, column = TRUE)
+      if ("primary_key" %in% unlist(cdef$constraints)) {
+        primary_keys[[tname]] <- c(primary_keys[[tname]], cn)
+      }
+    }
+    # A data-dict file lists every key, so a table without one has none
+    if (is.null(primary_keys[[tname]])) primary_keys[tname] <- list(character(0))
+    tables[[tname]] <- if (length(cols)) {
+      as.data.frame(cols, stringsAsFactors = FALSE, check.names = FALSE)
+    } else {
+      data.frame()
+    }
+  }
+
+  relationships <- list()
+  skipped <- 0L
+  for (rdef in schema$relationships %||% list()) {
+    m <- regmatches(
+      rdef$join %||% "",
+      regexec("^\\s*([^.\\s]+)\\.([^=\\s]+)\\s*=\\s*([^.\\s]+)\\.([^=\\s]+)\\s*$", rdef$join %||% "", perl = TRUE)
+    )[[1]]
+    if (length(m) != 5) {
+      skipped <- skipped + 1L
+      next
+    }
+    aliases <- rdef$aliases %||% list()
+    side <- function(x) aliases[[x]] %||% x
+    left <- list(table = side(m[2]), col = m[3])
+    right <- list(table = side(m[4]), col = m[5])
+    # The link points from the "many" side to the "one" side
+    if (identical(rdef$cardinality, "one-to-many")) {
+      tmp <- left
+      left <- right
+      right <- tmp
+    }
+    relationships[[length(relationships) + 1]] <- list(
+      from_table = left$table,
+      from_col = left$col,
+      to_table = right$table,
+      to_col = right$col,
+      detected_by = "schema",
+      confidence = "high",
+      score = 1.0,
+      signals = list(schema = 1.0),
+      reasons = "declared in data-dict"
+    )
+  }
+  if (skipped > 0) {
+    notify_fn(sprintf(
+      "%d data-dict relationship(s) skipped: only joins of the form a.x = b.y are read.",
+      skipped
+    ))
+  }
+  list(
+    tables = tables,
+    relationships = relationships,
+    dictionary = dictionary,
+    primary_keys = primary_keys
+  )
+}
+
+# Add imported dictionary entries (keyed by the imported names, cleaned the
+# way table and column names are) without overwriting non-empty user edits
+merge_dictionary <- function(current, imported) {
+  current <- current %||% list()
+  for (k in names(imported)) {
+    parts <- strsplit(k, "|", fixed = TRUE)[[1]]
+    # One name at a time: cleaned together, a column named like its table
+    # would be made unique ("status|status_2")
+    ck <- paste(vapply(parts, janitor::make_clean_names, ""), collapse = "|")
+    e <- current[[ck]] %||% list()
+    # The user's own Private / Not private choice wins; a file that marks a
+    # column restricted still overrides an automatic flag the user rejected
+    decided <- !is.null(e[["private"]])
+    for (f in setdiff(names(imported[[k]]), "private_source")) {
+      if (f == "private" && decided) next
+      have <- e[[f]]
+      empty <- is.null(have) || (is.character(have) && !nzchar(have))
+      if (f == "label" && !is.null(e$business_name) && nzchar(e$business_name)) empty <- FALSE
+      if (empty) {
+        e[[f]] <- imported[[k]][[f]]
+        if (f == "private") e$private_source <- imported[[k]]$private_source
+      }
+    }
+    current[[ck]] <- e
+  }
+  current
 }
 
 # ── App export detection ─────────────────────────────────────

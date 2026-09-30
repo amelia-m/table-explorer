@@ -595,7 +595,8 @@ save_session_json <- function(
   schema_rels,
   settings = list(),
   review = list(),
-  dictionary = list()
+  dictionary = list(),
+  declared_pks = list()
 ) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     return("{}")
@@ -604,7 +605,11 @@ save_session_json <- function(
   # Convert data frames to serializable format
   tables_ser <- lapply(tables, function(df) {
     lapply(df, function(col) {
-      if (inherits(col, c("Date", "POSIXt"))) {
+      if (inherits(col, "POSIXt")) {
+        # Every value with its time, in UTC (as.character drops the time
+        # from values at midnight)
+        format(col, "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+      } else if (inherits(col, "Date") || is.factor(col)) {
         as.character(col)
       } else {
         col
@@ -622,14 +627,40 @@ save_session_json <- function(
     settings = settings,
     # User review decisions: confirmed relationships and suppressed keys
     review = review,
-    # Data dictionary edits (descriptions, business names), keyed
+    # Data dictionary edits (labels, descriptions, privacy), keyed
     # "table" or "table|column"
-    dictionary = dictionary
+    dictionary = dictionary,
+    # Primary keys stated by schema files and databases, table -> columns
+    declared_pks = lapply(declared_pks, as.list),
+    # Column classes, so empty tables and dates come back as they were
+    column_types = lapply(tables, function(df) {
+      as.list(vapply(df, function(col) class(col)[1], ""))
+    })
   )
 
   # na = "null": numeric NAs would otherwise be written as the string "NA"
   # and turn the whole column into text on restore
-  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+  # digits = NA: full precision (the default keeps 4 significant digits)
+  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null", digits = NA)
+}
+
+# A restored column in its saved class; an empty one keeps its type
+session_column <- function(col, type = NULL) {
+  type <- type %||% ""
+  tryCatch(
+    switch(
+      type,
+      integer = as.integer(col),
+      numeric = as.numeric(col),
+      character = ,
+      factor = as.character(col),
+      logical = as.logical(col),
+      Date = as.Date(as.character(col)),
+      POSIXct = as.POSIXct(as.character(col), format = "%Y-%m-%dT%H:%M:%S", tz = "UTC"),
+      if (is.null(col)) logical(0) else col
+    ),
+    error = function(e) col
+  )
 }
 
 restore_session_json <- function(json_text) {
@@ -641,7 +672,8 @@ restore_session_json <- function(json_text) {
       schema_relationships = list(),
       settings = list(),
       review = list(),
-      dictionary = list()
+      dictionary = list(),
+      declared_pks = list()
     ))
   }
 
@@ -656,13 +688,15 @@ restore_session_json <- function(json_text) {
         # tdata is a named list of columns (each column is a list of values)
         # Missing values come back from JSON as null; keep them as NA so
         # every column keeps its length
-        col_list <- lapply(tdata, function(col) {
+        types <- session$column_types[[tname]] %||% list()
+        col_list <- lapply(names(tdata), function(cn) {
+          col <- tdata[[cn]]
           if (is.list(col)) {
-            unlist(lapply(col, function(v) if (is.null(v)) NA else v))
-          } else {
-            col
+            col <- unlist(lapply(col, function(v) if (is.null(v)) NA else v))
           }
+          session_column(col, types[[cn]])
         })
+        names(col_list) <- names(tdata)
         df <- tryCatch(
           as.data.frame(col_list, stringsAsFactors = FALSE),
           error = function(e) as.data.frame(tdata, stringsAsFactors = FALSE)
@@ -679,15 +713,25 @@ restore_session_json <- function(json_text) {
     schema_relationships = session$schema_relationships %||% list(),
     settings = session$settings %||% list(),
     review = session$review %||% list(),
-    dictionary = session$dictionary %||% list()
+    dictionary = session$dictionary %||% list(),
+    declared_pks = lapply(session$declared_pks %||% list(), function(x) as.character(unlist(x)))
   )
 }
 
 # ── Data dictionary ───────────────────────────────────────────
-# One row per column with what the data says (type, nullability, keys,
-# what it references) and what people add (description, business name).
-# `dictionary` holds the edits: a named list keyed "table" (table-level) or
-# "table|column", each entry list(description, business_name).
+# One row per column with what the data says (type, format, missing values,
+# unique values, lengths or range, keys, what it references, examples) and
+# what people add (label, description, units, allowed values, details,
+# privacy). `dictionary` holds the edits: a named list keyed "table"
+# (table-level) or "table|column", plus the reserved ".settings" (see
+# dict_settings() in utils_privacy.R). A column entry may hold:
+#   label, description, units, values ("A = Active; I = Inactive"), details
+#   private        TRUE / FALSE: the user's choice (absent: automatic)
+#   hide_examples  TRUE / FALSE: no examples without calling it private
+#   privacy_review list(state = "confirmed" | "rejected", reason)
+# Older sessions stored the label as `business_name`; it is still read.
+
+dict_text_fields <- c("label", "description", "units", "values", "details")
 
 dict_key <- function(table, column = NULL) {
   if (is.null(column)) table else paste(table, column, sep = "|")
@@ -695,18 +739,59 @@ dict_key <- function(table, column = NULL) {
 
 dict_entry <- function(dictionary, table, column = NULL) {
   e <- dictionary[[dict_key(table, column)]] %||% list()
+  txt <- function(x) if (is.null(x) || length(x) == 0 || is.na(x[[1]])) "" else as.character(x[[1]])
   list(
-    description = e$description %||% "",
-    business_name = e$business_name %||% ""
+    label = txt(e$label %||% e$business_name),
+    description = txt(e$description),
+    units = txt(e$units),
+    values = txt(e$values),
+    details = txt(e$details),
+    private = if (is.logical(e[["private"]]) && length(e[["private"]]) == 1 && !is.na(e[["private"]])) e[["private"]] else NA,
+    hide_examples = if (is.logical(e$hide_examples) && length(e$hide_examples) == 1 && !is.na(e$hide_examples)) e$hide_examples else NA
   )
 }
 
-# Example values are left out for columns whose name suggests personal data
-dict_sensitive_re <- paste0(
-  "(^|_)(ssn|sin|password|passwd|pwd|dob|birth|birthdate|email|e_mail|",
-  "phone|mobile|cell|address|street|zip|postcode|first_name|last_name|",
-  "full_name|surname|name)(_|$)"
-)
+# TRUE when an entry holds nothing worth keeping
+dict_entry_empty <- function(e) {
+  texts <- unlist(lapply(c(dict_text_fields, "business_name"), function(f) e[[f]] %||% ""))
+  all(!nzchar(texts)) && is.null(e[["private"]]) && is.null(e$hide_examples) &&
+    is.null(e$privacy_review)
+}
+
+# A readable format: the value fingerprint for text, else from the type
+dict_format <- function(v) {
+  if (inherits(v, "POSIXt")) return("datetime")
+  if (inherits(v, "Date")) return("date")
+  if (is.logical(v)) return("true/false")
+  if (is.numeric(v)) {
+    x <- v[!is.na(v)]
+    if (length(x) == 0) return("number")
+    return(if (all(x == round(x))) "whole number" else "decimal")
+  }
+  fp <- format_fingerprint(v)
+  labels <- c(
+    uuid = "UUID", email = "email address", iso_ts = "ISO timestamp",
+    iso_date = "ISO date", zip_us = "US ZIP code", phone = "phone number",
+    hex_color = "hex colour", int_code = "numeric code", alpha_code = "letter code"
+  )
+  if (!is.null(fp) && fp %in% names(labels)) return(unname(labels[fp]))
+  "text"
+}
+
+dict_num <- function(x) {
+  if (inherits(x, c("Date", "POSIXt"))) return(as.character(x))
+  format(signif(x, 6), trim = TRUE, scientific = FALSE, drop0trailing = TRUE)
+}
+
+# Up to n examples spread across the sorted distinct values
+dict_examples <- function(v, n = 5, width = 30) {
+  # Sorted on the values themselves, so 2 comes before 10
+  vals <- as.character(sort(unique(v[!is.na(v)])))
+  vals <- vals[nzchar(trimws(vals))]
+  if (length(vals) == 0) return(character(0))
+  idx <- unique(round(seq(1, length(vals), length.out = min(n, length(vals)))))
+  substr(vals[idx], 1, width)
+}
 
 build_data_dictionary <- function(
   tables,
@@ -719,14 +804,21 @@ build_data_dictionary <- function(
   empty <- data.frame(
     table = character(0), table_description = character(0),
     column = character(0), position = integer(0), type = character(0),
-    nullable = logical(0), pct_missing = numeric(0), n_unique = integer(0),
-    keys = character(0), references = character(0), reference_source = character(0),
-    examples = character(0), description = character(0),
-    business_name = character(0), stringsAsFactors = FALSE
+    format = character(0), nullable = logical(0), pct_missing = numeric(0),
+    n_unique = integer(0), len_min = integer(0), len_median = numeric(0),
+    len_max = integer(0), min = character(0), median = character(0),
+    max = character(0), keys = character(0), references = character(0),
+    reference_source = character(0), private = logical(0),
+    privacy_status = character(0), privacy_reason = character(0),
+    examples = character(0), examples_note = character(0),
+    label = character(0), description = character(0), units = character(0),
+    values = character(0), details = character(0), stringsAsFactors = FALSE
   )
   if (length(tables) == 0) {
     return(empty)
   }
+  settings <- dict_settings(dictionary)
+  examples_on <- isTRUE(examples) && !identical(settings$examples, "off")
   # Documentation lists links worth relying on: low-confidence detected
   # links (demoted or ambiguous) stay out
   rels <- Filter(function(r) {
@@ -741,25 +833,51 @@ build_data_dictionary <- function(
     lapply(seq_len(nrow(cols)), function(i) {
       cn <- cols$name[i]
       v <- df[[cn]]
+      if (is.factor(v)) v <- as.character(v)
       n <- length(v)
+      present <- v[!is.na(v)]
       refs <- Filter(function(r) r$from_col == cn, out_rels)
-      ex <- ""
-      if (isTRUE(examples) && !grepl(dict_sensitive_re, clean_name(cn)) && n > 0) {
-        vals <- unique(as.character(v[!is.na(v)]))
-        vals <- vals[nzchar(trimws(vals))]
-        vals <- substr(head(vals, 3), 1, 30)
-        ex <- paste(vals, collapse = ", ")
-      }
       e <- dict_entry(dictionary, t$name, cn)
+      p <- dict_privacy(dictionary, t$name, cn, v)
+
+      # Text lengths never identify anyone; a numeric or date range can
+      # (ages, birth dates), so it is left out for private columns
+      lens <- if (is.character(v) && length(present) > 0) nchar(present) else NULL
+      ranged <- (is.numeric(v) || inherits(v, c("Date", "POSIXt"))) && length(present) > 0
+      rng <- c("", "", "")
+      if (ranged) {
+        rng <- if (p$private) rep("hidden", 3) else {
+          c(dict_num(min(present)), dict_num(stats::median(present)), dict_num(max(present)))
+        }
+      }
+
+      note <- if (p$private) {
+        "private"
+      } else if (isTRUE(e$hide_examples)) {
+        "hidden by you"
+      } else if (!examples_on && !dict_examples_forced(dictionary, t$name, cn, v)) {
+        "examples off"
+      } else {
+        ""
+      }
+      ex <- if (!nzchar(note) && n > 0) paste(dict_examples(v), collapse = ", ") else ""
+
       data.frame(
         table = t$name,
         table_description = t_desc,
         column = cn,
         position = match(cn, names(df)),
         type = cols$type[i],
+        format = dict_format(v),
         nullable = isTRUE(cols$nullable[i]),
         pct_missing = if (n > 0) round(100 * mean(is.na(v)), 1) else NA_real_,
-        n_unique = if (n > 0) length(unique(v[!is.na(v)])) else NA_integer_,
+        n_unique = if (n > 0) length(unique(present)) else NA_integer_,
+        len_min = if (length(lens)) min(lens) else NA_integer_,
+        len_median = if (length(lens)) stats::median(lens) else NA_real_,
+        len_max = if (length(lens)) max(lens) else NA_integer_,
+        min = rng[1],
+        median = rng[2],
+        max = rng[3],
         keys = paste(c(
           if (cols$pk[i]) "PK",
           if (!is.na(cols$fk_index[i])) paste0("FK", cols$fk_index[i]),
@@ -769,9 +887,16 @@ build_data_dictionary <- function(
           paste0(r$to_table, ".", r$to_col %||% r$from_col)
         }, ""), collapse = "; "),
         reference_source = paste(vapply(refs, rel_source, ""), collapse = "; "),
+        private = p$private,
+        privacy_status = p$status,
+        privacy_reason = p$reason,
         examples = ex,
+        examples_note = note,
+        label = e$label,
         description = e$description,
-        business_name = e$business_name,
+        units = e$units,
+        values = e$values,
+        details = e$details,
         stringsAsFactors = FALSE
       )
     })
@@ -786,8 +911,26 @@ build_data_dictionary <- function(
   dd
 }
 
-# Markdown: one section per table, with its description, a column table and
-# what it links to
+# "length 2–12 (median 6)" for text, "1 – 40 (median 7)" for numbers and
+# dates, "hidden (private)" when the range is withheld
+dict_range_text <- function(dd) {
+  vapply(seq_len(nrow(dd)), function(i) {
+    if (!is.na(dd$len_min[i])) {
+      return(sprintf(
+        "length %s–%s (median %s)",
+        dd$len_min[i], dd$len_max[i], dict_num(dd$len_median[i])
+      ))
+    }
+    if (identical(dd$min[i], "hidden")) return("hidden (private)")
+    if (nzchar(dd$min[i])) {
+      return(sprintf("%s – %s (median %s)", dd$min[i], dd$max[i], dd$median[i]))
+    }
+    ""
+  }, "")
+}
+
+# Markdown: one section per table, with its description, a column table,
+# notes (units, allowed values, details, privacy) and what it links to
 generate_data_dictionary_md <- function(dd, title = "Data dictionary") {
   cell <- function(x) {
     x <- ifelse(is.na(x), "", as.character(x))
@@ -806,24 +949,39 @@ generate_data_dictionary_md <- function(dd, title = "Data dictionary") {
     }
     lines <- c(
       lines,
-      "| Column | Business name | Type | Keys | Nullable | Missing % | Unique | Description | Examples |",
-      "|---|---|---|---|---|---|---|---|---|"
+      "| Column | Label | Type | Format | Keys | Nullable | Missing % | Unique | Range | Description | Examples |",
+      "|---|---|---|---|---|---|---|---|---|---|---|"
     )
+    rng <- dict_range_text(d)
     for (i in seq_len(nrow(d))) {
+      ex <- if (nzchar(d$examples_note[i])) paste0("_", d$examples_note[i], "_") else cell(d$examples[i])
       lines <- c(lines, paste0(
         "| ", paste(c(
           paste0("`", cell(d$column[i]), "`"),
-          cell(d$business_name[i]),
+          cell(d$label[i]),
           cell(d$type[i]),
+          cell(d$format[i]),
           cell(d$keys[i]),
           if (d$nullable[i]) "yes" else "no",
           cell(d$pct_missing[i]),
           cell(d$n_unique[i]),
+          cell(rng[i]),
           cell(d$description[i]),
-          cell(d$examples[i])
+          ex
         ), collapse = " | "), " |"
       ))
     }
+    notes <- character(0)
+    for (i in seq_len(nrow(d))) {
+      bits <- c(
+        if (nzchar(d$units[i])) paste0("units: ", cell(d$units[i])),
+        if (nzchar(d$values[i])) paste0("values: ", cell(d$values[i])),
+        if (d$private[i]) privacy_status_labels[[d$privacy_status[i]]],
+        if (nzchar(d$details[i])) cell(d$details[i])
+      )
+      if (length(bits)) notes <- c(notes, sprintf("- `%s`: %s", d$column[i], paste(bits, collapse = "; ")))
+    }
+    if (length(notes)) lines <- c(lines, "", "**Notes**", "", notes)
     linked <- d[nzchar(d$references), , drop = FALSE]
     if (nrow(linked) > 0) {
       lines <- c(lines, "", "**References**", "")
@@ -840,4 +998,296 @@ generate_data_dictionary_md <- function(dd, title = "Data dictionary") {
     lines <- c(lines, "")
   }
   paste(lines, collapse = "\n")
+}
+
+# ── data-dict YAML ────────────────────────────────────────────
+# The data-dict.yaml format (https://data-dict.tidyverse.org/, spec 0.1.0),
+# written in plain R so the app doesn't need the data-dict tool. The whole
+# mapping lives here; if the spec changes, this and
+# parse_data_dict_schema() in utils_file_readers.R are what change.
+#
+# - Key columns that hold numbers are number(id); a number with units is
+#   number(quantity) (the spec only allows units there), other numbers are
+#   plain number. Columns with allowed values are enums.
+# - Private columns get display: restricted, and neither real examples nor a
+#   real range: an open range, or a todo asking for fake examples.
+# - Declared, manual and confirmed links are relationships (with a
+#   foreign_key constraint on the column); unreviewed detected links are
+#   listed under the top-level todo, since the spec has no provenance field.
+
+data_dict_spec_version <- "0.1.0"
+
+# "A = Active; I = Inactive" -> list(A = "Active", I = "Inactive");
+# "A; B; C" -> c("A", "B", "C")
+dict_parse_values <- function(txt) {
+  parts <- trimws(strsplit(txt %||% "", ";", fixed = TRUE)[[1]])
+  parts <- parts[nzchar(parts)]
+  if (length(parts) == 0) return(NULL)
+  has_label <- grepl("=", parts, fixed = TRUE)
+  codes <- trimws(sub("=.*$", "", parts))
+  labels <- ifelse(has_label, trimws(sub("^[^=]*=", "", parts)), codes)
+  # Codes must be non-empty and distinct (the first label wins)
+  keep <- nzchar(codes) & !duplicated(codes)
+  codes <- codes[keep]
+  if (length(codes) == 0) return(NULL)
+  if (!any(has_label[keep])) return(codes)
+  stats::setNames(as.list(labels[keep]), codes)
+}
+
+# The reverse, for imports
+dict_format_values <- function(values) {
+  if (is.null(values) || length(values) == 0) return("")
+  if (!is.null(names(values)) && all(nzchar(names(values)))) {
+    return(paste(paste(names(values), "=", unlist(values)), collapse = "; "))
+  }
+  paste(unlist(values), collapse = "; ")
+}
+
+# Stand-ins that match a withheld column's type and format
+dict_placeholder_examples <- function(v, format) {
+  if (is.numeric(v)) return(list(0L))
+  switch(
+    format,
+    "email address" = list("person@example.com"),
+    "phone number" = list("555-0100"),
+    "US ZIP code" = list("00000"),
+    "UUID" = list("00000000-0000-0000-0000-000000000000"),
+    "ISO date" = list("2000-01-01"),
+    "numeric code" = list("000"),
+    "letter code" = list("XX"),
+    list("(withheld)")
+  )
+}
+
+generate_data_dict_yaml <- function(
+  tables,
+  rels,
+  pks,
+  composite_pks = NULL,
+  dictionary = list(),
+  name = NULL
+) {
+  if (!requireNamespace("yaml", quietly = TRUE)) {
+    stop("Install the 'yaml' package to export data-dict YAML: install.packages('yaml')")
+  }
+  dd <- build_data_dictionary(tables, rels, pks, composite_pks, dictionary = dictionary)
+  # A table with no columns can't be described (the spec needs at least one)
+  empty_tables <- names(Filter(function(df) ncol(df) == 0, tables))
+  tables <- tables[!names(tables) %in% empty_tables]
+  kept <- Filter(function(r) {
+    !(rel_source(r) == "detected" && identical(r$confidence, "low"))
+  }, rels %||% list())
+  model <- erd_model(tables, kept, pks, composite_pks)
+  # One entry per join, keeping the most reviewed source
+  src_rank <- c(declared = 1L, manual = 2L, confirmed = 3L, detected = 4L)
+  mrels <- model$rels
+  if (length(mrels) > 0) {
+    mrels <- mrels[order(src_rank[vapply(mrels, rel_source, "")])]
+    mrels <- mrels[!duplicated(vapply(mrels, rel_key, ""))]
+  }
+  # The spec wants a foreign key to point at a primary key, and the "one"
+  # side of a join to be a key or unique. A column of a composite key is
+  # neither on its own.
+  single_pk <- function(t) if (sum(t$columns$pk) == 1) t$columns$name[t$columns$pk] else character(0)
+  pk_cols <- unlist(lapply(model$tables, function(t) {
+    pk <- single_pk(t)
+    if (length(pk)) paste(t$name, pk, sep = "|")
+  }))
+  key_cols <- c(pk_cols, unlist(lapply(model$tables, function(t) {
+    uk <- t$columns$name[t$columns$uk & !t$columns$pk]
+    if (length(uk)) paste(t$name, uk, sep = "|")
+  })))
+  to_key <- function(r) paste(r$to_table, r$to_col, sep = "|") %in% key_cols
+  reviewed <- Filter(function(r) rel_source(r) != "detected" && to_key(r), mrels)
+  # Reviewed links the spec can't express as a join stay visible as a todo
+  non_key <- Filter(function(r) rel_source(r) != "detected" && !to_key(r), mrels)
+  unreviewed <- Filter(function(r) rel_source(r) == "detected", mrels)
+  fk_cols <- unique(unlist(lapply(reviewed, function(r) {
+    if (paste(r$to_table, r$to_col, sep = "|") %in% pk_cols) paste(r$from_table, r$from_col, sep = "|")
+  })))
+
+  settings <- dict_settings(dictionary)
+  examples_on <- !identical(settings$examples, "off")
+  iso <- function(x) {
+    if (inherits(x, "POSIXt")) format(x, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC") else as.character(x)
+  }
+
+  column_yaml <- function(t, i) {
+    row <- dd[dd$table == t$name & dd$column == t$columns$name[i], , drop = FALSE]
+    cn <- t$columns$name[i]
+    v <- tables[[t$name]][[cn]]
+    if (is.factor(v)) v <- as.character(v)
+    present <- v[!is.na(v)]
+    is_key <- t$columns$pk[i] || !is.na(t$columns$fk_index[i])
+    allowed <- dict_parse_values(row$values)
+    units <- row$units
+    details <- row$details
+    todo <- character(0)
+
+    # The spec's enums hold text; codes for other types go in the details
+    if (!is.null(allowed) && !is.character(v)) {
+      codes <- if (is.list(allowed)) paste(names(allowed), "=", unlist(allowed)) else allowed
+      details <- paste(c(if (nzchar(details)) details, paste0("Allowed values: ", paste(codes, collapse = "; "))), collapse = "\n\n")
+      allowed <- NULL
+    }
+    type <- if (!is.null(allowed)) {
+      "enum"
+    } else if (is.logical(v)) {
+      "boolean"
+    } else if (inherits(v, "POSIXt")) {
+      "datetime"
+    } else if (inherits(v, "Date")) {
+      "date"
+    } else if (is.numeric(v)) {
+      if (is_key) "number(id)" else if (nzchar(units)) "number(quantity)" else "number"
+    } else {
+      "string"
+    }
+    if (nzchar(units) && type != "number(quantity)") {
+      # The spec allows units on quantities only; keep them in the details
+      details <- paste(c(if (nzchar(details)) details, paste0("Units: ", units)), collapse = "\n\n")
+      units <- ""
+    }
+
+    constraints <- c(
+      if (t$columns$pk[i]) "primary_key",
+      if (paste(t$name, cn, sep = "|") %in% fk_cols) "foreign_key",
+      # nullable is NA for a table without rows: nothing is known
+      if (!t$columns$pk[i] && isFALSE(t$columns$nullable[i])) "required",
+      if (!t$columns$pk[i] && isTRUE(t$columns$uk[i])) "unique"
+    )
+
+    needs_range <- type %in% c("number(quantity)", "number(ordinal)", "date", "datetime")
+    range <- NULL
+    if (needs_range) {
+      range <- if (row$private || length(present) == 0) {
+        list(-Inf, Inf)
+      } else if (is.numeric(v)) {
+        list(min(present), max(present))
+      } else {
+        list(iso(min(present)), iso(max(present)))
+      }
+      if (row$private) todo <- c(todo, "Range withheld: private column.")
+    }
+
+    examples <- NULL
+    if (!type %in% c("boolean", "enum") && !needs_range) {
+      show <- !nzchar(row$examples_note)
+      ex <- if (show) dict_examples(if (is.numeric(v)) v[is.finite(v)] else v) else character(0)
+      if (length(ex) > 0) {
+        examples <- if (is.numeric(v)) {
+          x <- as.numeric(ex)
+          if (all(x == round(x))) {
+            # Whole numbers written as such (not 1.0 or 9.8765432e+09),
+            # including ones too large for an R integer
+            lapply(format(x, scientific = FALSE, trim = TRUE), structure, class = "verbatim")
+          } else {
+            as.list(x)
+          }
+        } else {
+          as.list(ex)
+        }
+      } else {
+        # The spec requires examples; a withheld column gets placeholders
+        examples <- dict_placeholder_examples(v, row$format)
+        todo <- c(todo, if (row$private) {
+          "Examples are placeholders: real values withheld (private column)."
+        } else if (show) {
+          "Examples are placeholders: no values to show (no data loaded, or all blank)."
+        } else {
+          "Examples are placeholders: real values withheld in Table Relationship Explorer."
+        })
+      }
+    }
+    if (identical(row$privacy_status, "auto_unreviewed")) {
+      todo <- c(todo, sprintf("Confirm this column is personal data (%s).", row$privacy_reason))
+    }
+
+    out <- list(name = cn)
+    if (nzchar(row$label)) out$label <- row$label
+    out$type <- type
+    if (nzchar(row$description)) out$description <- row$description
+    if (nzchar(details)) out$details <- details
+    if (row$private) out$display <- "restricted"
+    if (length(constraints)) out$constraints <- as.list(constraints)
+    if (nzchar(units)) out$units <- units
+    if (!is.null(allowed)) out$values <- if (is.list(allowed)) allowed else as.list(allowed)
+    if (!is.null(range)) out$range <- range
+    if (!is.null(examples)) out$examples <- examples
+    if (length(todo)) out$todo <- paste(todo, collapse = "\n")
+    out
+  }
+
+  table_names <- vapply(model$tables, `[[`, "", "name")
+  alias_for <- function(base) {
+    a <- base
+    while (a %in% table_names) a <- paste0(a, "_")
+    a
+  }
+  rel_yaml <- function(r) {
+    left <- r$from_table
+    right <- r$to_table
+    out <- list()
+    if (isTRUE(r$self_ref)) {
+      left <- alias_for("child")
+      right <- alias_for("parent")
+      aliases <- list()
+      aliases[[left]] <- r$from_table
+      aliases[[right]] <- r$to_table
+    }
+    out$join <- sprintf("%s.%s = %s.%s", left, r$from_col, right, r$to_col)
+    if (isTRUE(r$self_ref)) out$aliases <- aliases
+    one_to_one <- identical(r$child_max, "one") &&
+      paste(r$from_table, r$from_col, sep = "|") %in% key_cols
+    out$cardinality <- if (one_to_one) "one-to-one" else "many-to-one"
+    out$description <- switch(
+      rel_source(r),
+      manual = "Added by hand in Table Relationship Explorer.",
+      confirmed = "Detected and confirmed in Table Relationship Explorer.",
+      NULL
+    )
+    out
+  }
+
+  doc <- list(
+    `$version` = data_dict_spec_version,
+    `$learn_more` = "https://data-dict.tidyverse.org/"
+  )
+  if (!is.null(name)) doc$name <- name
+  doc$tables <- lapply(unname(model$tables), function(t) {
+    te <- dict_entry(dictionary, t$name)
+    out <- list(name = t$name)
+    if (nzchar(te$label)) out$label <- te$label
+    if (nzchar(te$description)) out$description <- te$description
+    if (nzchar(te$details)) out$details <- te$details
+    out$columns <- lapply(seq_len(nrow(t$columns)), function(i) column_yaml(t, i))
+    out
+  })
+  # A single-table dictionary is described at the top level
+  if (length(doc$tables) == 1) {
+    for (f in c("label", "description", "details")) {
+      doc[[f]] <- doc$tables[[1]][[f]]
+      doc$tables[[1]][[f]] <- NULL
+    }
+    doc <- doc[c(setdiff(names(doc), "tables"), "tables")]
+  }
+  if (length(reviewed)) doc$relationships <- lapply(unname(reviewed), rel_yaml)
+  link <- function(r) sprintf("- %s.%s = %s.%s", r$from_table, r$from_col, r$to_table, r$to_col)
+  todo <- c(
+    if (length(unreviewed)) c(
+      "Unconfirmed links found by detection (confirm or remove, then move to relationships):",
+      vapply(unreviewed, function(r) {
+        paste0(link(r), " (", r$confidence %||% "unknown", " confidence)")
+      }, "")
+    ),
+    if (length(non_key)) c(
+      "Links to a column that isn't a single-column key or unique (the spec can't express them as joins):",
+      vapply(non_key, function(r) paste0(link(r), " (", rel_source(r), ")"), "")
+    ),
+    if (length(empty_tables)) paste0(
+      "Tables with no columns, left out: ", paste(empty_tables, collapse = ", ")
+    )
+  )
+  if (length(todo)) doc$todo <- paste(todo, collapse = "\n")
+  yaml::as.yaml(doc, indent.mapping.sequence = TRUE, column.major = FALSE)
 }

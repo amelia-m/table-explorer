@@ -24,7 +24,8 @@ mod_export_ui <- function(id) {
         downloadButton(ns("dl_dbml"), "DBML (.dbml)", class = "dl-btn"),
         downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn"),
         downloadButton(ns("dl_dict_csv"), "Data dictionary (.csv)", class = "dl-btn"),
-        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn")
+        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn"),
+        downloadButton(ns("dl_dict_yaml"), "data-dict (.yaml)", class = "dl-btn")
       ),
       checkboxInput(
         ns("dbt_constraints"),
@@ -51,6 +52,11 @@ mod_export_ui <- function(id) {
           buttonLabel = "Restore Session",
           placeholder = "No file selected"
         )
+      ),
+      div(
+        class = "dict-hint",
+        "A saved session holds all the loaded data, including columns marked ",
+        "private in the Data Dictionary. Store and share it like the original data."
       )
     )
   )
@@ -69,7 +75,8 @@ mod_export_ui <- function(id) {
 #' @param confirmed_rels_rv reactiveVal of confirmed relationships (by key)
 #' @param detect_method reactive returning the current detect_method setting
 #' @param min_confidence reactive returning the current min_confidence setting
-#' @param dictionary_rv reactiveVal of data dictionary edits (descriptions)
+#' @param dictionary_rv reactiveVal of data dictionary edits
+#' @param declared_pks_rv reactiveVal of declared primary keys (table -> columns)
 #' @param rel_sources reactive: which relationships to export ("both",
 #'   "declared", "detected"); the saved session always keeps them all
 #' @noRd
@@ -86,7 +93,8 @@ mod_export_server <- function(
   detect_method,
   min_confidence,
   rel_sources = reactive("both"),
-  dictionary_rv = reactiveVal(list())
+  dictionary_rv = reactiveVal(list()),
+  declared_pks_rv = reactiveVal(list())
 ) {
   moduleServer(id, function(input, output, session) {
     export_rels_rv <- reactive(filter_rel_sources(all_rels_rv(), rel_sources()))
@@ -158,6 +166,21 @@ mod_export_server <- function(
       filename = "data_dictionary.md",
       content = function(file) writeLines(generate_data_dictionary_md(dict_df()), file)
     )
+    output$dl_dict_yaml <- downloadHandler(
+      filename = "data-dict.yaml",
+      content = function(file) {
+        writeLines(
+          generate_data_dict_yaml(
+            all_tables_rv(),
+            export_rels_rv(),
+            pk_map_rv(),
+            composite_pk_map_rv(),
+            dictionary = dictionary_rv()
+          ),
+          file
+        )
+      }
+    )
 
     output$dl_elk <- downloadHandler(
       filename = "erd.elk.json",
@@ -193,7 +216,8 @@ mod_export_server <- function(
             confirmed = unname(confirmed_rels_rv()),
             suppressed = as.list(false_positives_rv())
           ),
-          dictionary = dictionary_rv()
+          dictionary = dictionary_rv(),
+          declared_pks = declared_pks_rv()
         )
         writeLines(json_str, file)
       }
@@ -236,8 +260,11 @@ mod_export_server <- function(
           vapply(confirmed, rel_key, character(1))
         ))
       }
-      if (length(result$dictionary) > 0) {
-        dictionary_rv(result$dictionary)
+      # Replaced along with the tables (even when empty), so an older
+      # session's privacy decisions never apply to the restored data
+      if (length(result$tables) > 0) {
+        dictionary_rv(result$dictionary %||% list())
+        declared_pks_rv(result$declared_pks %||% list())
       }
       suppressed <- unlist(result$review$suppressed %||% list())
       if (length(suppressed) > 0) {

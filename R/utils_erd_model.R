@@ -111,6 +111,16 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
 
   primary_keys <- lapply(names(tables), function(t) {
     df <- tables[[t]]
+    # A key a schema or database states (apply_declared_pks) is used
+    # whatever its type, as long as the loaded data doesn't contradict it
+    # (a stale declaration for data loaded later under the same name)
+    if (isTRUE(attr(pk_map[[t]], "declared"))) {
+      declared <- intersect(as.character(pk_map[[t]]), names(df))
+      holds <- nrow(df) == 0 || all(vapply(declared, function(cn) {
+        !anyNA(df[[cn]]) && !anyDuplicated(df[[cn]])
+      }, logical(1)))
+      if (holds) return(declared)
+    }
     cands <- intersect(pk_map[[t]] %||% character(0), names(df))
     # detect_pks also flags PK-named columns that aren't unique; with data,
     # only a truly unique column can be the primary key
