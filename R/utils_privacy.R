@@ -159,7 +159,10 @@ privacy_reset <- function(dictionary, tables = NULL) {
 # for the data they were chosen for: each carries a hash of the column
 # (public_for, examples_for). New data under the same name (an overwrite, a
 # reload, another upload) goes back to the safe side.
-privacy_data_hash <- function(values) rlang::hash(values)
+privacy_data_hash <- function(values) {
+  # Factors are compared as text, the way the dictionary reads them
+  rlang::hash(if (is.factor(values)) as.character(values) else values)
+}
 
 privacy_holds <- function(stamp, values) {
   is.null(values) || identical(stamp, privacy_data_hash(values))
@@ -207,7 +210,10 @@ dict_privacy <- function(dictionary, table, column, values = NULL) {
     if (identical(review$state, "confirmed")) {
       return(list(private = TRUE, status = "confirmed", reason = reason, needs_review = FALSE))
     }
-    if (identical(review$state, "rejected")) {
+    # "Not personal" lets values show, so it holds only for the data it
+    # was decided for (reviews saved without a stamp hold as before)
+    if (identical(review$state, "rejected") &&
+      (is.null(review$data_for) || privacy_holds(review$data_for, values))) {
       return(list(private = FALSE, status = "not_personal", reason = reason, needs_review = FALSE))
     }
   }
@@ -254,7 +260,11 @@ privacy_review_set <- function(dictionary, tables, keys, state) {
     cn <- paste(parts[-1], collapse = "|")
     guess <- privacy_guess(cn, tables[[t]][[cn]])
     e <- dictionary[[k]] %||% list()
+    values <- tables[[t]][[cn]]
     e$privacy_review <- list(state = state, reason = guess$reason %||% "")
+    if (identical(state, "rejected") && !is.null(values)) {
+      e$privacy_review$data_for <- privacy_data_hash(values)
+    }
     dictionary[[k]] <- e
   }
   dictionary

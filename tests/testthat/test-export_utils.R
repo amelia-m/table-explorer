@@ -932,3 +932,20 @@ test_that("sessions keep empty tables and column types", {
   expect_s3_class(back$d$day, "Date")
   expect_true(is.na(back$d$day[2]))
 })
+
+test_that("sessions keep full precision and datetimes", {
+  t <- list(x = data.frame(
+    v = c(1234.5678, 0.000123456),
+    at = as.POSIXct(c("2024-01-01 00:00:00", "2024-01-01 10:00:00"), tz = "UTC")
+  ))
+  back <- restore_session_json(save_session_json(t, list(), list(), list()))$tables$x
+  expect_equal(back$v, t$x$v)
+  expect_equal(format(back$at, "%H:%M:%S", tz = "UTC"), c("00:00:00", "10:00:00"))
+})
+
+test_that("a declared key the loaded data contradicts is not used", {
+  t <- list(a = data.frame(code = c(1L, 1L, 2L), id = 1:3))
+  pks <- apply_declared_pks(list(a = "id"), list(a = "code"), t)
+  m <- erd_model(t, list(), pks)
+  expect_false("code" %in% m$tables$a$columns$name[m$tables$a$columns$pk])
+})
