@@ -1,0 +1,21 @@
+# Pin line endings for every clone, whatever core.autocrlf says locally.
+* text=auto eol=lf
+
+# Windows scripts need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary artefacts git might guess wrong.
+*.rds binary
+*.RData binary
+*.rda binary
+*.xlsx binary
+*.xlsm binary
+*.accdb binary
+*.mdb binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
