@@ -22,7 +22,14 @@ mod_export_ui <- function(id) {
         downloadButton(ns("dl_dbt_yaml"), "dbt schema.yml", class = "dl-btn"),
         downloadButton(ns("dl_mermaid"), "Mermaid (.mmd)", class = "dl-btn"),
         downloadButton(ns("dl_dbml"), "DBML (.dbml)", class = "dl-btn"),
-        downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn")
+        downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn"),
+        downloadButton(ns("dl_dict_csv"), "Data dictionary (.csv)", class = "dl-btn"),
+        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn")
+      ),
+      checkboxInput(
+        ns("dbt_constraints"),
+        "dbt: include constraints (dbt 1.9+; PKs and declared/confirmed FKs)",
+        value = FALSE
       ),
       div(
         style = "font-size:11px;color:var(--text-secondary);margin:-8px 0 12px;line-height:1.5;",
@@ -62,6 +69,9 @@ mod_export_ui <- function(id) {
 #' @param confirmed_rels_rv reactiveVal of confirmed relationships (by key)
 #' @param detect_method reactive returning the current detect_method setting
 #' @param min_confidence reactive returning the current min_confidence setting
+#' @param dictionary_rv reactiveVal of data dictionary edits (descriptions)
+#' @param rel_sources reactive: which relationships to export ("both",
+#'   "declared", "detected"); the saved session always keeps them all
 #' @noRd
 mod_export_server <- function(
   id,
@@ -74,12 +84,16 @@ mod_export_server <- function(
   false_positives_rv,
   confirmed_rels_rv,
   detect_method,
-  min_confidence
+  min_confidence,
+  rel_sources = reactive("both"),
+  dictionary_rv = reactiveVal(list())
 ) {
   moduleServer(id, function(input, output, session) {
+    export_rels_rv <- reactive(filter_rel_sources(all_rels_rv(), rel_sources()))
+
     output$dl_rels_csv <- downloadHandler(
       filename = "table_relationships.csv",
-      content = .rels_csv_content(all_rels_rv)
+      content = .rels_csv_content(export_rels_rv)
     )
 
     output$dl_dbt_yaml <- downloadHandler(
@@ -87,9 +101,11 @@ mod_export_server <- function(
       content = function(file) {
         yaml_str <- generate_dbt_yaml(
           all_tables_rv(),
-          all_rels_rv(),
+          export_rels_rv(),
           pk_map_rv(),
-          composite_pk_map_rv()
+          composite_pk_map_rv(),
+          dictionary = dictionary_rv(),
+          constraints = isTRUE(input$dbt_constraints)
         )
         writeLines(yaml_str, file)
       }
@@ -100,9 +116,10 @@ mod_export_server <- function(
       content = function(file) {
         mmd_str <- generate_mermaid_erd(
           all_tables_rv(),
-          all_rels_rv(),
+          export_rels_rv(),
           pk_map_rv(),
-          composite_pk_map_rv()
+          composite_pk_map_rv(),
+          dictionary = dictionary_rv()
         )
         writeLines(mmd_str, file)
       }
@@ -114,13 +131,32 @@ mod_export_server <- function(
         writeLines(
           generate_dbml(
             all_tables_rv(),
-            all_rels_rv(),
+            export_rels_rv(),
             pk_map_rv(),
-            composite_pk_map_rv()
+            composite_pk_map_rv(),
+            dictionary = dictionary_rv()
           ),
           file
         )
       }
+    )
+
+    dict_df <- reactive({
+      build_data_dictionary(
+        all_tables_rv(),
+        export_rels_rv(),
+        pk_map_rv(),
+        composite_pk_map_rv(),
+        dictionary = dictionary_rv()
+      )
+    })
+    output$dl_dict_csv <- downloadHandler(
+      filename = "data_dictionary.csv",
+      content = function(file) write.csv(dict_df(), file, row.names = FALSE, na = "")
+    )
+    output$dl_dict_md <- downloadHandler(
+      filename = "data_dictionary.md",
+      content = function(file) writeLines(generate_data_dictionary_md(dict_df()), file)
     )
 
     output$dl_elk <- downloadHandler(
@@ -129,7 +165,7 @@ mod_export_server <- function(
         writeLines(
           generate_elk_json(
             all_tables_rv(),
-            all_rels_rv(),
+            export_rels_rv(),
             pk_map_rv(),
             composite_pk_map_rv()
           ),
@@ -150,12 +186,14 @@ mod_export_server <- function(
           schema_rels = schema_rels_rv(),
           settings = list(
             detect_method = detect_method(),
-            min_confidence = min_confidence()
+            min_confidence = min_confidence(),
+            rel_sources = rel_sources()
           ),
           review = list(
             confirmed = unname(confirmed_rels_rv()),
             suppressed = as.list(false_positives_rv())
-          )
+          ),
+          dictionary = dictionary_rv()
         )
         writeLines(json_str, file)
       }
@@ -197,6 +235,9 @@ mod_export_server <- function(
           confirmed,
           vapply(confirmed, rel_key, character(1))
         ))
+      }
+      if (length(result$dictionary) > 0) {
+        dictionary_rv(result$dictionary)
       }
       suppressed <- unlist(result$review$suppressed %||% list())
       if (length(suppressed) > 0) {

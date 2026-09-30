@@ -74,6 +74,26 @@ mod_detection_ui <- function(id) {
       style = "font-size: 11px; color: var(--text-faint); margin-top: -6px; line-height: 1.5;",
       "When no single-column PK is found, try combinations of 2\u20133 columns",
       "whose values together uniquely identify each row."
+    ),
+    selectInput(
+      ns("rel_sources"),
+      "Relationships to show:",
+      choices = c(
+        "Declared + detected" = "both",
+        "Declared only (incl. manual)" = "declared",
+        "Detected only" = "detected"
+      ),
+      selected = "both"
+    ),
+    checkboxInput(
+      ns("hide_detected_on_declared"),
+      "Hide detected links on columns that already have a declared one",
+      value = FALSE
+    ),
+    div(
+      style = "font-size: 11px; color: var(--text-faint); margin-top: -6px; line-height: 1.5;",
+      "Declared = from a schema file, database or Access file. Keep detected ",
+      "links too when the documentation may be incomplete."
     )
   )
 }
@@ -374,7 +394,9 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       scan_request_rv = scan_request_rv,
       detection_settings_rv = detection_settings_rv,
       enable_composite_pk = reactive(isTRUE(input$enable_composite_pk)),
-      detect_method = reactive(input$detect_method %||% "both")
+      detect_method = reactive(input$detect_method %||% "both"),
+      rel_sources = reactive(input$rel_sources %||% "both"),
+      hide_detected_on_declared = reactive(isTRUE(input$hide_detected_on_declared))
     )
   })
 }

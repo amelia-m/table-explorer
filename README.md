@@ -22,10 +22,11 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **ERD Diagram** | Standard physical ERD: table cards with PK/FK/UK badges, types and nullable marks; lines run from the FK row to the PK row with crow's-foot ends (elkjs layout, orthogonal routing). Focus a table with a hops slider, detail levels (all columns / keys only / names only), subject-area filter, left→right or top→down layout, pan/zoom, click a line to confirm or suppress it, SVG/PNG download |
 | **Network overview** | The force-directed visNetwork graph (drag, zoom, hover tooltips; force/hierarchical/circular layouts), good for spotting clusters |
 | **Table Details** | Per-table column summary with type, non-null count, unique values, PK/FK flags, table size |
+| **Data Dictionary tab** | One row per column: type, missing %, unique count, PK/FK/UK, what it references (and whether that link is declared, confirmed or detected), example values (left out for columns that look personal, e.g. `email`, `phone`, `name`). Add a description per table and a description and business name per column; edits are saved with the session and flow into the dbt, DBML and Mermaid exports. Download as CSV or Markdown |
 | **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
 | **Manual overrides** | Add relationships auto-detection misses |
-| **Exports** | Relationships CSV (with review status), dbt schema.yml, Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), session save/restore (JSON) |
+| **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
 ### Architecture (golem package)
@@ -96,8 +97,11 @@ install.packages(c("DBI", "RSQLite", "RPostgres", "RMariaDB", "odbc", "bigrquery
 # Fuzzy name matching
 install.packages("stringdist")
 
-# Access databases (Java-based)
+# Access databases (Java-based; rJava, which RJDBC installs, also reads the
+# relationships declared in the file)
 install.packages("RJDBC")
+# Without Java, relationships can still be read if mdbtools is installed
+# (macOS: brew install mdbtools; Debian/Ubuntu: apt install mdbtools)
 ```
 
 ### Run locally
@@ -134,6 +138,46 @@ run_app()
 
 Scores are combined via noisy-OR aggregation: `score = 1 - prod(1 - weights)`. The composite score maps to confidence tiers: high (>= 0.85), medium (>= 0.55), low (< 0.55).
 
+**Choosing between candidate parents.** A column can fit several tables. In
+Access databases, for example, every `tlk_*` lookup numbers its `id` 1..N, so
+`service_id` fits `tlk_services`, `tlk_sites` and every other lookup. Values
+alone can't choose between them, so names come first, as in SchemaSpy and
+SchemaCrawler:
+
+- If the column's name points to one of the tables, that link is kept.
+  Value-only matches to the other tables drop to **low** ("name points to
+  tlk_services").
+- If the name points nowhere and the values fit two or more tables, all of them
+  drop to **low** ("ambiguous: values fit 8 tables").
+- A link whose values mostly aren't in the parent can't rest on format or
+  loose name likeness alone.
+
+Low links are hidden by default. Tick "Show low confidence" on the Relationships
+tab, or "Show low-confidence links" in the ERD, to review them.
+
+### Declared vs detected relationships
+
+- **Declared** relationships come from a schema file, a database connection, or
+  the relationships stored inside an Access file (read with Jackcess when rJava
+  is installed, else with mdbtools' `mdb-export`).
+- **Detected** ones are inferred from the data.
+
+Declared links and detected ones are shown differently everywhere:
+
+- **Relationships tab:** a sortable **Source** column (declared / manual /
+  ✓ confirmed / ? to review) and a Source filter.
+- **ERD Diagram:** declared lines have no chip; confirmed lines show ✓, manual
+  lines show M, and unreviewed detected lines are grey with a ?.
+- **Network overview:** declared edges are drawn thick.
+
+In the sidebar, **Relationships to show** picks *Declared + detected* (the
+default, useful when documentation is incomplete), *Declared only* or *Detected
+only*. It applies to all views and exports.
+
+**Hide detected links on columns that already have a declared one** keeps
+documented columns clean while undocumented ones are still inferred. A detected
+link that duplicates a declared one appears once, as declared ("also detected").
+
 ### ERD Diagram tab
 
 The diagram is laid out in the browser by [elkjs](https://github.com/kieler/elkjs)
@@ -147,8 +191,18 @@ vendored in `inst/app/www/vendor/`.
   grey with a `?` chip; confirmed, declared and manual ones are drawn in
   full ink. Low-confidence links are hidden unless "Show low-confidence
   links" is on. The legend under the diagram explains the ends and badges.
-- **Large schemas**: over 40 tables it opens in "Keys only" and suggests
-  picking a focus table. Views with more than 600 relationships ask you to
+- **Lookup links**: "Labels" shows a link to a reference table as a tag on
+  the FK row (`→ tlk_providers`) instead of a line, which removes most of the
+  clutter in hub-and-lookup schemas.
+  - Reference tables are found by shape and use, not only by `tlk_`-style
+    names: a table other tables point at, with no FKs of its own, that is
+    named like a lookup, is small (≤ 500 rows, ≤ 4 columns), or is referenced
+    by 3+ tables and has ≤ 6 columns.
+  - Clicking a tag opens the relationship, as a line would.
+  - Tables left without lines are listed down the right-hand side, split
+    into lookups and unlinked tables.
+- **Large schemas**: over 40 tables it opens in "Keys only" with lookup
+  labels, and suggests picking a focus table. Views with more than 600 relationships ask you to
   narrow them first (focus, subject area or minimum confidence), with a
   "Draw anyway" button.
 - **Downloads**: the SVG / PNG buttons save the current view with its

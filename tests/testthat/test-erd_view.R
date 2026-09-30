@@ -218,3 +218,186 @@ test_that("large-schema 'Keys only' default isn't taken for a user choice", {
     }
   )
 })
+
+# ── Declared vs detected ─────────────────────────────────────
+
+src_rel <- function(from_col, to_table, by, confirmed = FALSE, score = 0.9) {
+  list(
+    from_table = "tbl_visits", from_col = from_col, to_table = to_table,
+    to_col = "id", detected_by = by, confidence = "high", score = score,
+    confirmed = confirmed
+  )
+}
+
+test_that("rel_source tells declared, manual, confirmed and detected apart", {
+  expect_equal(rel_source(src_rel("a", "t", "schema")), "declared")
+  expect_equal(rel_source(src_rel("a", "t", "manual")), "manual")
+  expect_equal(rel_source(src_rel("a", "t", "naming", confirmed = TRUE)), "confirmed")
+  expect_equal(rel_source(src_rel("a", "t", "cardinality")), "detected")
+})
+
+test_that("a detected link that is also declared shows once, as declared", {
+  declared <- list(src_rel("service_id", "tlk_services", "schema", score = 1))
+  auto <- list(
+    src_rel("service_id", "tlk_services", "naming", score = 0.87),
+    src_rel("service_id", "tlk_sites", "cardinality"),
+    src_rel("site_id", "tlk_sites", "naming")
+  )
+  both <- combine_relationships(auto, list(), declared)
+  keys <- vapply(both, rel_key, "")
+  expect_equal(sum(keys == "tbl_visits|service_id|tlk_services|id"), 1)
+  kept <- both[[which(keys == "tbl_visits|service_id|tlk_services|id")]]
+  expect_equal(rel_source(kept), "declared")
+  expect_equal(kept$also_detected, 0.87)
+  # Other detected links, even on the declared column, stay by default
+  expect_length(both, 3)
+  # ... unless hidden on columns that have a declared link
+  trimmed <- combine_relationships(auto, list(), declared, hide_detected_on_declared = TRUE)
+  expect_setequal(
+    vapply(trimmed, rel_key, ""),
+    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+  )
+})
+
+test_that("source filters keep declared or detected links", {
+  rels <- list(
+    src_rel("a", "t1", "schema"),
+    src_rel("b", "t2", "manual"),
+    src_rel("c", "t3", "naming", confirmed = TRUE),
+    src_rel("d", "t4", "cardinality")
+  )
+  src <- function(x) vapply(x, rel_source, "")
+  expect_equal(src(filter_rel_sources(rels, "declared")), c("declared", "manual"))
+  expect_equal(src(filter_rel_sources(rels, "detected")), c("confirmed", "detected"))
+  expect_length(filter_rel_sources(rels, "both"), 4)
+})
+
+test_that("links without a score (manual) give no null ELK properties", {
+  manual <- list(
+    from_table = "orders", from_col = "customer_id", to_table = "customers",
+    to_col = "customer_id", detected_by = "manual"
+  )
+  m <- erd_model(
+    erd_fixture()[c("customers", "orders")],
+    list(manual),
+    list(customers = "customer_id", orders = "order_id")
+  )
+  g <- erd_elk_graph(erd_view(m))
+  props <- g$edges[[1]]$properties
+  expect_false(any(vapply(props, function(v) is.null(v) || anyNA(v), logical(1))))
+  expect_equal(props$provenance, "manual")
+})
+
+# ── Reference tables shown as labels; unlinked tables to the side ──
+
+ref_fixture <- function() {
+  set.seed(5)
+  list(
+    status = data.frame(status_code = c("A", "B", "C"), label = c("a", "b", "c")),
+    countries = data.frame(country_id = 1:20, name = paste0("c", 1:20), iso = letters[1:20]),
+    orders = data.frame(order_id = 1:600, status_code = sample(c("A", "B", "C"), 600, TRUE), country_id = sample(1:20, 600, TRUE)),
+    shipments = data.frame(shipment_id = 1:50, order_id = sample(1:600, 50), country_id = sample(1:20, 50, TRUE)),
+    suppliers = data.frame(supplier_id = 1:10, country_id = sample(1:20, 10, TRUE)),
+    notes = data.frame(text = c("x", "y"))
+  )
+}
+ref_rels <- function() {
+  mk <- function(ft, fc, tt, tc) list(from_table = ft, from_col = fc, to_table = tt, to_col = tc, detected_by = "naming", confidence = "high", score = 1)
+  list(
+    mk("orders", "status_code", "status", "status_code"),
+    mk("orders", "country_id", "countries", "country_id"),
+    mk("shipments", "order_id", "orders", "order_id"),
+    mk("shipments", "country_id", "countries", "country_id"),
+    mk("suppliers", "country_id", "countries", "country_id")
+  )
+}
+ref_model <- function() {
+  erd_model(ref_fixture(), ref_rels(), list(
+    status = "status_code", countries = "country_id", orders = "order_id",
+    shipments = "shipment_id", suppliers = "supplier_id"
+  ))
+}
+
+test_that("reference tables are found without Access-style names", {
+  m <- ref_model()
+  is_ref <- vapply(m$tables, function(t) isTRUE(t$is_reference), logical(1))
+  # status: lookup-shaped; countries: narrow and referenced by 3 tables
+  expect_true(is_ref[["status"]])
+  expect_true(is_ref[["countries"]])
+  # orders is referenced but has FKs of its own; the rest aren't parents
+  expect_false(any(is_ref[c("orders", "shipments", "suppliers", "notes")]))
+  am <- view_model()
+  expect_true(isTRUE(am$tables$tlk_status$is_reference) || !"tlk_status" %in% unlist(lapply(am$rels, `[[`, "to_table")))
+})
+
+test_that("labels replace lines to reference tables; unlinked tables go to the side", {
+  v <- erd_view(ref_model())
+  lines <- erd_elk_graph(v, side = TRUE)
+  labels <- erd_elk_graph(v, ref_labels = TRUE, side = TRUE)
+  expect_length(lines$edges, 5)
+  expect_length(labels$edges, 1) # shipments -> orders
+  node <- function(g, id) g$children[[which(vapply(g$children, `[[`, "", "id") == id)]]
+  cols <- node(labels, "orders")$properties$columns
+  refs <- Filter(Negate(is.null), lapply(cols, `[[`, "refs"))
+  expect_setequal(vapply(refs, function(r) r[[1]]$table, ""), c("status", "countries"))
+  side <- vapply(labels$children, function(n) n$properties$side %||% "", "")
+  names(side) <- vapply(labels$children, `[[`, "", "id")
+  expect_equal(side[["status"]], "lookups")
+  expect_equal(side[["countries"]], "lookups")
+  expect_equal(side[["notes"]], "unlinked")
+  # suppliers only links to a lookup, so it has no lines either
+  expect_equal(side[["suppliers"]], "unlinked")
+  expect_equal(side[["orders"]], "")
+  # Line mode: only the orphan is set aside
+  side_l <- vapply(lines$children, function(n) n$properties$side %||% "", "")
+  expect_equal(sum(nzchar(side_l)), 1)
+  # Edge ends still exist; names-only never uses labels
+  ports <- graph_ports(labels)
+  expect_true(all(unlist(lapply(labels$edges, function(e) c(e$sources[[1]], e$targets[[1]]))) %in% ports))
+  expect_length(erd_elk_graph(erd_view(ref_model(), detail = "names"), detail = "names", ref_labels = TRUE)$edges, 5)
+  # The export stays unchanged
+  expect_length(erd_elk_graph(v)$edges, 5)
+})
+
+test_that("large schemas default to lookup labels without locking the choice", {
+  skip_if_not_installed("shiny")
+  big <- stats::setNames(lapply(1:45, function(i) data.frame(id = 1:3)), paste0("t", 1:45))
+  tables <- shiny::reactiveVal(big)
+  shiny::testServer(
+    mod_erd_server,
+    args = list(
+      tables_rv = tables,
+      rels_rv = shiny::reactive(list()),
+      pk_map_rv = shiny::reactive(list()),
+      composite_pk_map_rv = shiny::reactive(list()),
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      false_positives_rv = shiny::reactiveVal(character(0))
+    ),
+    {
+      session$setInputs(detail = "all", ref_links = "lines", direction = "RIGHT", hops = 2)
+      session$flushReact()
+      expect_equal(ref_links_rv(), "labels")
+      session$setInputs(ref_links = "labels") # the radio echoing the server
+      expect_null(user_ref())
+      tables(erd_fixture())
+      session$flushReact()
+      expect_equal(ref_links_rv(), "lines")
+      session$setInputs(ref_links = "labels") # a real choice
+      tables(big)
+      session$flushReact()
+      expect_equal(ref_links_rv(), "labels")
+      expect_equal(user_ref(), "labels")
+    }
+  )
+})
+
+test_that("the ELK graph has no null node or column properties", {
+  g <- erd_elk_graph(erd_view(ref_model()), ref_labels = TRUE, side = TRUE)
+  has_null <- function(x) {
+    if (is.null(x)) return(TRUE)
+    if (is.list(x)) return(any(vapply(x, has_null, logical(1))))
+    FALSE
+  }
+  for (n in g$children) expect_false(has_null(n$properties), info = n$id)
+  expect_false(has_null(erd_elk_graph(erd_view(ref_model()))$children))
+})

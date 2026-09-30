@@ -721,3 +721,100 @@ test_that("self_ref_match rejects non-hierarchy and other-entity names", {
   emp <- data.frame(id = 1:3, manager_id = c(90L, 91L, 92L))
   expect_null(self_ref_match("employees", "manager_id", emp, "id"))
 })
+
+# ── Choosing between candidate parents (Access lookups share ids 1..N) ──
+
+access_lookup_fixture <- function() {
+  set.seed(11)
+  lk <- c("services", "sites", "providers", "programs")
+  tbls <- lapply(lk, function(l) data.frame(id = 1:8, label = paste(l, 1:8)))
+  names(tbls) <- paste0("tlk_", lk)
+  tbls$tbl_visits <- data.frame(
+    visit_id = 1:60,
+    service_id = sample(1:8, 60, TRUE),
+    site_id = sample(1:8, 60, TRUE),
+    code = sample(1:8, 60, TRUE)
+  )
+  tbls
+}
+
+links_from <- function(rels, col) {
+  Filter(function(r) r$from_table == "tbl_visits" && r$from_col == col, rels)
+}
+
+test_that("a column's name picks its lookup; other lookups drop to low", {
+  rels <- detect_fks(access_lookup_fixture(), "both", "medium")
+  svc <- links_from(rels, "service_id")
+  strong <- Filter(function(r) r$confidence != "low", svc)
+  expect_equal(vapply(strong, `[[`, "", "to_table"), "tlk_services")
+  weak <- Filter(function(r) r$confidence == "low", svc)
+  expect_setequal(
+    vapply(weak, `[[`, "", "to_table"),
+    c("tlk_sites", "tlk_providers", "tlk_programs")
+  )
+  expect_true(all(vapply(weak, function(r) {
+    identical(r$reasons[[1]], "name points to tlk_services")
+  }, logical(1))))
+})
+
+test_that("values that fit several lookups with no name to go on are low", {
+  rels <- detect_fks(access_lookup_fixture(), "both", "medium")
+  code <- links_from(rels, "code")
+  expect_length(code, 4)
+  expect_true(all(vapply(code, `[[`, "", "confidence") == "low"))
+  expect_match(code[[1]]$reasons[[1]], "^ambiguous: values fit 4 tables")
+})
+
+test_that("a content-only match to a single parent is left alone", {
+  tbls <- list(
+    parent = data.frame(pk = 1:5, label = letters[1:5]),
+    child = data.frame(row = 1:20, cust_ref = rep(1:5, 4))
+  )
+  rels <- detect_fks(tbls, "both", "medium")
+  r <- Filter(function(r) r$from_col == "cust_ref", rels)
+  expect_length(r, 1)
+  expect_equal(r[[1]]$confidence, "high")
+})
+
+test_that("resolving parents is repeatable and order-independent", {
+  rels <- detect_fks(access_lookup_fixture(), "both", "medium")
+  key <- function(rs) {
+    sort(vapply(rs, function(r) paste(r$from_col, r$to_table, r$confidence), ""))
+  }
+  expect_equal(key(resolve_fk_parents(rels)), key(rels))
+  expect_equal(key(resolve_fk_parents(rev(rels))), key(rels))
+})
+
+test_that("a new lookup the name points to demotes an older value-only link", {
+  tbls <- access_lookup_fixture()
+  first <- detect_fks(tbls[setdiff(names(tbls), "tlk_services")], "both", "medium")
+  svc_first <- links_from(first, "service_id")
+  # Without tlk_services, service_id's values fit 3 lookups: ambiguous
+  expect_true(all(vapply(svc_first, `[[`, "", "confidence") == "low"))
+  added <- detect_fks(tbls, "both", "medium", focus_tables = "tlk_services", existing = first)
+  merged <- resolve_fk_parents(c(first, added))
+  svc <- links_from(merged, "service_id")
+  strong <- Filter(function(r) r$confidence != "low", svc)
+  expect_equal(vapply(strong, `[[`, "", "to_table"), "tlk_services")
+  full <- links_from(detect_fks(tbls, "both", "medium"), "service_id")
+  key <- function(rs) sort(vapply(rs, function(r) paste(r$to_table, r$confidence), ""))
+  expect_equal(key(svc), key(full))
+})
+
+test_that("format and loose name likeness can't carry a link without shared values", {
+  tbls <- list(
+    tbl_payment = data.frame(payment_id = 6001:6060),
+    tbl_client = data.frame(client_id = 1:60, amount = rep(c(5, 10, 20, 50), 15))
+  )
+  rels <- detect_fks(tbls, "both", "medium")
+  expect_length(Filter(function(r) r$from_col == "amount", rels), 0)
+})
+
+test_that("is_lookup_table re-checks a table whose content changed", {
+  a <- data.frame(id = 1:5, label = letters[1:5])
+  b <- data.frame(id = c(1L, 1L, 2L, 3L, 4L), label = letters[1:5])
+  expect_true(is_lookup_table("statuses_x", a))
+  # Same name and shape, but the key is no longer unique
+  expect_false(is_lookup_table("statuses_x", b))
+  expect_true(is_lookup_table("statuses_x", a))
+})

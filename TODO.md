@@ -11,11 +11,22 @@
 - [ ] ERD redesign: see `docs/erd-redesign-plan.md` (steps 1-2 done: model,
       exports, ERD Diagram tab; next: data dictionary, dbt constraints,
       session diff, lints).
-- [ ] Detection noise on Access-style schemas: when every `tlk_*` lookup
-      numbers its `id` 1..N, value-only signals (identical values) match a
-      lookup FK such as `service_id` to *every* lookup, not just
-      `tlk_services`. Consider: when a column has a naming match, don't also
-      propose value-only matches to other targets (or rank them lower).
+- [x] Detection noise on Access-style schemas (lookups sharing ids 1..N):
+      names now choose between parents that values can't tell apart, and
+      Access files' declared relationships are read.
+- [ ] (Maybe later) Read Access lookup-field `RowSource` queries as a second
+      declared source (the Lookup Wizard already stores a relationship).
+- [ ] (Maybe later) ERD, large schemas: **use the width**. ELK layer
+      wrapping (`elk.layered.wrapping.strategy = MULTI_EDGE`) with
+      `elk.aspectRatio` from the canvas, so hub-and-spoke schemas aren't one
+      tall column.
+- [ ] Lints / data-quality panel (Phase 4 in `docs/erd-redesign-plan.md`):
+      tables without a PK, orphan tables, FKs whose values are missing from
+      the parent (share of orphaned rows), nullable PK-like columns, and
+      duplicate links into the same parent.
+- [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
+      tables, start focused on the most-connected table with 2 hops instead
+      of drawing everything.
 
 ## Reference: ERD design examples
 
