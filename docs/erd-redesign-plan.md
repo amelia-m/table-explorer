@@ -258,6 +258,8 @@ Access-style schema.
     their metadata but lose examples and ranges;
   - data-dict YAML (spec 0.1.0) export and import, in plain R; the mapping
     lives in `generate_data_dict_yaml()` and `parse_data_dict_schema()`;
+  - diagrams of the privacy rules, the data-dict round trip and primary-key
+    precedence: [internals.md](internals.md);
   - CSV and Markdown exports;
   - descriptions carried into dbt, DBML and Mermaid;
   - optional dbt 1.9 constraints for PKs and declared/confirmed FKs.
