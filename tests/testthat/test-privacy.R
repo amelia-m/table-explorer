@@ -244,3 +244,13 @@ test_that("Dictionary tab: selected rows become private; review decisions save",
     }
   )
 })
+
+test_that("choices that let values show follow the data: factors, overwrites", {
+  f <- factor(c("a@x.io", "b@x.io"))
+  d <- list("t|email" = list(private = FALSE, public_for = privacy_data_hash(f)))
+  expect_equal(dict_privacy(d, "t", "email", as.character(f))$status, "user_public")
+  tabs <- list(t = data.frame(first_name = c("Ann", "Bo"), stringsAsFactors = FALSE))
+  r <- privacy_review_set(list(), tabs, "t|first_name", "rejected")
+  expect_equal(dict_privacy(r, "t", "first_name", tabs$t$first_name)$status, "not_personal")
+  expect_equal(dict_privacy(r, "t", "first_name", c("Cy", "Di"))$status, "auto_unreviewed")
+})

@@ -605,7 +605,11 @@ save_session_json <- function(
   # Convert data frames to serializable format
   tables_ser <- lapply(tables, function(df) {
     lapply(df, function(col) {
-      if (inherits(col, c("Date", "POSIXt"))) {
+      if (inherits(col, "POSIXt")) {
+        # Every value with its time, in UTC (as.character drops the time
+        # from values at midnight)
+        format(col, "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+      } else if (inherits(col, "Date") || is.factor(col)) {
         as.character(col)
       } else {
         col
@@ -636,7 +640,8 @@ save_session_json <- function(
 
   # na = "null": numeric NAs would otherwise be written as the string "NA"
   # and turn the whole column into text on restore
-  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+  # digits = NA: full precision (the default keeps 4 significant digits)
+  jsonlite::toJSON(session, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null", digits = NA)
 }
 
 # A restored column in its saved class; an empty one keeps its type
@@ -651,7 +656,7 @@ session_column <- function(col, type = NULL) {
       factor = as.character(col),
       logical = as.logical(col),
       Date = as.Date(as.character(col)),
-      POSIXct = as.POSIXct(as.character(col), tz = "UTC"),
+      POSIXct = as.POSIXct(as.character(col), format = "%Y-%m-%dT%H:%M:%S", tz = "UTC"),
       if (is.null(col)) logical(0) else col
     ),
     error = function(e) col
