@@ -55,6 +55,87 @@ Found in review, not fixed there. How the pieces work: `docs/internals.md`.
       were unconfirmed (they're under `todo`, not `relationships`), and all
       examples (no rows). Expected, but worth a note if round trips matter.
 
+## Repository housekeeping (logged 2026-09-30)
+
+Baseline: on `main` at `6276a1e`, with the real packages (R 4.6.1),
+`testthat::test_local()` gives 209 tests, 1035 expectations, 0 failed, 0
+errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
+157 of 157 real links at medium+, 0 false.
+
+- [ ] **Framework research (on hold until Amelia dispatches it).** The
+      contract for three research agents is in
+      `docs/research/shiny-framework/contract.md`:
+      - leprechaun;
+      - golem, rhino, a plain package and plain `app.R`;
+      - shipping as an R package or a Positron extension, and Shiny for
+        Python structure.
+
+      The outcome decides whether golem stays, and with it backlog decision
+      D1 in `dev/code-review-backlog.md` (wire `inst/golem-config.yml` or
+      delete it). Until then `shiny.maxRequestSize` in that file is never
+      applied, so uploads are capped at Shiny's 5 MB default (backlog C3).
+- [ ] **Adopt renv? Decide after the framework research.** Nothing records
+      a past decision for or against it. Proposal: `renv::init()` with an
+      explicit snapshot, locking Imports plus the test essentials
+      (testthat, pkgload, jsonlite, yaml, readxl, RSQLite), and leaving the
+      database drivers (rJava, RJDBC, odbc, RODBC, bigrquery, RPostgres,
+      RMariaDB) optional. Check how current renv treats Suggests before
+      snapshotting. It also needs a `.Rbuildignore`, which the repo lacks
+      (backlog I6), covering `renv/`, `renv.lock`, `_scratch/`, `dev/` and
+      the Python files.
+- [ ] **Salvage two fixes from branch
+      `copilot/review-codebase-and-make-edits`** (one Copilot commit,
+      2026-08-06, never opened as a PR). Re-apply them by hand as a small PR
+      on current `main`; the code has moved too far to cherry-pick.
+      1. `db_introspect()` in `R/utils_db_connectors.R` pastes the schema
+         name into SQL inside quotes, so a schema name containing an
+         apostrophe breaks the query. Quote it with `DBI::dbQuoteString()`.
+      2. `R/mod_db_connect.R` turns a non-numeric port into `NA` with only a
+         warning. Reject non-numeric or non-positive ports with a message.
+
+      Do not take the branch's `mod_upload.R` change (superseded). Its
+      session-restore change (always replace state, even with empty lists)
+      is a design choice, not a fix: leave it unless wanted. In the same
+      PR, two leftovers from the `is_lookup_table()` cache fix (`bf1823e`):
+      - the comment above `.lookup_cache` in `R/utils_inference.R` still
+        says "Memoised per shape";
+      - add a test that a same-shaped table with renamed columns
+        (`foo`/`bar` instead of `id`/`label`) is re-checked.
+
+      Then delete the branch. Do all this before the Air reformat.
+- [ ] **Close draft PR #6 but keep its branch**
+      (`copilot/evaluate-current-status`, 7 Copilot commits, 2026-09-11,
+      conflicts with `main`) as a reference for the Python work. Its unique
+      content is about 1050 lines of Python features in `app.py`: database
+      connections, export, run detection, name cleaning and scan triage,
+      plus SQLAlchemy in `requirements.txt`. Whether to port that depends
+      on the framework research. Take two pieces separately:
+      - its GitHub Actions R CI workflow (`.github/workflows/r-ci.yml`,
+        Ubuntu, `devtools::test()`). `main` has no CI.
+      - `URL`, `BugReports` and a real `person("Amelia", "Miramonti", ...)`
+        in `DESCRIPTION`.
+
+      Do not take its committed `__pycache__/*.pyc` file.
+- [ ] **Air reformat as its own commit.** Add an `air.toml`, run
+      `air format .`, run the tests, and commit the reformat alone so it is
+      never mixed with content changes. Then add the commit to a
+      `.git-blame-ignore-revs` file in a follow-up commit. With default
+      settings, `air format --check .` reports 30 of 40 tracked R files
+      would change. Do it after the salvage PR above. The research outcome
+      does not block it.
+- [ ] **Stale remote branches.** These have no commits that are not on
+      `main`, and can be deleted with Amelia's go-ahead:
+      - `copilot/expand-sample-data-composite-keys`
+      - `copilot/fix-shiny-app-errors`
+      - `copilot/fix-source-file-path-error`
+      - `copilot/update-repo-sidebar-description`
+      - `fix/composite-pk-and-erd-dblclick`
+
+      These have one unmerged commit each, and need a look first:
+      - `chore/package-metadata`: author email and LICENSE holder, mostly
+        already on `main`;
+      - `copilot/add-open-source-license`: an MIT LICENSE.
+
 ## Reference: ERD design examples
 
 Third-party example diagrams, kept for design reference only (a possible
