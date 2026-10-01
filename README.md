@@ -67,7 +67,11 @@ dev/
   02_dev.R               Development helpers
   03_deploy.R            Deployment helpers
 tests/testthat/          Unit tests (~1,000 expectations across 7 suites)
+docs/internals.md        Diagrams of privacy, data-dict, primary keys, data flow
+docs/diagrams/           The diagram SVGs and generate.py that draws them
 ```
+
+Diagrams of the privacy rules, the data-dict round trip, primary-key precedence and the data flow between modules: [docs/internals.md](docs/internals.md).
 
 **Reactive data flow between modules:**
 
