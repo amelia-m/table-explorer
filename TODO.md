@@ -8,9 +8,9 @@
       conventions (Access, Rails/Django, SQL Server, warehouse `_key`/`_sk`,
       code lookups, role prefixes) are detected automatically already.
 
-- [ ] ERD redesign: see `docs/erd-redesign-plan.md` (steps 1-2 done: model,
-      exports, ERD Diagram tab; next: data dictionary, dbt constraints,
-      session diff, lints).
+- [ ] ERD redesign: see `docs/erd-redesign-plan.md` (done: model, exports,
+      ERD Diagram tab, data dictionary, dbt constraints; next: session diff,
+      lints).
 - [x] Detection noise on Access-style schemas (lookups sharing ids 1..N):
       names now choose between parents that values can't tell apart, and
       Access files' declared relationships are read.
@@ -32,6 +32,28 @@
 - [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
       tables, start focused on the most-connected table with 2 hops instead
       of drawing everything.
+
+## Follow-ups from the data dictionary work (PR #20)
+
+Found in review, not fixed there. How the pieces work: `docs/internals.md`.
+
+- [ ] "Hide empty tables" also hides tables imported from a schema or
+      data-dict file (they have no rows), so their labels and descriptions
+      vanish from the Data Dictionary tab and its downloads while it's on.
+      Consider exempting tables that came from a schema import.
+- [ ] A manual link identical to a declared one shows twice in the app
+      (`combine_relationships()` in `R/utils_helpers.R` only folds detected
+      links into declared ones). The data-dict export already de-duplicates.
+- [ ] "Not personal" reviews re-ask after any data refresh, because they are
+      tied to a hash of the column. Safe, but noisy for regularly refreshed
+      data; a name-based review could survive refreshes if the column's
+      value pattern doesn't change.
+- [ ] The automatic personal-data guess still flags generic `name` columns
+      on non-person tables (`products.name`). The review clears them; a
+      table-name heuristic (people-like tables) could cut the noise.
+- [ ] A data-dict re-import loses `number(id)` on foreign keys whose links
+      were unconfirmed (they're under `todo`, not `relationships`), and all
+      examples (no rows). Expected, but worth a note if round trips matter.
 
 ## Reference: ERD design examples
 
