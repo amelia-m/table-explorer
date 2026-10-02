@@ -62,27 +62,49 @@ Baseline: on `main` at `6276a1e`, with the real packages (R 4.6.1),
 errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
 157 of 157 real links at medium+, 0 false.
 
-- [ ] **Framework research (on hold until Amelia dispatches it).** The
-      contract for three research agents is in
-      `docs/research/shiny-framework/contract.md`:
-      - leprechaun;
-      - golem, rhino, a plain package and plain `app.R`;
-      - shipping as an R package or a Positron extension, and Shiny for
-        Python structure.
+- [ ] **Framework decision (research done 2026-10-02, decision pending).**
+      `docs/research/shiny-framework/decision.md` sums up five agent reports.
+      Its findings:
+      - golem wired up and a plain package (golem removed) both keep the R
+        package, Positron extension and Connect Cloud routes open;
+      - leprechaun, rhino and a plain `app.R` lose for this app, and
+        Amelia rejected all three on 2026-10-02;
+      - the open choice is golem wired up or a plain package; the research
+        leans to a plain package, but it isn't a clear win.
 
       The outcome decides whether golem stays, and with it backlog decision
       D1 in `dev/code-review-backlog.md` (wire `inst/golem-config.yml` or
       delete it). Until then `shiny.maxRequestSize` in that file is never
       applied, so uploads are capped at Shiny's 5 MB default (backlog C3).
-- [ ] **Adopt renv? Decide after the framework research.** Nothing records
-      a past decision for or against it. Proposal: `renv::init()` with an
-      explicit snapshot, locking Imports plus the test essentials
-      (testthat, pkgload, jsonlite, yaml, readxl, RSQLite), and leaving the
-      database drivers (rJava, RJDBC, odbc, RODBC, bigrquery, RPostgres,
-      RMariaDB) optional. Check how current renv treats Suggests before
-      snapshotting. It also needs a `.Rbuildignore`, which the repo lacks
-      (backlog I6), covering `renv/`, `renv.lock`, `_scratch/`, `dev/` and
-      the Python files.
+- [ ] **R version for Connect Cloud (deferred 2026-10-02).** Connect Cloud
+      supports R 4.0.0 to 4.6.0 (its R platform docs). This machine has only
+      R 4.6.1, so a `manifest.json` written here names an unsupported
+      version, and what Connect Cloud does then is undocumented. Amelia chose
+      to wait: deployment is not imminent and Connect Cloud may add 4.6.1.
+      Before the first deploy, check its supported range again. If 4.6.1 is
+      still missing, either `rig add 4.6.0` (alongside 4.6.1; packages share
+      the 4.6 user library) and write the manifest from it, or test-deploy
+      on 4.6.1.
+- [x] **renv adopted 2026-10-02** (`31b89ae`, Amelia's instruction).
+      Explicit snapshot: `renv.lock` holds DESCRIPTION's Imports and their
+      dependencies (93 packages, R 4.6.1). renv 1.2.4 leaves Suggests out
+      (`snapshot.dev: false`), so testthat, pkgload, RSQLite and the database
+      drivers are installed in the project library but not locked.
+- [ ] **Lock the test packages in `renv.lock`?** A fresh `renv::restore()`
+      on another machine gets the app's Imports but not testthat, so tests
+      can't run there until it is installed by hand. Options:
+      1. set `snapshot.dev = TRUE`, which locks all of Suggests, the heavy
+         database drivers (rJava, odbc, bigrquery and so on) included;
+      2. keep it as is, and document `renv::install(c("testthat",
+         "pkgload", "RSQLite"))` for contributors;
+      3. move the test essentials into a separate setup step.
+
+      Recommendation: 2, until there is CI.
+- [ ] **`.Rbuildignore` is still minimal** (backlog I6). renv created it
+      with `^renv$`, `^renv\.lock$` and `^requirements\.txt$` only. A
+      package release also needs `app.R`, `app.py`, `dev/`, `docs/`,
+      `_scratch/`, `sample_data/`, the legacy root `.R` files, `CLAUDE.md`,
+      `TODO.md`, `.agents/` and `.vscode/`.
 - [ ] **Salvage two fixes from branch
       `copilot/review-codebase-and-make-edits`** (one Copilot commit,
       2026-08-06, never opened as a PR). Re-apply them by hand as a small PR
