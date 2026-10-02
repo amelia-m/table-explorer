@@ -77,9 +77,11 @@ priority, but a structure that works across both languages would help.
 - Agents and Amelia both work on the code; Air (formatter) and testthat
   edition 3 are in use.
 - Build and test (for reference only; agents do not run them):
-  `Rscript.bat -e "testthat::test_dir('tests/testthat')"` in PowerShell.
-  The full runner `testthat::test_local()` needs `golem`, `visNetwork` and
-  `shinythemes`, which are not installed. R 4.6.1.
+  `Rscript.bat -e "testthat::test_local()"` in PowerShell, R 4.6.1, with
+  the real packages installed. Baseline on `main` at `6276a1e`: 209 tests,
+  1035 expectations, 0 failed, 4 expected skips.
+  `Rscript dev/fixtures/score_detection.R` gives 157 of 157 real links, 0
+  false.
 
 ## Constraints
 - Primary sources first: CRAN package pages, the package's GitHub repo
@@ -161,9 +163,5 @@ priority, but a structure that works across both languages would help.
   `[unverified]` claims remain.
 
 ## Open assumptions
-- One cloud session (the same one behind `bf1823e`, PR #19 and PR #20) has
-  open PR #21 on `claude/vigilant-darwin-cosnap`: docs, diagrams,
-  follow-ups in `TODO.md` and Playwright browser checks, with no app code
-  changes. Assumed: it is finishing, not starting new work, and the
-  synthesis reads `main` after #21 merges. The research is read-only, so
-  this matters only for the synthesis's view of the code.
+- None. (Resolved 2026-10-02: PRs #21 and #22 are merged, and both
+  cloud sessions reported nothing pending.)
