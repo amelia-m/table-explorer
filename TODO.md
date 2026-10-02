@@ -62,20 +62,11 @@ Baseline: on `main` at `6276a1e`, with the real packages (R 4.6.1),
 errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
 157 of 157 real links at medium+, 0 false.
 
-- [ ] **Framework decision (research done 2026-10-02, decision pending).**
-      `docs/research/shiny-framework/decision.md` sums up five agent reports.
-      Its findings:
-      - golem wired up and a plain package (golem removed) both keep the R
-        package, Positron extension and Connect Cloud routes open;
-      - leprechaun, rhino and a plain `app.R` lose for this app, and
-        Amelia rejected all three on 2026-10-02;
-      - the open choice is golem wired up or a plain package; the research
-        leans to a plain package, but it isn't a clear win.
-
-      The outcome decides whether golem stays, and with it backlog decision
-      D1 in `dev/code-review-backlog.md` (wire `inst/golem-config.yml` or
-      delete it). Until then `shiny.maxRequestSize` in that file is never
-      applied, so uploads are capped at Shiny's 5 MB default (backlog C3).
+- [x] **Framework decision (2026-10-02): golem dropped, plain package.**
+      Why, what changed, and when golem would be worth bringing back are in
+      `docs/research/shiny-framework/decision.md`. Rejected: leprechaun,
+      rhino and a plain `app.R`. This also resolved backlog items C3 (the
+      upload limit now applies, 100 MB), I5, I13, M9, M10, M11 and D1.
 - [ ] **R version for Connect Cloud (deferred 2026-10-02).** Connect Cloud
       supports R 4.0.0 to 4.6.0 (its R platform docs). This machine has only
       R 4.6.1, so a `manifest.json` written here names an unsupported
