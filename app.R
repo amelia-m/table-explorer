@@ -1,4 +1,4 @@
-# Launch the Table Relationship Explorer via the golem package.
+# Launch the Table Relationship Explorer (a plain R package, no app framework).
 # To deploy on shinyapps.io / Posit Connect, use this file as the entry point.
 #
 # Development usage:
