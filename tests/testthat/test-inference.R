@@ -810,6 +810,14 @@ test_that("format and loose name likeness can't carry a link without shared valu
   expect_length(Filter(function(r) r$from_col == "amount", rels), 0)
 })
 
+test_that("is_lookup_table re-checks a same-shaped table with renamed columns", {
+  keyed <- data.frame(id = 1:5, label = letters[1:5])
+  renamed <- data.frame(foo = 1:5, bar = letters[1:5])
+  expect_true(is_lookup_table("statuses_z", keyed))
+  # Same name and shape, but no key-named column any more
+  expect_false(is_lookup_table("statuses_z", renamed))
+})
+
 test_that("is_lookup_table re-checks a table whose content changed", {
   a <- data.frame(id = 1:5, label = letters[1:5])
   b <- data.frame(id = c(1L, 1L, 2L, 3L, 4L), label = letters[1:5])
