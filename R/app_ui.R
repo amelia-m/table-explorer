@@ -37,6 +37,18 @@ app_ui <- function(request) {
       )
     ),
 
+    # Shown while Shiny is busy for more than a moment: switching to Table
+    # Details on a wide schema can take seconds, and nothing on screen said
+    # the app was working rather than stuck
+    div(
+      id = "app-busy",
+      class = "app-busy",
+      role = "status",
+      `aria-live` = "polite",
+      div(class = "app-busy-dot"),
+      tags$span("Working...")
+    ),
+
     div(
       id = "app-body",
 
@@ -50,7 +62,7 @@ app_ui <- function(request) {
         `aria-label` = "Show controls",
         `aria-expanded` = "false",
         `aria-controls` = "sidebar-col",
-        tags$span(class = "sidebar-chevron", "›"),
+        tags$span(class = "sidebar-chevron", "â€º"),
         # A bare chevron does not say what comes back
         tags$span(class = "sidebar-rail-label", "DATA & DETECTION")
       ),
@@ -70,7 +82,7 @@ app_ui <- function(request) {
               `aria-label` = "Hide controls",
               `aria-expanded` = "true",
               `aria-controls` = "sidebar-col",
-              tags$span(class = "sidebar-chevron", "‹")
+              tags$span(class = "sidebar-chevron", "â€¹")
             ),
             mod_upload_ui("upload"),
             tags$hr(),
@@ -98,6 +110,9 @@ app_ui <- function(request) {
         )
       )
     ),
-    br()
+    br(),
+
+    # Which build is on screen: a trailing + means uncommitted changes
+    div(class = "app-footer", app_build_stamp())
   )
 }
