@@ -31,9 +31,13 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown / data-dict YAML), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
-### Architecture (golem package)
+### Architecture (R package)
 
-The app is structured as an R package using the [golem](https://thinkr-open.github.io/golem/) framework.
+The app is a plain R package with no app framework: `run_app()` builds the
+Shiny app, and static files under `inst/app/www/` are served through
+`addResourcePath()`. It used golem until 2026-10-02; why it was dropped, and
+what would make it worth bringing back, is in
+`docs/research/shiny-framework/decision.md`.
 
 ```
 R/
@@ -61,7 +65,6 @@ R/
 inst/
   app/www/               Static assets (styles.css, app.js)
   extdata/               Sample data + schema.json
-  golem-config.yml       App configuration
 dev/
   01_start.R             One-time project setup
   02_dev.R               Development helpers
