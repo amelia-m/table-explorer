@@ -172,6 +172,10 @@ filter_rel_sources <- function(rels, sources = "both") {
     Filter(function(r) rel_source(r) %in% c("declared", "manual"), rels)
   } else if (identical(sources, "detected")) {
     Filter(function(r) rel_source(r) %in% c("detected", "confirmed"), rels)
+  } else if (identical(sources, "confirmed")) {
+    Filter(function(r) identical(rel_source(r), "confirmed"), rels)
+  } else if (identical(sources, "to_review")) {
+    Filter(function(r) identical(rel_source(r), "detected"), rels)
   } else {
     rels
   }

@@ -572,6 +572,11 @@ erd_elk_graph <- function(
       "elk.layered.spacing.nodeNodeBetweenLayers" = 80,
       "elk.layered.spacing.edgeNodeBetweenLayers" = erd_elk_marker_room,
       "elk.spacing.edgeNode" = erd_elk_marker_room,
+      # Parallel trunks 10px apart (ELK's default) read as one thick line
+      # once they are dashed; 16 separates them and still leaves the chip
+      # placement in erd.js, which uses an 8px tolerance, room to work
+      "elk.spacing.edgeEdge" = 16,
+      "elk.layered.spacing.edgeEdgeBetweenLayers" = 16,
       # Self-references (manager_id -> id) loop around their own card
       "elk.spacing.nodeSelfLoop" = erd_elk_marker_room,
       "elk.spacing.nodeNode" = 40
