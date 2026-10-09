@@ -171,7 +171,7 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
       package release also needs `app.R`, `app.py`, `dev/`, `docs/`,
       `_scratch/`, `sample_data/`, the legacy root `.R` files, `CLAUDE.md`,
       `TODO.md`, `.agents/` and `.vscode/`.
-- [ ] **Salvage two fixes from branch
+- [x] **Salvage two fixes from branch
       `copilot/review-codebase-and-make-edits`** (one Copilot commit,
       2026-08-06, never opened as a PR). Re-apply them by hand as a small PR
       on current `main`; the code has moved too far to cherry-pick.
@@ -191,6 +191,25 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
         (`foo`/`bar` instead of `id`/`label`) is re-checked.
 
       Then delete the branch. Do all this before the Air reformat.
+
+      Done 2026-10-08 in PR #24 (`salvage/db-hardening`): both fixes, the
+      stale comment and the renamed-columns test. Schema quoting turned out
+      to be six query sites, not one. Tests 0 failures; detection scorer
+      still 157 of 157 at medium+, 0 false. Still open from this item:
+      - [ ] Delete branch `copilot/review-codebase-and-make-edits` (local
+            and remote) once PR #24 is merged. Needs Amelia's go-ahead.
+      - [ ] **Third fix in the same branch commit, not salvaged (deferred
+            2026-10-08, decision for Amelia).** `db_load_table()` in
+            `R/utils_db_connectors.R` builds SQL with hand-quoted
+            identifiers (`"schema"."table"`) and a backtick fallback, and
+            does not sanitise `limit`. The branch rewrites it with
+            `DBI::Id()` and `DBI::dbQuoteIdentifier()`, coerces a bad limit
+            back to 10000, and replaces the fallback with
+            `DBI::dbReadTable()`, plus 2 tests (a table name containing a
+            space and a hyphen; `limit = 0`). This is old backlog item P2
+            (not portable to SQL Server, fails silently). Left out to keep
+            PR #24 to the logged scope. Worth its own PR; say whether to
+            take it, and whether the `dbReadTable()` fallback is wanted.
 - [ ] **Close draft PR #6 but keep its branch**
       (`copilot/evaluate-current-status`, 7 Copilot commits, 2026-09-11,
       conflicts with `main`) as a reference for the Python work. Its unique
