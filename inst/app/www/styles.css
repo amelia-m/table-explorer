@@ -198,7 +198,7 @@
       display: none;
       position: absolute;
       left: 0; top: 0; bottom: 0;
-      width: 24px;
+      width: 28px;
       padding: 0;
       align-items: center; justify-content: center;
       background: var(--bg-surface);
@@ -208,6 +208,16 @@
       cursor: pointer;
       z-index: 2;
     }
+    .sidebar-rail-label {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      margin-top: 10px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+    }
+    .sidebar-rail { flex-direction: column; justify-content: flex-start; padding-top: 12px; }
     #app-body.sidebar-collapsed .sidebar-rail { display: flex; }
     /* Direct children only: a nested 3/9 row inside the main panel would
        otherwise be hidden and stretched along with the sidebar */
@@ -216,7 +226,7 @@
       width: 100%;
       /* 24px rail + 14px gap + 15px to undo Bootstrap's -15px row margin,
          which starts this column's padding box left of #app-body */
-      padding-left: 53px;
+      padding-left: 57px;
     }
 
     /* ── Form inputs ──────────────────────────────────────────── */
