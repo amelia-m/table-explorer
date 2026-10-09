@@ -434,6 +434,20 @@
     .erd-panel-cols td { padding: 2px 4px; border-top: 1px solid var(--border-sub); }
     .erd-panel-cols td:first-child { color: var(--warn); font-size: 10px; font-weight: 700; width: 48px; }
     .erd-panel-cols td:last-child { color: var(--text-secondary); text-align: right; }
+    /* Table Details: column list behind a disclosure */
+    .tbl-cols > summary {
+      cursor: pointer;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 4px 0;
+      list-style: revert;
+    }
+    .tbl-cols > summary:hover { color: var(--accent-soft); }
+    .tbl-cols[open] > summary { margin-bottom: 8px; }
     .erd-orphans { font-size: 12px; color: var(--text-primary); }
     .erd-orphans summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
     .erd-orphan { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border-sub); color: var(--accent); padding: 3px 2px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
