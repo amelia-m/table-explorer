@@ -20,6 +20,21 @@
             });
           }
         }, true);
+        // Busy indicator. Shiny fires shiny:busy on every recalculation,
+        // including fast ones, so hold it back a moment: a flash on every
+        // click reads as noise, a few seconds of nothing reads as frozen.
+        var busyTimer = null;
+        document.addEventListener("shiny:busy", function() {
+          if (busyTimer) return;
+          busyTimer = setTimeout(function() {
+            document.body.classList.add("app-is-busy");
+          }, 350);
+        });
+        document.addEventListener("shiny:idle", function() {
+          clearTimeout(busyTimer);
+          busyTimer = null;
+          document.body.classList.remove("app-is-busy");
+        });
         // Per-table remove buttons (delegated - buttons are rendered dynamically)
         document.body.addEventListener("click", function(e) {
           if (e.target.classList.contains("btn-remove")) {

@@ -148,6 +148,44 @@
     body.light-mode #theme-toggle .toggle-thumb { left: 17px; }
     #theme-toggle .toggle-icon { font-size: 14px; line-height: 1; }
 
+    /* ── Busy indicator ───────────────────────────────────────── */
+    .app-busy {
+      display: none;
+      position: fixed;
+      top: 14px; right: 18px;
+      z-index: 1050;
+      align-items: center; gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      color: var(--text-primary);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    }
+    body.app-is-busy .app-busy { display: flex; }
+    .app-busy-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: app-busy-pulse 1s ease-in-out infinite;
+    }
+    @keyframes app-busy-pulse {
+      0%, 100% { opacity: 0.25; }
+      50%      { opacity: 1; }
+    }
+    /* Anything still recalculating dims, so a stale table is not mistaken
+       for the new one */
+    body.app-is-busy .shiny-bound-output.recalculating {
+      opacity: 0.4;
+      transition: opacity 0.15s linear;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .app-busy-dot { animation: none; opacity: 1; }
+    }
+
     /* ── Sidebar ──────────────────────────────────────────────── */
     .sidebar-box {
       background: var(--bg-surface);
