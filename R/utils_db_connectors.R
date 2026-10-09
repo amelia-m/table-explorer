@@ -130,10 +130,26 @@ db_connect <- function(
   )
 }
 
+# ── SQL quoting helper ────────────────────────────────────────
+# Driver-correct string literal, so a schema name containing an
+# apostrophe cannot break (or alter) the query.
+
+sql_quote_string <- function(conn, value) {
+  as.character(DBI::dbQuoteString(conn, value %||% ""))
+}
+
 # ── Introspect database metadata ──────────────────────────────
 
 db_introspect <- function(conn, type, schema = "public") {
   result <- list(tables = character(0), pks = list(), fks = list())
+  schema_sql <- tryCatch(
+    sql_quote_string(conn, schema),
+    error = function(e) "'public'"
+  )
+  schema_upper_sql <- tryCatch(
+    sql_quote_string(conn, toupper(schema %||% "public")),
+    error = function(e) "'PUBLIC'"
+  )
 
   # Get table list
   result$tables <- tryCatch(
@@ -146,9 +162,9 @@ db_introspect <- function(conn, type, schema = "public") {
           postgres = ,
           redshift = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '",
-            schema,
-            "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ",
+            schema_sql,
+            " AND table_type = 'BASE TABLE'"
           ),
           mysql = paste0(
             "SELECT table_name FROM information_schema.tables ",
@@ -156,15 +172,15 @@ db_introspect <- function(conn, type, schema = "public") {
           ),
           sqlserver = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '",
-            schema,
-            "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ",
+            schema_sql,
+            " AND table_type = 'BASE TABLE'"
           ),
           snowflake = paste0(
             "SELECT table_name FROM information_schema.tables ",
-            "WHERE table_schema = '",
-            toupper(schema),
-            "' AND table_type = 'BASE TABLE'"
+            "WHERE table_schema = ",
+            schema_upper_sql,
+            " AND table_type = 'BASE TABLE'"
           )
         )
         res <- DBI::dbGetQuery(conn, q)
@@ -193,9 +209,8 @@ db_introspect <- function(conn, type, schema = "public") {
             "  AND tc.table_schema = kcu.table_schema ",
             "  AND tc.table_name = kcu.table_name ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '",
-            schema,
-            "'"
+            "AND tc.table_schema = ",
+            schema_sql
           ),
           mysql = paste0(
             "SELECT tc.table_name, kcu.column_name ",
@@ -215,9 +230,8 @@ db_introspect <- function(conn, type, schema = "public") {
             "  AND tc.table_schema = kcu.table_schema ",
             "  AND tc.table_name = kcu.table_name ",
             "WHERE tc.constraint_type = 'PRIMARY KEY' ",
-            "AND tc.table_schema = '",
-            schema,
-            "'"
+            "AND tc.table_schema = ",
+            schema_sql
           )
         )
         # Every MySQL primary key constraint is named PRIMARY, hence the
@@ -255,9 +269,8 @@ db_introspect <- function(conn, type, schema = "public") {
             "JOIN information_schema.constraint_column_usage ccu ",
             "  ON rc.unique_constraint_name = ccu.constraint_name ",
             "  AND rc.unique_constraint_schema = ccu.constraint_schema ",
-            "WHERE rc.constraint_schema = '",
-            schema,
-            "'"
+            "WHERE rc.constraint_schema = ",
+            schema_sql
           ),
           mysql = paste0(
             "SELECT ",

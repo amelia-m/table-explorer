@@ -248,7 +248,8 @@ is_lookup_name <- function(tname) {
 }
 
 # Lookup tables: named like one (tlk_, lkp_, _lookup, ...) or shaped like
-# one (few rows, few columns, a unique id/code column). Memoised per shape.
+# one (few rows, few columns, a unique id/code column). Memoised per
+# content for small tables, per name and shape for larger ones.
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {

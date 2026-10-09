@@ -1,5 +1,71 @@
 # TODO
 
+## Open items from the 2026-10-09 session
+
+Decisions waiting on Amelia, in full wording so they can be answered later.
+
+- [ ] **Contrast remediation**: plan written at `docs/contrast-plan.md`, measured
+      with `_scratch/contrast_audit.R`. Amelia asked to hold implementation until
+      other work lands. Its own open question: after step 1 the tokens
+      `--text-faint`, `--text-secondary` and `--empty-text` all hold `#94a3b8` in
+      dark mode. Collapse them into one token, or give `--text-faint` a distinct
+      value that still clears 4.5:1?
+- [ ] **Column semantic types**: task contract at
+      `_scratch/contracts/2026-10-09-column-semantic-types.md`, covering validated
+      type guesses (ZIP first), a type confirmation queue reusing the Data
+      Dictionary review pattern, a privacy-respecting value preview, type-driven
+      FK matching (veto mismatched confirmed types, boost matched ones), bulk
+      approval of grouped links, and cross-table column-pair rules. Not approved,
+      not dispatched. Its open assumption: where does the list of valid 3-digit
+      SCF ZIP prefixes come from, and is a one-off fetch at build time (recorded
+      in a `dev/` script, generated data committed) acceptable on this machine?
+- [ ] **Commit hygiene on `feat/dict-review-and-scroll`** (branch unpushed): it
+      carries an empty commit of mine titled "placeholder", and commit `49fbd36`
+      sweeps both the DT scrollbar fix and the empty-flagged-column queue work
+      under a scrollbar-only message. Proposed fix: `git reset --soft HEAD~2` and
+      recommit as two honest commits. Needs Amelia's go-ahead, per the rule on
+      resets.
+- [ ] **Dictionary scrollbar height**: currently `scrollY = "62vh"` plus
+      `scrollCollapse`. Recommended instead:
+      `max-height: calc(100dvh - var(--dict-chrome, 360px))` in CSS, so the
+      offset lives in one place and the cap bites on short windows. The JS
+      measure-and-set alternative needs three listeners and a visibility guard
+      and was judged more fragile. Amelia to choose.
+- [ ] **Merge order and visual checks for the open PRs**: #23 drop golem, #24
+      schema quoting and port validation, #25 `db_load_table` dialect and strict
+      limit, #26 collapsible sidebar, #27 ERD chips off shared trunks, #28
+      relationship panel grid, #29 Table Details collapse. #27, #28 and #29 were
+      verified only on an empty app or not at all, and need a look on the real
+      schema before merging.
+- [ ] **Detection noise: value overlap on counts and low-cardinality integers**
+      (Amelia, 2026-10-09: its own PR, after the current PRs land). A count
+      column such as a `*_month_count` holding {0..12} overlaps any `tlk_*.id`
+      holding a contiguous 1..N almost perfectly, so `overlap_high` (weight
+      0.90) plus `format_match` (0.40, shape `int_code`) produces a 49% low
+      candidate. On the real schema this is a large share of the 357
+      low-confidence rows. The only guard today is
+      `is_fk_candidate()` at `R/utils_inference.R:748`, which rejects a column
+      only when `n_unique <= 2 && n > 10` and it is not key-named.
+      Agreed approach, rules 1 and 4:
+      1. Chance-overlap discount: estimate expected overlap from the parent's
+         domain density (distinct values `m` over range `R`) and score only the
+         excess, `max(0, observed - expected)`. Overlap on a dense integer
+         domain then carries almost no weight.
+      4. Two-signal floor: a single content signal cannot raise a candidate when
+         the child column's distinct count is below a threshold (start at 5);
+         it needs overlap plus cardinality, or a naming signal.
+      Rule 3 (a measure-name guard for `*_count`, `*_qty`, `*_amount`, `*_age`,
+      `*_days`, `*_month`, `*_year`, `*_total`) is held back: `is_key_name()`
+      already treats `_num` and `_no` as key-like, so the two lists contradict
+      and that has to be resolved first.
+      Acceptance: `Rscript dev/fixtures/score_detection.R` still reports 157 of
+      157 real links at medium+ with 0 false, and the low-confidence count on
+      Amelia's schema drops measurably (only she can measure that).
+- [ ] **`limit = 0` semantics** (`db_load_table`, PR #25): currently 0 means zero
+      rows, following `DBI::dbFetch()`. Useful only once a caller can use an
+      empty frame for a schema-only probe: `mod_db_connect.R` drops frames with
+      `nrow(df) == 0`. Build that path, or leave the semantics unused?
+
 - [x] Add a "Hide empty tables" toggle (0-row tables) to the sidebar that filters
       them out of the ERD, Table Details, and Relationships views.
 - [ ] (Maybe later) User-defined naming patterns for FK detection: a settings
@@ -62,20 +128,11 @@ Baseline: on `main` at `6276a1e`, with the real packages (R 4.6.1),
 errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
 157 of 157 real links at medium+, 0 false.
 
-- [ ] **Framework decision (research done 2026-10-02, decision pending).**
-      `docs/research/shiny-framework/decision.md` sums up five agent reports.
-      Its findings:
-      - golem wired up and a plain package (golem removed) both keep the R
-        package, Positron extension and Connect Cloud routes open;
-      - leprechaun, rhino and a plain `app.R` lose for this app, and
-        Amelia rejected all three on 2026-10-02;
-      - the open choice is golem wired up or a plain package; the research
-        leans to a plain package, but it isn't a clear win.
-
-      The outcome decides whether golem stays, and with it backlog decision
-      D1 in `dev/code-review-backlog.md` (wire `inst/golem-config.yml` or
-      delete it). Until then `shiny.maxRequestSize` in that file is never
-      applied, so uploads are capped at Shiny's 5 MB default (backlog C3).
+- [x] **Framework decision (2026-10-02): golem dropped, plain package.**
+      Why, what changed, and when golem would be worth bringing back are in
+      `docs/research/shiny-framework/decision.md`. Rejected: leprechaun,
+      rhino and a plain `app.R`. This also resolved backlog items C3 (the
+      upload limit now applies, 100 MB), I5, I13, M9, M10, M11 and D1.
 - [ ] **R version for Connect Cloud (deferred 2026-10-02).** Connect Cloud
       supports R 4.0.0 to 4.6.0 (its R platform docs). This machine has only
       R 4.6.1, so a `manifest.json` written here names an unsupported
@@ -105,7 +162,7 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
       package release also needs `app.R`, `app.py`, `dev/`, `docs/`,
       `_scratch/`, `sample_data/`, the legacy root `.R` files, `CLAUDE.md`,
       `TODO.md`, `.agents/` and `.vscode/`.
-- [ ] **Salvage two fixes from branch
+- [x] **Salvage two fixes from branch
       `copilot/review-codebase-and-make-edits`** (one Copilot commit,
       2026-08-06, never opened as a PR). Re-apply them by hand as a small PR
       on current `main`; the code has moved too far to cherry-pick.
@@ -125,6 +182,25 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
         (`foo`/`bar` instead of `id`/`label`) is re-checked.
 
       Then delete the branch. Do all this before the Air reformat.
+
+      Done 2026-10-08 in PR #24 (`salvage/db-hardening`): both fixes, the
+      stale comment and the renamed-columns test. Schema quoting turned out
+      to be six query sites, not one. Tests 0 failures; detection scorer
+      still 157 of 157 at medium+, 0 false. Still open from this item:
+      - [ ] Delete branch `copilot/review-codebase-and-make-edits` (local
+            and remote) once PR #24 is merged. Needs Amelia's go-ahead.
+      - [ ] **Third fix in the same branch commit, not salvaged (deferred
+            2026-10-08, decision for Amelia).** `db_load_table()` in
+            `R/utils_db_connectors.R` builds SQL with hand-quoted
+            identifiers (`"schema"."table"`) and a backtick fallback, and
+            does not sanitise `limit`. The branch rewrites it with
+            `DBI::Id()` and `DBI::dbQuoteIdentifier()`, coerces a bad limit
+            back to 10000, and replaces the fallback with
+            `DBI::dbReadTable()`, plus 2 tests (a table name containing a
+            space and a hyphen; `limit = 0`). This is old backlog item P2
+            (not portable to SQL Server, fails silently). Left out to keep
+            PR #24 to the logged scope. Worth its own PR; say whether to
+            take it, and whether the `dbReadTable()` fallback is wanted.
 - [ ] **Close draft PR #6 but keep its branch**
       (`copilot/evaluate-current-status`, 7 Copilot commits, 2026-09-11,
       conflicts with `main`) as a reference for the Python work. Its unique
