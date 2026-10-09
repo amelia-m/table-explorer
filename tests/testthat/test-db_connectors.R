@@ -149,7 +149,24 @@ test_that("db_load_table quotes awkward table names", {
   db_close(conn)
 })
 
-test_that("db_load_table falls back to the default on an unusable limit", {
+test_that("db_load_table limit = 0 returns columns and types, no rows", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:8, label = letters[1:8]))
+
+  df <- db_load_table(conn, "items", limit = 0, type = "sqlite")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), 0)
+  expect_equal(names(df), c("id", "label"))
+
+  db_close(conn)
+})
+
+test_that("db_load_table limit = Inf returns every row", {
   skip_if_not_installed("RSQLite")
 
   tmp_db <- tempfile(fileext = ".sqlite")
@@ -158,11 +175,27 @@ test_that("db_load_table falls back to the default on an unusable limit", {
   conn <- db_connect("sqlite", path = tmp_db)
   DBI::dbWriteTable(conn, "items", data.frame(id = 1:8))
 
-  # NA, non-numeric and below 1 all mean "use the 10000-row default"
-  for (bad in list(NA, "abc", 0, -5)) {
-    df <- db_load_table(conn, "items", limit = bad, type = "sqlite")
-    expect_true(is.data.frame(df))
-    expect_equal(nrow(df), 8)
+  df <- db_load_table(conn, "items", limit = Inf, type = "sqlite")
+  expect_equal(nrow(df), 8)
+
+  db_close(conn)
+})
+
+test_that("db_load_table rejects an unusable limit", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:3))
+
+  # Garbage is a caller bug, not something to paper over with a default
+  for (bad in list(NA, NA_integer_, "abc", -5, 2.5, c(1, 2), NULL)) {
+    expect_error(
+      db_load_table(conn, "items", limit = bad, type = "sqlite"),
+      "single whole number"
+    )
   }
 
   db_close(conn)
@@ -201,6 +234,15 @@ test_that("db_load_table uses TOP for sqlserver and LIMIT elsewhere", {
   expect_equal(
     db_row_limit_sql("\"items\"", 5L, top = FALSE),
     "SELECT * FROM \"items\" LIMIT 5"
+  )
+  # Inf drops the clause, and a big limit is not written as 1e+06
+  expect_equal(
+    db_row_limit_sql("\"items\"", Inf, top = TRUE),
+    "SELECT * FROM \"items\""
+  )
+  expect_equal(
+    db_row_limit_sql("\"items\"", 1e6, top = FALSE),
+    "SELECT * FROM \"items\" LIMIT 1000000"
   )
 })
 
