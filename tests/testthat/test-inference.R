@@ -407,6 +407,7 @@ test_that("detect_pks works on a table wide enough to blow the name cap", {
   ))
   df$id <- c(1L, 2L)
   expect_true("id" %in% detect_pks(df, "wide_table", method = "both"))
+})
 
 test_that("identical column names report as identical, not as similarity", {
   df1 <- data.frame(provider_id = c(1, 2, 3))
