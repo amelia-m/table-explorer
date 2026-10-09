@@ -324,9 +324,18 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   who already holds the credentials - so this is closer to a robustness bug than privilege
   escalation. A schema named `O'Brien` breaks it.
 
-- [ ] **P2. `db_load_table` SQL is not portable to SQL Server and fails silently.**
+- [x] **P2. `db_load_table` SQL is not portable to SQL Server and fails silently.**
   `LIMIT` is not valid T-SQL, so both the primary query and the backtick fallback fail, and
   `error = function(e2) NULL` returns `NULL` with no user-visible reason.
+  Done 2026-10-08: `sqlserver` now gets `SELECT TOP (n)`, every other type keeps `LIMIT`, and
+  an unknown type tries one then the other. Failures reach the user through `notify_fn`.
+  Identifiers are quoted by the driver (`DBI::Id()` / `dbQuoteIdentifier()`), so the
+  schema-dropping backtick fallback is gone. Decision (revised 2026-10-09): `limit` is a
+  strict contract, as for `DBI::dbFetch()`. `0` means zero rows (`LIMIT 0` / `TOP (0)`:
+  columns and types, no data), `Inf` means no limit clause, and anything else that is not a
+  single whole number >= 0 stops with an error rather than being replaced by a default.
+  Leniency belongs where the human types, as with the port in `R/mod_db_connect.R`; no UI
+  control sets `limit` today, so there is nothing to sanitise yet.
 
 - [ ] **P3. `read_access_db` re-downloads roughly 10 MB of UCanAccess JARs every session.**
   `R/utils_file_readers.R:446` targets `dirname(<uploaded .mdb>)/access_jars`, which under
