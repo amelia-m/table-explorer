@@ -27,6 +27,17 @@ lack of quota.
   merge" line for this repository. Branch deletion still needs her go-ahead,
   as does anything else the global rules gate (force pushes, resets,
   discarding work, changing remotes or settings).
+- **Verification is a command whose result you quote, never the absence of
+  output.** Run `Rscript dev/check.R`: it parses every R and JS file, runs
+  the suite and reports the counts, runs the detection scorer, and exits
+  non-zero on any failure. Quote its summary lines in the pull request. An
+  empty grep, a missing "Failed" header or a silent command is not evidence
+  that anything passed. Twice in one session an edit half-applied and the
+  signal that should have caught it was silence.
+- **Do not let a script write a file before all of its assertions have
+  passed.** A multi-step edit that writes as it goes leaves the file half
+  changed when a later step fails. Either use the editing tools, or build
+  the whole new content in memory and write once at the end.
 - There is no CI here yet, so the output of `testthat::test_local()` and
   `Rscript dev/fixtures/score_detection.R` stands in for it and belongs in the
   pull request body, named with the command that produced it. Pulling the
