@@ -479,6 +479,11 @@ mod_dictionary_server <- function(
           pageLength = 50,
           lengthMenu = list(c(25, 50, 100, -1), c("25", "50", "100", "All")),
           scrollX = TRUE,
+          # Without a capped body the horizontal bar sits under the last
+          # row, so on a 50-row page it is off screen until you scroll
+          # past everything. Capping the body keeps it in view.
+          scrollY = "62vh",
+          scrollCollapse = TRUE,
           autoWidth = FALSE,
           order = list(list(0, "asc"), list(1, "asc")),
           columnDefs = list(
