@@ -8,10 +8,15 @@ mod_relationships_ui <- function(id) {
   ns <- NS(id)
   tagList(
     br(),
+    # Above the table: at the bottom it sat past 477 rows of review and
+    # went unnoticed
+    div(
+      class = "rel-export",
+      downloadButton(ns("dl_rels"), "\u2b07  Export CSV", class = "dl-btn")
+    ),
     uiOutput(ns("relationships_summary")),
     uiOutput(ns("relationships_ui")),
-    br(),
-    downloadButton(ns("dl_rels"), "\u2b07  Export CSV", class = "dl-btn")
+    br()
   )
 }
 
