@@ -52,7 +52,7 @@ app_ui <- function(request) {
         `aria-controls` = "sidebar-col",
         tags$span(class = "sidebar-chevron", "›"),
         # A bare chevron does not say what comes back
-        tags$span(class = "sidebar-rail-label", "CONTROLS")
+        tags$span(class = "sidebar-rail-label", "DATA & DETECTION")
       ),
 
       fluidRow(
