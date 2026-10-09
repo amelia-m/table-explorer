@@ -13,8 +13,67 @@ where one option clearly wins; elsewhere it sets out the trade-off.
 ## Decisions
 
 - 2026-10-02, Amelia: leprechaun, rhino and a plain `app.R` are rejected.
-  Still open: golem with its config wired up, or a plain package (golem
-  removed).
+- 2026-10-02, Amelia: **drop golem for now; the app is a plain package.**
+
+### Why golem was dropped
+
+- **It was never really used.** Its only runtime role was one
+  `golem::with_golem_options()` call around `shinyApp()`. The config file
+  was never read (so the 100 MB upload limit in it never applied), one
+  import was unused, and none of its helpers were called.
+- **Finishing the adoption would have cost more than removing it:** about 8
+  files of wiring, against about 6 for removal. Its config would still not
+  have set Shiny options by itself.
+- **None of the three shipping routes needs it.** A plain package serves the
+  R package, Positron extension and Connect Cloud routes equally well.
+- **A plain package is the most widely known layout,** and it leaves no
+  half-adopted conventions for people or agents to trip over.
+- **The runtime saving is small, and was not the reason:** 4 packages
+  (golem, attempt, config, codetools), 2.5 MB, and about 0.3 s at startup,
+  measured on this machine.
+
+### What changed
+
+- `R/run_app.R` builds the app with plain `shinyApp()`, passing through
+  `onStart`, `options`, `enableBookmarking` and `uiPattern` (backlog M10).
+- It sets `shiny.maxRequestSize` (default 100 MB, argument
+  `max_request_size`) when the app starts, and restores it when the app
+  stops (C3).
+- It stops with a clear message if the static files can't be found (M11).
+- golem is gone from `DESCRIPTION`, `NAMESPACE` and the package
+  documentation (M9); `inst/golem-config.yml` is deleted (I5, D1: "delete
+  it"; I13 moot). The golem lines in `dev/`, `app.R` and `README.md` are
+  updated.
+- New `R/_disable_autoload.R`, so Shiny doesn't source `R/` by itself when
+  `app.R` runs.
+- New `tests/testthat/test-run_app.R`: 3 tests, which failed on the golem
+  version and pass now.
+- `renv.lock` lost golem, attempt, config and codetools.
+
+### When golem would be worth bringing back
+
+Re-adding it costs about what wiring it up would have: an
+`R/app_config.R`, a config file, the template `run_app()`, and golem in
+Imports. Reconsider if any of these become true:
+
+1. **Settings differ between environments.** Dev, staging and production
+   need different values (upload limits, feature switches, database
+   defaults), and switching them by environment variable with golem's
+   config profiles beats hand-written `Sys.getenv()` code.
+2. **A maintenance page is needed.** A hosted copy has users who should see
+   "down for maintenance" during updates without a redeploy.
+3. **New modules are added often,** and `add_module()` and similar
+   generators would save real time over copying an existing module.
+4. **Container or CI deployment.** golem's Dockerfile generators
+   (including a renv-based one) and CI templates would be the quickest
+   route.
+5. **More contributors who know golem.** Working with a team that expects
+   golem's layout and conventions.
+6. **golem gains support for the routes in use here:** Connect Cloud
+   deployment files, Positron extension support, or a fix for issue #1185
+   (golem apps ignore Positron's external preview setting).
+
+Golem's runtime weight is not a factor either way.
 
 ## The short version
 

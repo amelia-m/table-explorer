@@ -54,7 +54,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   is both PK-named and unique, and columns that are unique on their own are excluded from the
   combo search (otherwise `a + d` is returned before `a + b + c`). All tests pass.
 
-- [ ] **C3. `options(shiny.maxRequestSize)` was dropped in the restructure.**
+- [x] **C3. `options(shiny.maxRequestSize)` was dropped in the restructure.** Resolved 2026-10-02 (golem dropped): `run_app()` sets it on start, 100 MB default.
   `main`'s `app.R:14` set `shiny.maxRequestSize = Inf`. On this branch the value
   exists only at `inst/golem-config.yml:6` (104857600), which nothing reads (see I5).
   `grep -rn "options(" R/ app.R` returns nothing. Uploads silently revert to Shiny's
@@ -127,7 +127,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
 
 ### Packaging and golem conformance (reviewer C)
 
-- [ ] **I5. `inst/golem-config.yml` is decorative - nothing can read it.**
+- [x] **I5. `inst/golem-config.yml` is decorative - nothing can read it.** Resolved 2026-10-02: file deleted with golem.
   There is no `R/app_config.R`, so `app_sys()` and `get_golem_config()` do not exist in
   the package (`grep -rn "app_sys\|get_golem_config" R/` returns only comments). So
   `app_prod`, `app_url` and `shiny.maxRequestSize` are all inert. `app.R` also never sets
@@ -219,7 +219,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   inside a function it does not throw, but `$ofile` is always `NULL` so it always yields
   `dirname(".")`. See D5.
 
-- [ ] **I13. `app.R` is missing `options("golem.app.prod" = TRUE)`.**
+- [x] **I13. `app.R` is missing `options("golem.app.prod" = TRUE)`.** Moot 2026-10-02: golem dropped.
   The rest of the file matches golem's generated deployment template. Inert today since
   nothing reads `golem.app.prod`, but one line now prevents a future `golem::app_prod()`
   guard silently behaving as dev in production.
@@ -270,15 +270,15 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Both are Suggests, so `R CMD check --as-cran` flags unconditional Suggests use, and the user
   gets a raw "no package called 'RSQLite'" instead of the friendly notification.
 
-- [ ] **M9. `NAMESPACE` imports `golem::get_golem_options`, never called.**
+- [x] **M9. `NAMESPACE` imports `golem::get_golem_options`, never called.** Resolved 2026-10-02: golem imports removed.
   Drop from `R/tableexplorer-package.R:13`.
 
-- [ ] **M10. `R/run_app.R:5` takes only `...`.**
+- [x] **M10. `R/run_app.R:5` takes only `...`.** Resolved 2026-10-02: `run_app()` passes the shinyApp arguments through.
   golem's template signature is `run_app(onStart, options, enableBookmarking, uiPattern, ...)`
   passed to `shinyApp()`. As written you cannot set a port, bookmarking or `onStart` without
   editing the function.
 
-- [ ] **M11. `R/run_app.R:8-9` - `addResourcePath("tableexplorer", "")` on a missing package.**
+- [x] **M11. `R/run_app.R:8-9` - `addResourcePath("tableexplorer", "")` on a missing package.** Resolved 2026-10-02: `run_app()` stops with a clear message.
   If `system.file()` returns `""`, this errors with a confusing message. `app_sys()` exists
   to wrap exactly this.
 
@@ -343,7 +343,7 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
 
 ## Decisions needed
 
-- [ ] **D1. `inst/golem-config.yml`: wire it or delete it.**
+- [x] **D1. `inst/golem-config.yml`: wire it or delete it.** Decided 2026-10-02: deleted, golem dropped (see docs/research/shiny-framework/decision.md).
   Either add a real `R/app_config.R` (golem's `app_sys()` + `get_golem_config()`), fix
   `app_version` to `golem_version`, and add the `dev:` block - or remove the file so it stops
   implying behaviour it does not have. Wiring it is the prerequisite for reading
