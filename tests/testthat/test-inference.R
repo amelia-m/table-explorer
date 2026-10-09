@@ -408,11 +408,54 @@ test_that("near-identical column names still report as similarity", {
   )
   res <- score_candidate("tbl_a", "provider_ids", df1, "tbl_b", "provider_id", df2, flags)
   expect_false("name_identical" %in% names(res$signals))
+  # Assert the positive too: without it this passes when res is NULL
+  expect_true("name_sim" %in% names(res$signals))
 })
 
-test_that("name_identical carries the same weight as name_sim", {
-  # The split is a labelling change: scores must not move
+test_that("splitting out name_identical leaves the score and the label alone", {
+  df1 <- data.frame(provider_id = c(1, 2, 3))
+  df2 <- data.frame(provider_id = c(1, 2, 3))
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  res <- score_candidate("tbl_a", "provider_id", df1, "tbl_b", "provider_id", df2, flags)
+  # cardinality_match (0.95) outranks the naming signal here, so check the
+  # label on a naming-only pass as well
+  name_only <- score_candidate(
+    "tbl_a", "provider_id", df1, "tbl_b", "provider_id", df2,
+    list(
+      naming = TRUE, value_overlap = FALSE, cardinality = FALSE,
+      format = FALSE, distribution = FALSE, null_pattern = FALSE
+    )
+  )
+  expect_equal(name_only$detected_by, "name_similarity")
+  # Same weight as name_sim, so the noisy-OR is unchanged
   expect_equal(unname(weight_map[["name_identical"]]), unname(weight_map[["name_sim"]]))
+  expect_equal(res$score, 1 - (1 - 0.95) * (1 - 0.90) * (1 - 0.60))
+  # And detected_by keeps its old value: the Method chip, its CSS class,
+  # the ERD edge colour and the exports all read this string
+  expect_equal(res$detected_by, "cardinality")
+  expect_equal(unname(label_map[["name_identical"]]), "name_similarity")
+})
+
+test_that("the ambiguity tie-break still treats a closer name as closer", {
+  # resolve_fk_parents' "name is closest" branch: the child column name
+  # matches one parent's column, and values fit both parents
+  tables <- list(
+    visits = data.frame(provider_id = c(1, 2, 3, 1)),
+    staff = data.frame(provider_id = c(1, 2, 3)),
+    sites = data.frame(code = c(1, 2, 3))
+  )
+  rels <- detect_fks(tables, method = "both", min_confidence = "low")
+  to_staff <- Filter(
+    function(r) r$from_table == "visits" && r$to_table == "staff",
+    rels
+  )
+  expect_length(to_staff, 1)
+  expect_true(
+    any(c("name_identical", "name_sim") %in% names(to_staff[[1]]$signals))
+  )
 })
 
 # ── Constants and maps ───────────────────────────────────────
