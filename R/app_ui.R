@@ -37,6 +37,18 @@ app_ui <- function(request) {
       )
     ),
 
+    # Shown while Shiny is busy for more than a moment: switching to Table
+    # Details on a wide schema can take seconds, and nothing on screen said
+    # the app was working rather than stuck
+    div(
+      id = "app-busy",
+      class = "app-busy",
+      role = "status",
+      `aria-live` = "polite",
+      div(class = "app-busy-dot"),
+      tags$span("Working...")
+    ),
+
     fluidRow(
       # ---- Sidebar ----
       column(
