@@ -201,7 +201,15 @@ mod_db_connect_server <- function(
           raw_tname <- input$db_selected_tables[i]
           tname <- janitor::make_clean_names(raw_tname)
           incProgress(1 / n, detail = tname)
-          df <- db_load_table(conn, raw_tname, schema_val)
+          df <- db_load_table(
+            conn,
+            raw_tname,
+            schema_val,
+            type = input$db_type %||% "",
+            notify_fn = function(msg) {
+              showNotification(msg, type = "error", duration = 8)
+            }
+          )
           if (!is.null(df) && nrow(df) > 0) {
             clean_df <- janitor::clean_names(df)
             existing[[tname]] <- clean_df

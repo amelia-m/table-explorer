@@ -314,22 +314,77 @@ db_introspect <- function(conn, type, schema = "public") {
 
 # ── Load a single table from the database ─────────────────────
 
-db_load_table <- function(conn, table_name, schema = "", limit = 10000) {
-  q <- if (nzchar(schema)) {
-    paste0("SELECT * FROM \"", schema, "\".\"", table_name, "\" LIMIT ", limit)
+# Row-limit syntax is dialect-specific: T-SQL (sqlserver) has no LIMIT,
+# every other supported backend does. With the type unknown, try LIMIT
+# first and fall back to TOP, rather than reading the whole table.
+
+db_row_limit_sql <- function(tbl_sql, limit, top = FALSE) {
+  if (top) {
+    paste0("SELECT TOP (", limit, ") * FROM ", tbl_sql)
   } else {
-    paste0("SELECT * FROM \"", table_name, "\" LIMIT ", limit)
+    paste0("SELECT * FROM ", tbl_sql, " LIMIT ", limit)
   }
+}
+
+db_load_table <- function(
+  conn,
+  table_name,
+  schema = "",
+  limit = 10000,
+  type = "",
+  notify_fn = message
+) {
+  # A limit that is missing, non-numeric or below 1 falls back to the
+  # default: the caller wants a preview, and 0 rows is never useful
+  limit <- suppressWarnings(as.integer(limit))
+  if (is.na(limit) || limit < 1L) {
+    limit <- 10000L
+  }
+
+  tbl_ref <- if (nzchar(schema)) {
+    DBI::Id(schema = schema, table = table_name)
+  } else {
+    DBI::Id(table = table_name)
+  }
+  # Let the driver quote: backticks for MySQL, brackets for SQL Server,
+  # double quotes for postgres and sqlite
+  tbl_sql <- tryCatch(
+    as.character(DBI::dbQuoteIdentifier(conn, tbl_ref)),
+    error = function(e) NULL
+  )
+  if (is.null(tbl_sql)) {
+    notify_fn(paste0("Could not quote table name: ", table_name))
+    return(NULL)
+  }
+
+  use_top <- identical(type, "sqlserver")
   tryCatch(
-    DBI::dbGetQuery(conn, q),
+    DBI::dbGetQuery(conn, db_row_limit_sql(tbl_sql, limit, top = use_top)),
     error = function(e) {
-      # Fallback: try without schema quoting (for MySQL, SQLite, etc.)
+      if (nzchar(type)) {
+        notify_fn(paste0(
+          "Could not load table '",
+          table_name,
+          "': ",
+          conditionMessage(e)
+        ))
+        return(NULL)
+      }
+      # Type unknown: the other dialect's syntax is the likely cause
       tryCatch(
         DBI::dbGetQuery(
           conn,
-          paste0("SELECT * FROM `", table_name, "` LIMIT ", limit)
+          db_row_limit_sql(tbl_sql, limit, top = !use_top)
         ),
-        error = function(e2) NULL
+        error = function(e2) {
+          notify_fn(paste0(
+            "Could not load table '",
+            table_name,
+            "': ",
+            conditionMessage(e2)
+          ))
+          NULL
+        }
       )
     }
   )

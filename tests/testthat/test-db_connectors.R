@@ -129,6 +129,104 @@ test_that("db_load_table respects limit parameter", {
   db_close(conn)
 })
 
+test_that("db_load_table quotes awkward table names", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(
+    conn,
+    DBI::Id(table = "weird table-name"),
+    data.frame(id = 1:3, value = letters[1:3])
+  )
+
+  df <- db_load_table(conn, "weird table-name", type = "sqlite")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), 3)
+
+  db_close(conn)
+})
+
+test_that("db_load_table falls back to the default on an unusable limit", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:8))
+
+  # NA, non-numeric and below 1 all mean "use the 10000-row default"
+  for (bad in list(NA, "abc", 0, -5)) {
+    df <- db_load_table(conn, "items", limit = bad, type = "sqlite")
+    expect_true(is.data.frame(df))
+    expect_equal(nrow(df), 8)
+  }
+
+  db_close(conn)
+})
+
+test_that("db_load_table reports a failure instead of returning NULL quietly", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:3))
+
+  msgs <- character(0)
+  df <- db_load_table(
+    conn,
+    "no_such_table",
+    type = "sqlite",
+    notify_fn = function(m) msgs <<- c(msgs, m)
+  )
+  expect_null(df)
+  expect_length(msgs, 1)
+  expect_match(msgs[1], "no_such_table")
+
+  db_close(conn)
+})
+
+test_that("db_load_table uses TOP for sqlserver and LIMIT elsewhere", {
+  # SQL Server has no LIMIT, so the dialect decides the syntax. No odbc
+  # connection here: assert on the generated SQL.
+  expect_equal(
+    db_row_limit_sql("[dbo].[items]", 5L, top = TRUE),
+    "SELECT TOP (5) * FROM [dbo].[items]"
+  )
+  expect_equal(
+    db_row_limit_sql("\"items\"", 5L, top = FALSE),
+    "SELECT * FROM \"items\" LIMIT 5"
+  )
+})
+
+test_that("db_load_table retries the other dialect when the type is unknown", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:4))
+
+  # type = "" keeps the old dialect-blind behaviour, without a full read
+  msgs <- character(0)
+  df <- db_load_table(
+    conn,
+    "items",
+    type = "",
+    notify_fn = function(m) msgs <<- c(msgs, m)
+  )
+  expect_equal(nrow(df), 4)
+  expect_length(msgs, 0)
+
+  db_close(conn)
+})
+
 # ── db_close ─────────────────────────────────────────────────
 
 test_that("db_close handles NULL connection", {
