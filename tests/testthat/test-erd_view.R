@@ -1,5 +1,5 @@
 # ============================================================
-# Tests for erd_view() and erd_elk_graph() - the ERD Diagram tab
+# Tests for erd_view() and erd_elk_graph() - the ERD tab
 # ============================================================
 
 low_rel <- function() {

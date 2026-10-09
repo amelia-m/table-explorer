@@ -1,5 +1,5 @@
 # ============================================================
-# mod_erd.R - ERD Diagram (standard physical ERD)
+# mod_erd.R - ERD tab (standard physical ERD)
 # ============================================================
 #
 # Table cards with PK/FK/UK badges, lines from the FK row to the PK row,
@@ -142,13 +142,15 @@ mod_erd_ui <- function(id) {
         class = "erd-layout",
         div(
           class = "erd-main",
-          div(id = ns("canvas"), class = "erd-canvas"),
+          # Above the canvas: below it the key sat off the bottom of a
+          # tall diagram, so the symbols went unexplained
           tags$details(
             class = "erd-legend",
             open = NA,
-            tags$summary("Legend"),
+            tags$summary("Key"),
             div(id = ns("legend"), class = "erd-legend-body")
-          )
+          ),
+          div(id = ns("canvas"), class = "erd-canvas")
         ),
         div(class = "erd-side", uiOutput(ns("side")))
       )

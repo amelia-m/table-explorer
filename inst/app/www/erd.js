@@ -1,5 +1,5 @@
 // ============================================================
-// erd.js - ERD Diagram renderer (elkjs layout + hand-drawn SVG)
+// erd.js - ERD renderer (elkjs layout + hand-drawn SVG)
 // ============================================================
 //
 // The server (R/mod_erd.R) sends an ELK graph built by erd_elk_graph():
