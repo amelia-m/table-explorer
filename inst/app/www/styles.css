@@ -198,7 +198,7 @@
       display: none;
       position: absolute;
       left: 0; top: 0; bottom: 0;
-      width: 28px;
+      width: 30px;
       padding: 0;
       align-items: center; justify-content: center;
       background: var(--bg-surface);
@@ -209,13 +209,16 @@
       z-index: 2;
     }
     .sidebar-rail-label {
+      /* Bottom-to-top, the usual reading direction for a vertical tab.
+         IBM Plex Mono at 10px with wide tracking renders muddy once
+         rotated, so this is the UI sans at 11px with normal tracking. */
       writing-mode: vertical-rl;
-      text-orientation: mixed;
+      transform: rotate(180deg);
       margin-top: 10px;
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 2px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
     }
     .sidebar-rail { flex-direction: column; justify-content: flex-start; padding-top: 12px; }
     #app-body.sidebar-collapsed .sidebar-rail { display: flex; }
@@ -226,7 +229,7 @@
       width: 100%;
       /* 24px rail + 14px gap + 15px to undo Bootstrap's -15px row margin,
          which starts this column's padding box left of #app-body */
-      padding-left: 57px;
+      padding-left: 59px;
     }
 
     /* ── Form inputs ──────────────────────────────────────────── */
