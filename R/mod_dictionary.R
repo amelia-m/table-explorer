@@ -263,9 +263,20 @@ mod_dictionary_server <- function(
     })
 
     # ── Reviewing automatic flags ────────────────────────────
-    queue_rv <- reactive({
+    queue_all_rv <- reactive({
       req(length(tables_rv()) > 0)
       privacy_review_queue(tables_rv(), dictionary_rv())
+    })
+
+    # A column with no values cannot disclose anything, and on a wide
+    # extract these dominate the queue. Hidden by default, counted in the
+    # banner so they are not a secret.
+    queue_rv <- reactive({
+      q <- queue_all_rv()
+      if (isTRUE(input$review_hide_empty %||% TRUE)) {
+        q <- q[q$n_values > 0, , drop = FALSE]
+      }
+      q
     })
 
     # Say so once when new columns are flagged
@@ -289,16 +300,40 @@ mod_dictionary_server <- function(
 
     output$review_banner <- renderUI({
       q <- tryCatch(queue_rv(), error = function(e) NULL)
-      if (is.null(q) || nrow(q) == 0) {
+      all_q <- tryCatch(queue_all_rv(), error = function(e) NULL)
+      if (is.null(all_q) || nrow(all_q) == 0) {
         return(NULL)
       }
+      n_empty <- sum(all_q$n_values == 0)
+      n <- nrow(q)
       div(
         class = "dict-review-banner",
-        sprintf(
-          "%d column%s flagged as possibly personal. Until you review them they are treated as private: no example values or value ranges.",
-          nrow(q), if (nrow(q) == 1) " was" else "s were"
+        div(
+          if (n == 0) {
+            sprintf(
+              "All %d flagged column%s are empty, so nothing needs reviewing.",
+              n_empty, if (n_empty == 1) "" else "s"
+            )
+          } else {
+            sprintf(
+              "%d column%s flagged as possibly personal. Until you review them they are treated as private: no example values or value ranges.",
+              n, if (n == 1) " was" else "s were"
+            )
+          },
+          if (n_empty > 0) {
+            checkboxInput(
+              ns("review_hide_empty"),
+              sprintf(
+                "Hide %d flagged column%s with no values",
+                n_empty, if (n_empty == 1) "" else "s"
+              ),
+              # Isolated: this banner re-renders when the box is ticked,
+              # and reading it reactively here would reset it each time
+              value = isTRUE(isolate(input$review_hide_empty) %||% TRUE)
+            )
+          }
         ),
-        actionButton(ns("review"), "Review", class = "btn-sm")
+        if (nrow(q) > 0) actionButton(ns("review"), "Review", class = "btn-sm")
       )
     })
 
