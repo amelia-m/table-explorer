@@ -172,6 +172,10 @@ filter_rel_sources <- function(rels, sources = "both") {
     Filter(function(r) rel_source(r) %in% c("declared", "manual"), rels)
   } else if (identical(sources, "detected")) {
     Filter(function(r) rel_source(r) %in% c("detected", "confirmed"), rels)
+  } else if (identical(sources, "confirmed")) {
+    Filter(function(r) identical(rel_source(r), "confirmed"), rels)
+  } else if (identical(sources, "to_review")) {
+    Filter(function(r) identical(rel_source(r), "detected"), rels)
   } else {
     rels
   }
@@ -242,4 +246,72 @@ apply_declared_composite_pks <- function(composite_map, declared, tables) {
     }
   }
   composite_map
+}
+
+# ── Build stamp ──────────────────────────────────────────────
+# Which build is this? Running from source during development, the
+# answer is the git checkout; installed, it is whatever the build wrote
+# into inst/BUILD. Either way the footer can name it, so a screenshot
+# says which code produced it.
+
+app_build_stamp <- function() {
+  ver <- tryCatch(
+    as.character(utils::packageVersion("tableexplorer")),
+    error = function(e) NA_character_
+  )
+  sha <- NA_character_
+  when <- NA_character_
+
+  build_file <- tryCatch(
+    system.file("BUILD", package = "tableexplorer"),
+    error = function(e) ""
+  )
+  if (nzchar(build_file) && file.exists(build_file)) {
+    fields <- tryCatch(readLines(build_file, warn = FALSE), error = function(e) character(0))
+    sha <- sub("^sha:[[:space:]]*", "", grep("^sha:", fields, value = TRUE)[1])
+    when <- sub("^date:[[:space:]]*", "", grep("^date:", fields, value = TRUE)[1])
+  }
+
+  # Development checkout: ask git, but never let a missing git or a
+  # non-repo directory break the page
+  if (is.na(sha) || !nzchar(sha %||% "")) {
+    git_sha <- tryCatch(
+      suppressWarnings(system2(
+        "git",
+        c("-C", shQuote(getwd()), "rev-parse", "--short", "HEAD"),
+        stdout = TRUE,
+        stderr = FALSE
+      )),
+      error = function(e) character(0)
+    )
+    if (length(git_sha) == 1 && nzchar(git_sha)) {
+      sha <- git_sha
+      dirty <- tryCatch(
+        suppressWarnings(system2(
+          "git",
+          c("-C", shQuote(getwd()), "status", "--porcelain"),
+          stdout = TRUE,
+          stderr = FALSE
+        )),
+        error = function(e) character(0)
+      )
+      if (length(dirty) > 0) sha <- paste0(sha, "+")
+      when <- tryCatch(
+        suppressWarnings(system2(
+          "git",
+          c("-C", shQuote(getwd()), "log", "-1", "--format=%cs"),
+          stdout = TRUE,
+          stderr = FALSE
+        )),
+        error = function(e) character(0)
+      )[1]
+    }
+  }
+
+  parts <- c(
+    if (!is.na(ver)) paste0("tableexplorer ", ver),
+    if (!is.na(sha) && nzchar(sha)) sha,
+    if (!is.na(when) && nzchar(when)) when
+  )
+  paste(parts, collapse = " · ")
 }

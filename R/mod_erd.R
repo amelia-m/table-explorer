@@ -9,6 +9,28 @@
 # on in mod_network.R ("Network overview").
 
 erd_large_schema <- 40L
+# A card is as tall as its column list, so a handful of very wide tables
+# is as unreadable as many narrow ones. Six tables of 150 columns each
+# render as tall strips of 8px text, which the table count alone misses.
+erd_wide_table <- 40L
+erd_many_columns <- 300L
+
+# "keys" or "all", before the first draw. The user's own choice wins over
+# this and is handled by the caller.
+erd_auto_detail <- function(tables) {
+  if (length(tables) == 0) {
+    return("all")
+  }
+  n_cols <- vapply(
+    tables,
+    function(t) nrow(t$columns %||% data.frame()),
+    integer(1)
+  )
+  wide <- length(tables) > erd_large_schema ||
+    sum(n_cols) > erd_many_columns ||
+    max(n_cols) > erd_wide_table
+  if (wide) "keys" else "all"
+}
 
 #' ERD diagram module UI
 #' @noRd
@@ -88,7 +110,9 @@ mod_erd_ui <- function(id) {
           choices = c(
             "Declared + detected" = "both",
             "Declared only" = "declared",
-            "Detected only" = "detected"
+            "Detected (all)" = "detected",
+            "Detected, confirmed" = "confirmed",
+            "Detected, to review" = "to_review"
           ),
           selected = "both",
           width = "180px"
@@ -168,8 +192,7 @@ mod_erd_server <- function(
       }
     }, ignoreInit = TRUE)
     detail_rv <- reactive({
-      user_detail() %||%
-        if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
+      user_detail() %||% erd_auto_detail(model_rv()$tables)
     })
     # Lookup links: labels by default for large schemas, same handling of
     # the server's own radio updates as the detail level

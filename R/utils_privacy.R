@@ -241,13 +241,20 @@ privacy_review_queue <- function(tables, dictionary) {
       p <- dict_privacy(dictionary, t, cn, df[[cn]])
       if (isTRUE(p$needs_review)) {
         rows[[length(rows) + 1]] <- data.frame(
-          table = t, column = cn, reason = p$reason, stringsAsFactors = FALSE
+          table = t, column = cn, reason = p$reason,
+          # An all-NA column has nothing to disclose, so the caller can
+          # keep it out of the review queue
+          n_values = sum(!is.na(df[[cn]])),
+          stringsAsFactors = FALSE
         )
       }
     }
   }
   if (length(rows) == 0) {
-    return(data.frame(table = character(0), column = character(0), reason = character(0)))
+    return(data.frame(
+      table = character(0), column = character(0), reason = character(0),
+      n_values = integer(0)
+    ))
   }
   do.call(rbind, rows)
 }

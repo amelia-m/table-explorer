@@ -605,9 +605,14 @@ ucanaccess_jars <- list(
     file = "commons-logging-1.2.jar",
     url = "https://repo1.maven.org/maven2/commons-logging/commons-logging/1.2/commons-logging-1.2.jar"
   ),
+  # 2.5.2, not 2.7.x: UCanAccess 5.0.1 ships against 2.5, and HSQLDB 2.7
+  # refuses to resolve its Java routines unless hsqldb.method_class_names
+  # is set, which floods the console with
+  # "user lacks privilege or object not found:
+  #  net.ucanaccess.converters.Functions" for every Access function
   list(
-    file = "hsqldb-2.7.1.jar",
-    url = "https://repo1.maven.org/maven2/org/hsqldb/hsqldb/2.7.1/hsqldb-2.7.1.jar"
+    file = "hsqldb-2.5.2.jar",
+    url = "https://repo1.maven.org/maven2/org/hsqldb/hsqldb/2.5.2/hsqldb-2.5.2.jar"
   )
 )
 
@@ -783,6 +788,22 @@ read_access_db <- function(path, notify_fn = message) {
       jar_paths <- file.path(
         jar_dir,
         vapply(ucanaccess_jars, `[[`, character(1), "file")
+      )
+      # HSQLDB only resolves UCanAccess's Java routines when they are named
+      # here. Harmless on versions that do not check.
+      tryCatch(
+        {
+          if (requireNamespace("rJava", quietly = TRUE)) {
+            rJava::.jcall(
+              "java/lang/System",
+              "S",
+              "setProperty",
+              "hsqldb.method_class_names",
+              "net.ucanaccess.converters.*"
+            )
+          }
+        },
+        error = function(e) NULL
       )
       result <- tryCatch(
         {

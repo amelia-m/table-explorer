@@ -23,6 +23,7 @@ weight_map <- c(
   naming_self = 0.90,
   cardinality_match = 0.95,
   overlap_high = 0.90,
+  name_identical = 0.60,
   name_sim = 0.60,
   overlap_medium = 0.55,
   dist_high = 0.50,
@@ -38,6 +39,11 @@ label_map <- c(
   naming_exact = "naming",
   naming_role = "naming",
   naming_self = "naming",
+  # Deliberately the same label as name_sim: detected_by feeds the Method
+  # chip, its CSS class, the ERD edge colour and the exports, and a new
+  # value would reach all four unhandled. The split lives in the signal
+  # name and the reason text, which is all the evidence line needs.
+  name_identical = "name_similarity",
   name_sim = "name_similarity",
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
@@ -75,6 +81,13 @@ format_patterns <- list(
 clean_name <- function(name) {
   # Prefixed so an empty or "" input never becomes a zero-length env name
   key <- paste0("k:", paste(name, collapse = "\r"))
+  # Environment names are capped at 10000 bytes, and this is called with a
+  # whole table's column names at once (detect_pks), so a wide table or
+  # long names would otherwise stop detection with
+  # "variable names are limited to 10000 bytes"
+  if (nchar(key, type = "bytes") > 4000L) {
+    key <- paste0("h:", rlang::hash(name))
+  }
   hit <- .clean_name_cache[[key]]
   if (is.null(hit)) {
     hit <- janitor::make_clean_names(name)
@@ -246,7 +259,8 @@ is_lookup_name <- function(tname) {
 }
 
 # Lookup tables: named like one (tlk_, lkp_, _lookup, ...) or shaped like
-# one (few rows, few columns, a unique id/code column). Memoised per shape.
+# one (few rows, few columns, a unique id/code column). Memoised per
+# content for small tables, per name and shape for larger ones.
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {
@@ -490,10 +504,20 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
       reason = sprintf("FK naming with prefix (%s)", c1)
     )
   } else {
+    c2 <- clean_name(col2)
     stem1 <- sub("_(id|key|code|num|no)$", "", c1)
-    stem2 <- sub("_(id|key|code|num|no)$", "", clean_name(col2))
+    stem2 <- sub("_(id|key|code|num|no)$", "", c2)
     sim <- jaro_winkler_sim(stem1, stem2)
-    if (sim >= name_sim_high) {
+    # Identical names are reported as such: "name similarity 1.00" reads as
+    # a near miss, and the two cases are judged differently by a reviewer.
+    # Same weight as name_sim, so scores do not move.
+    if (identical(c1, c2)) {
+      list(
+        signal = "name_identical",
+        value = 1.0,
+        reason = sprintf("identical column name (%s)", c1)
+      )
+    } else if (sim >= name_sim_high) {
       list(
         signal = "name_sim",
         value = sim,
@@ -678,12 +702,29 @@ score_candidate <- function(
     reasons <- c(sprintf("only %.0f%% of values found in the parent", ov * 100), reasons)
   }
 
+  # Carried for the Relationships table: a reviewer needs to see how much
+  # the values actually overlap, and whether there were any values to
+  # compare, without opening another tab
+  if (n1 == 0 || n2 == 0) {
+    reasons <- c(
+      reasons,
+      sprintf(
+        "no rows to compare (child %s, parent %s)",
+        format(n1, big.mark = ","),
+        format(n2, big.mark = ",")
+      )
+    )
+  }
+
   list(
     signals = signals,
     reasons = reasons,
     score = score,
     confidence = confidence,
-    detected_by = detected_by
+    detected_by = detected_by,
+    overlap = ov,
+    n_from = n1,
+    n_to = n2
   )
 }
 
@@ -1392,7 +1433,7 @@ resolve_fk_parents <- function(rels) {
       fits <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_value_fit_signals), logical(1))]
       if (length(fits) >= 2) {
         # 2. Values fit several tables: only a clearly closer name can choose
-        close <- fits[vapply(rels[fits], function(r) "name_sim" %in% sig_names(r), logical(1))]
+        close <- fits[vapply(rels[fits], function(r) any(c("name_identical", "name_sim") %in% sig_names(r)), logical(1))]
         winners <- if (length(close) == 1) close else integer(0)
         n_fit <- length(fits)
         fit_names <- vapply(rels[fits], `[[`, "", "to_table")
