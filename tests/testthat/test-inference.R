@@ -386,6 +386,35 @@ test_that("is_fk_candidate rejects long free-text columns", {
   expect_false(is_fk_candidate(rep(long_text, 20), "description"))
 })
 
+test_that("identical column names report as identical, not as similarity", {
+  df1 <- data.frame(provider_id = c(1, 2, 3))
+  df2 <- data.frame(provider_id = c(1, 2, 3))
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  res <- score_candidate("tbl_a", "provider_id", df1, "tbl_b", "provider_id", df2, flags)
+  expect_true("name_identical" %in% names(res$signals))
+  expect_false("name_sim" %in% names(res$signals))
+  expect_true(any(grepl("identical column name", res$reasons)))
+})
+
+test_that("near-identical column names still report as similarity", {
+  df1 <- data.frame(provider_ids = c(1, 2, 3))
+  df2 <- data.frame(provider_id = c(1, 2, 3))
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  res <- score_candidate("tbl_a", "provider_ids", df1, "tbl_b", "provider_id", df2, flags)
+  expect_false("name_identical" %in% names(res$signals))
+})
+
+test_that("name_identical carries the same weight as name_sim", {
+  # The split is a labelling change: scores must not move
+  expect_equal(unname(weight_map[["name_identical"]]), unname(weight_map[["name_sim"]]))
+})
+
 # ── Constants and maps ───────────────────────────────────────
 
 test_that("weight_map has all expected signal keys", {
