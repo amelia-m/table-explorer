@@ -1457,3 +1457,87 @@ sort_rels <- function(rels) {
   )
   rels[order_idx]
 }
+
+# ── Shared columns (not foreign keys) ────────────────────────
+# A column that appears in two tables under the same name, holds
+# overlapping values, and is a key in neither. incident_year to
+# incident_year is the example: useful for joining, not a reference, and
+# detect_fks() never sees it because targets are drawn from unique
+# columns only. Reported as its own class so it is visible without
+# being mislabelled as an FK.
+
+detect_shared_columns <- function(
+  tables,
+  min_overlap = 0.5,
+  min_distinct = 3L,
+  max_pairs = 20000L
+) {
+  tnames <- names(tables)
+  if (length(tnames) < 2) {
+    return(list())
+  }
+  unique_cols <- lapply(tables, function(df) {
+    n <- nrow(df)
+    if (n == 0) {
+      return(character(0))
+    }
+    names(df)[vapply(
+      names(df),
+      function(c) !anyNA(df[[c]]) && length(unique(df[[c]])) == n,
+      logical(1)
+    )]
+  })
+  names(unique_cols) <- tnames
+
+  out <- list()
+  pairs <- 0L
+  for (i in seq_len(length(tnames) - 1L)) {
+    for (j in seq.int(i + 1L, length(tnames))) {
+      t1 <- tnames[[i]]
+      t2 <- tnames[[j]]
+      df1 <- tables[[t1]]
+      df2 <- tables[[t2]]
+      if (nrow(df1) == 0 || nrow(df2) == 0) {
+        next
+      }
+      common <- intersect(names(df1), names(df2))
+      for (cn in common) {
+        if (pairs >= max_pairs) {
+          return(out)
+        }
+        pairs <- pairs + 1L
+        # A key on either side is a foreign key question, not this one
+        if (cn %in% unique_cols[[t1]] || cn %in% unique_cols[[t2]]) {
+          next
+        }
+        v1 <- df1[[cn]][!is.na(df1[[cn]])]
+        v2 <- df2[[cn]][!is.na(df2[[cn]])]
+        u1 <- unique(v1)
+        u2 <- unique(v2)
+        # Two-valued flags shared by every table say nothing
+        if (length(u1) < min_distinct || length(u2) < min_distinct) {
+          next
+        }
+        shared <- intersect(u1, u2)
+        if (length(shared) == 0) {
+          next
+        }
+        ov <- length(shared) / min(length(u1), length(u2))
+        if (ov < min_overlap) {
+          next
+        }
+        out[[length(out) + 1]] <- list(
+          from_table = t1,
+          to_table = t2,
+          column = cn,
+          n_shared = length(shared),
+          n_distinct_from = length(u1),
+          n_distinct_to = length(u2),
+          overlap = ov,
+          contained = length(shared) == min(length(u1), length(u2))
+        )
+      }
+    }
+  }
+  out
+}

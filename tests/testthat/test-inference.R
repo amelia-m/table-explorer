@@ -921,3 +921,48 @@ test_that("is_lookup_table re-checks a table whose content changed", {
   expect_false(is_lookup_table("statuses_x", b))
   expect_true(is_lookup_table("statuses_x", a))
 })
+
+# ── Shared columns ───────────────────────────────────────────
+
+test_that("detect_shared_columns finds a shared attribute neither side keys", {
+  tables <- list(
+    toxicology = data.frame(
+      victim_substance_id = 1:6,
+      incident_year = c(2023, 2024, 2024, 2025, 2025, 2025)
+    ),
+    document = data.frame(
+      document_id = 1:5,
+      incident_year = c(2024, 2024, 2025, 2025, 2023)
+    )
+  )
+  out <- detect_shared_columns(tables)
+  expect_length(out, 1)
+  expect_equal(out[[1]]$column, "incident_year")
+  expect_equal(out[[1]]$overlap, 1)
+  expect_true(out[[1]]$contained)
+})
+
+test_that("detect_shared_columns leaves foreign keys to detect_fks", {
+  # client_id is unique in clients, so this pair is an FK question
+  tables <- list(
+    visits = data.frame(visit_id = 1:4, client_id = c(1, 1, 2, 3)),
+    clients = data.frame(client_id = 1:3, name = letters[1:3])
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
+
+test_that("detect_shared_columns ignores flags and tiny domains", {
+  tables <- list(
+    a = data.frame(id = 1:6, is_active = rep(c(TRUE, FALSE), 3)),
+    b = data.frame(id = 1:6, is_active = rep(c(TRUE, FALSE), 3))
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
+
+test_that("detect_shared_columns needs the values to actually overlap", {
+  tables <- list(
+    a = data.frame(k = 1:6, year = c(2001, 2002, 2003, 2004, 2005, 2006)),
+    b = data.frame(k = 1:6, year = c(2011, 2012, 2013, 2014, 2015, 2016))
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
