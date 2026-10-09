@@ -291,7 +291,9 @@ mod_relationships_server <- function(
           "000",
           sprintf("%03d", as.integer(rows$score))
         ),
-        Signals = rows$signals,
+        # The reasons carry the numbers ("value overlap 97%", "distribution
+        # similarity 0.82"); the bare signal names say only which tests fired
+        Evidence = ifelse(nzchar(rows$reasons), rows$reasons, rows$signals),
         Actions = actions,
         check.names = FALSE,
         stringsAsFactors = FALSE
