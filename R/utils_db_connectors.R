@@ -319,6 +319,13 @@ db_introspect <- function(conn, type, schema = "public") {
 # first and fall back to TOP, rather than reading the whole table.
 # Inf means no limit clause at all.
 
+# Which backends have a schema worth sending. mysql scopes by database
+# (its introspection uses DATABASE()), sqlite and bigquery have no schema
+# in this sense, so a schema here only breaks the query.
+db_type_uses_schema <- function(type) {
+  isTRUE(type %in% c("postgres", "redshift", "sqlserver", "snowflake"))
+}
+
 db_row_limit_sql <- function(tbl_sql, limit, top = FALSE) {
   if (is.infinite(limit)) {
     return(paste0("SELECT * FROM ", tbl_sql))
@@ -348,61 +355,68 @@ db_load_table <- function(
       length(limit) != 1L ||
       is.na(limit) ||
       limit < 0 ||
-      (is.finite(limit) && limit != trunc(limit))
+      (is.finite(limit) && limit != trunc(limit)) ||
+      (is.finite(limit) && limit > .Machine$integer.max)
   ) {
     stop(
-      "`limit` must be a single whole number >= 0, or Inf for no limit.",
+      "`limit` must be a single whole number from 0 to ",
+      .Machine$integer.max,
+      ", or Inf for no limit.",
       call. = FALSE
     )
   }
 
-  tbl_ref <- if (nzchar(schema)) {
-    DBI::Id(schema = schema, table = table_name)
-  } else {
-    DBI::Id(table = table_name)
-  }
-  # Let the driver quote: backticks for MySQL, brackets for SQL Server,
-  # double quotes for postgres and sqlite
-  tbl_sql <- tryCatch(
-    as.character(DBI::dbQuoteIdentifier(conn, tbl_ref)),
-    error = function(e) NULL
-  )
-  if (is.null(tbl_sql)) {
-    notify_fn(paste0("Could not quote table name: ", table_name))
-    return(NULL)
+  # Identifiers are quoted by the driver: double quotes for postgres,
+  # sqlite and odbc, backticks for MySQL
+  use_top <- identical(type, "sqlserver")
+  # Snowflake folds unquoted names to upper case, and db_introspect()
+  # already queries its information_schema with the schema uppercased
+  if (identical(type, "snowflake")) {
+    schema <- toupper(schema)
   }
 
-  use_top <- identical(type, "sqlserver")
-  tryCatch(
-    DBI::dbGetQuery(conn, db_row_limit_sql(tbl_sql, limit, top = use_top)),
-    error = function(e) {
-      if (nzchar(type)) {
-        notify_fn(paste0(
-          "Could not load table '",
-          table_name,
-          "': ",
-          conditionMessage(e)
-        ))
-        return(NULL)
-      }
-      # Type unknown: the other dialect's syntax is the likely cause
-      tryCatch(
-        DBI::dbGetQuery(
-          conn,
-          db_row_limit_sql(tbl_sql, limit, top = !use_top)
-        ),
-        error = function(e2) {
-          notify_fn(paste0(
-            "Could not load table '",
-            table_name,
-            "': ",
-            conditionMessage(e2)
-          ))
+  # Candidates in order of likelihood. A schema that the backend has no
+  # concept of is the common failure: the Schema box lives in a
+  # conditionalPanel, which only hides it, so sqlite and bigquery
+  # connections still arrive here with schema = "public". Dropping the
+  # schema on a second attempt is what the old backtick fallback did, and
+  # it is the part that was load-bearing.
+  refs <- list(if (nzchar(schema)) DBI::Id(schema = schema, table = table_name))
+  refs <- c(refs, list(DBI::Id(table = table_name)))
+  tops <- if (nzchar(type)) use_top else c(FALSE, TRUE)
+
+  first_err <- NULL
+  for (ref in Filter(Negate(is.null), refs)) {
+    tbl_sql <- tryCatch(
+      as.character(DBI::dbQuoteIdentifier(conn, ref)),
+      error = function(e) NULL
+    )
+    if (is.null(tbl_sql)) {
+      next
+    }
+    for (top in tops) {
+      out <- tryCatch(
+        DBI::dbGetQuery(conn, db_row_limit_sql(tbl_sql, limit, top = top)),
+        error = function(e) {
+          # Keep the first error: later attempts fail with a syntax error
+          # from the other dialect, which hides the real cause
+          if (is.null(first_err)) first_err <<- conditionMessage(e)
           NULL
         }
       )
+      if (!is.null(out)) {
+        return(out)
+      }
     }
-  )
+  }
+
+  notify_fn(paste0(
+    "Could not load table '",
+    table_name,
+    "': ",
+    first_err %||% "no usable query for this connection"
+  ))
+  NULL
 }
 
 # ── Close a database connection ───────────────────────────────
