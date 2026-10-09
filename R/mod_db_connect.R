@@ -109,7 +109,15 @@ mod_db_connect_server <- function(
 
       port_val <- NULL
       if (nzchar(input$db_port %||% "")) {
-        port_val <- as.integer(input$db_port)
+        port_val <- suppressWarnings(as.integer(input$db_port))
+        if (is.na(port_val) || port_val < 1L) {
+          showNotification(
+            "Port must be a positive integer.",
+            type = "error",
+            duration = 6
+          )
+          return()
+        }
       }
 
       path_val <- ""

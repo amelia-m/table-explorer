@@ -7,7 +7,8 @@
 pkgload::load_all(export_all = FALSE)
 
 # ── Add a new module ─────────────────────────────────────────
-# golem::add_module(name = "my_module")
+# Copy an existing R/mod_*.R (UI function mod_<name>_ui(id), server function
+# mod_<name>_server(id, ...)) and wire it into R/app_ui.R and R/app_server.R.
 
 # ── Add a package dependency ─────────────────────────────────
 # usethis::use_package("pkg_name")

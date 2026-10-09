@@ -24,6 +24,13 @@
               // Private mode and blocked site data both throw here
               try { localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0"); } catch (e) {}
             }
+            // Collapsing puts the focused button inside a display:none
+            // subtree, which drops focus to <body> and leaves a keyboard
+            // user tabbing from the top to find the 24px rail
+            if (persist) {
+              var next = document.getElementById(collapsed ? "sidebar-rail" : "sidebar-collapse");
+              if (next) next.focus();
+            }
             window.dispatchEvent(new Event("resize"));
           };
           var stored = null;
@@ -34,6 +41,18 @@
             if (e.target.closest("#sidebar-rail")) setSidebar(false, true);
           });
         }
+        // Table Details column lists open closed, and a DataTable laid out
+        // while hidden measures every column as zero wide. Re-measure when
+        // one is opened. The toggle event does not bubble, hence capture.
+        document.body.addEventListener("toggle", function(e) {
+          var d = e.target;
+          if (!d.classList || !d.classList.contains("tbl-cols") || !d.open) return;
+          if (window.jQuery && jQuery.fn.dataTable) {
+            jQuery(d).find("table.dataTable").each(function() {
+              jQuery(this).DataTable().columns.adjust();
+            });
+          }
+        }, true);
         // Per-table remove buttons (delegated - buttons are rendered dynamically)
         document.body.addEventListener("click", function(e) {
           if (e.target.classList.contains("btn-remove")) {
