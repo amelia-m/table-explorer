@@ -27,7 +27,7 @@ app_ui <- function(request) {
       div(
         h2("Table Relationship Explorer"),
         p(
-          "Upload CSV files \u2192 detect FK relationships \u2192 visualise ERD"
+          "Load files or connect a database \u2192 detect keys and relationships \u2192 review, document, export"
         )
       ),
       tags$button(
