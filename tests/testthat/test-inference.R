@@ -386,6 +386,29 @@ test_that("is_fk_candidate rejects long free-text columns", {
   expect_false(is_fk_candidate(rep(long_text, 20), "description"))
 })
 
+test_that("clean_name handles a table wider than the 10000-byte name cap", {
+  # Regression: the memo cache keyed on the pasted vector, and R caps
+  # environment names at 10000 bytes, so a wide table stopped detection
+  # with "variable names are limited to 10000 bytes"
+  cols <- paste0("a_very_long_column_name_number_", seq_len(400))
+  expect_gt(sum(nchar(cols)) + length(cols), 10000)
+  out <- clean_name(cols)
+  expect_length(out, length(cols))
+  expect_equal(out, janitor::make_clean_names(cols))
+  # Second call comes from the cache and must agree
+  expect_equal(clean_name(cols), out)
+})
+
+test_that("detect_pks works on a table wide enough to blow the name cap", {
+  cols <- paste0("a_very_long_column_name_number_", seq_len(400))
+  df <- as.data.frame(stats::setNames(
+    lapply(seq_along(cols), function(i) c(i, i + 1L)),
+    cols
+  ))
+  df$id <- c(1L, 2L)
+  expect_true("id" %in% detect_pks(df, "wide_table", method = "both"))
+})
+
 # ── Constants and maps ───────────────────────────────────────
 
 test_that("weight_map has all expected signal keys", {
