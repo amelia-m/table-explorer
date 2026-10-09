@@ -8,10 +8,15 @@ mod_relationships_ui <- function(id) {
   ns <- NS(id)
   tagList(
     br(),
+    # Above the table: at the bottom it sat past 477 rows of review and
+    # went unnoticed
+    div(
+      class = "rel-export",
+      downloadButton(ns("dl_rels"), "\u2b07  Export CSV", class = "dl-btn")
+    ),
     uiOutput(ns("relationships_summary")),
     uiOutput(ns("relationships_ui")),
-    br(),
-    downloadButton(ns("dl_rels"), "\u2b07  Export CSV", class = "dl-btn")
+    br()
   )
 }
 
@@ -319,13 +324,25 @@ mod_relationships_server <- function(
             list(targets = idx("Score %"), orderData = idx("score_sort")),
             # Source sorts declared, manual, confirmed, then to review
             list(targets = idx("Source"), orderData = c(idx("source_rank"), idx("score_sort"))),
+            list(targets = idx("Child rows"), orderData = idx("from_sort")),
+            list(targets = idx("Parent rows"), orderData = idx("to_sort")),
+            list(targets = idx("Overlap %"), orderData = idx("overlap_sort")),
             list(
-              targets = c(idx("conf_rank"), idx("score_sort"), idx("source_rank")),
+              targets = c(
+                idx("conf_rank"), idx("score_sort"), idx("source_rank"),
+                idx("from_sort"), idx("to_sort"), idx("overlap_sort")
+              ),
               visible = FALSE,
               searchable = FALSE
             ),
             list(targets = idx("Actions"), orderable = FALSE, searchable = FALSE),
-            list(className = "dt-center", targets = idx("Score %"))
+            list(
+              className = "dt-center",
+              targets = c(
+                idx("Score %"), idx("Child rows"), idx("Parent rows"),
+                idx("Overlap %")
+              )
+            )
           )
         ),
         class = "compact hover rel-dt"
