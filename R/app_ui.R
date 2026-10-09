@@ -58,7 +58,7 @@ app_ui <- function(request) {
         9,
         tabsetPanel(
           id = "main_tabs",
-          tabPanel("ERD Diagram", mod_erd_ui("erd")),
+          tabPanel("ERD", mod_erd_ui("erd")),
           tabPanel("Network overview", mod_network_ui("network")),
           tabPanel("Table Details", mod_table_details_ui("table_details")),
           tabPanel("Relationships", mod_relationships_ui("relationships")),
