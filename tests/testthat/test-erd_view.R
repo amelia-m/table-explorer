@@ -1,5 +1,5 @@
 # ============================================================
-# Tests for erd_view() and erd_elk_graph() - the ERD Diagram tab
+# Tests for erd_view() and erd_elk_graph() - the ERD tab
 # ============================================================
 
 low_rel <- function() {
@@ -400,4 +400,33 @@ test_that("the ELK graph has no null node or column properties", {
   }
   for (n in g$children) expect_false(has_null(n$properties), info = n$id)
   expect_false(has_null(erd_elk_graph(erd_view(ref_model()))$children))
+})
+
+# ── Automatic detail level ───────────────────────────────────
+
+test_that("erd_auto_detail counts columns, not only tables", {
+  tbl <- function(n_cols) {
+    list(columns = data.frame(name = paste0("c", seq_len(n_cols))))
+  }
+  # Few narrow tables: show everything
+  expect_equal(erd_auto_detail(list(a = tbl(5), b = tbl(5))), "all")
+  # Six very wide tables: the old table-count rule said "all" and the
+  # cards rendered as unreadable strips
+  expect_equal(
+    erd_auto_detail(stats::setNames(rep(list(tbl(150)), 6), letters[1:6])),
+    "keys"
+  )
+  # One wide table is enough
+  expect_equal(erd_auto_detail(list(a = tbl(41), b = tbl(2))), "keys")
+  # Many narrow tables, as before
+  expect_equal(
+    erd_auto_detail(stats::setNames(rep(list(tbl(2)), 41), paste0("t", 1:41))),
+    "keys"
+  )
+  # Totals across the view count too
+  expect_equal(
+    erd_auto_detail(stats::setNames(rep(list(tbl(39)), 9), paste0("t", 1:9))),
+    "keys"
+  )
+  expect_equal(erd_auto_detail(list()), "all")
 })

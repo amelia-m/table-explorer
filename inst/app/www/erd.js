@@ -1,5 +1,5 @@
 // ============================================================
-// erd.js - ERD Diagram renderer (elkjs layout + hand-drawn SVG)
+// erd.js - ERD renderer (elkjs layout + hand-drawn SVG)
 // ============================================================
 //
 // The server (R/mod_erd.R) sends an ELK graph built by erd_elk_graph():
@@ -28,6 +28,7 @@
   var states = {}; // container id -> render state
   // Chip at the middle of a line, by where the link came from
   var CHIPS = { inferred: "?", confirmed: "\u2713", manual: "M" };
+  var CHIP_R = 7;
   window.erdStates = states; // for tests
 
   // ── helpers ────────────────────────────────────────────────
@@ -140,25 +141,14 @@
     return m;
   }
 
-  function pointAtHalf(pts) {
-    var segs = [], total = 0;
-    for (var i = 1; i < pts.length; i++) {
-      var l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-      segs.push(l);
-      total += l;
+  // Stable 0..9 phase from the edge key, so a redraw keeps the same
+  // offset and the diagram does not shimmer between renders
+  function dashPhase(key) {
+    var h = 0, s = String(key || "");
+    for (var i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) % 1000;
     }
-    var half = total / 2;
-    for (var j = 0; j < segs.length; j++) {
-      if (half <= segs[j] && segs[j] > 0) {
-        var t = half / segs[j];
-        return {
-          x: pts[j].x + t * (pts[j + 1].x - pts[j].x),
-          y: pts[j].y + t * (pts[j + 1].y - pts[j].y),
-        };
-      }
-      half -= segs[j];
-    }
-    return pts[0];
+    return h % 10;
   }
 
   function edgeColor(pr, th) {
@@ -330,7 +320,85 @@
     out.height = Math.max(out.height || 0, bottom);
   }
 
-  function drawEdge(parent, e, nodes, th) {
+  // Every segment of every edge, for the chip placement below.
+  function allSegments(edges) {
+    var out = [];
+    (edges || []).forEach(function (e) {
+      var key = (e.properties || {}).key;
+      (e.sections || []).forEach(function (s) {
+        var pts = [s.startPoint].concat(s.bendPoints || [], [s.endPoint]);
+        for (var i = 1; i < pts.length; i++) {
+          out.push({ key: key, a: pts[i - 1], b: pts[i] });
+        }
+      });
+    });
+    return out;
+  }
+
+  // Two segments count as sharing a run only when they point the same way.
+  // Without this a perpendicular crossing scores a distance of 0 and every
+  // crossed edge loses its chip, which is most of a dense diagram.
+  function parallelSegments(a, b) {
+    var ax = a.b.x - a.a.x, ay = a.b.y - a.a.y;
+    var bx = b.b.x - b.a.x, by = b.b.y - b.a.y;
+    var la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la < 1e-6 || lb < 1e-6) return false;
+    // |cross product| of the unit vectors: 0 parallel, 1 perpendicular
+    return Math.abs((ax * by - ay * bx) / (la * lb)) < 0.26; // about 15 degrees
+  }
+
+  function nearSegment(p, s, tol) {
+    if (
+      p.x < Math.min(s.a.x, s.b.x) - tol || p.x > Math.max(s.a.x, s.b.x) + tol ||
+      p.y < Math.min(s.a.y, s.b.y) - tol || p.y > Math.max(s.a.y, s.b.y) + tol
+    ) {
+      return false;
+    }
+    var dx = s.b.x - s.a.x, dy = s.b.y - s.a.y;
+    var len = Math.hypot(dx, dy);
+    if (len < 1e-6) return false;
+    return Math.abs(dy * (p.x - s.a.x) - dx * (p.y - s.a.y)) / len <= tol;
+  }
+
+  // Orthogonal routing merges edges onto shared trunks, and a chip dropped
+  // at the halfway point often lands on one. Sitting on a run several
+  // relationships share, it reads as belonging to all of them. Pick the
+  // longest stretch of this edge that no other edge runs along; if the edge
+  // is shared end to end, return null and draw no chip. The row label and
+  // the muted dashed line still say the link is unreviewed.
+  function chipPoint(pts, key, segs) {
+    var mine = [];
+    for (var i = 1; i < pts.length; i++) {
+      mine.push({
+        a: pts[i - 1], b: pts[i],
+        len: Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y),
+      });
+    }
+    mine.sort(function (p, q) { return q.len - p.len; });
+    for (var j = 0; j < mine.length; j++) {
+      var m = mine[j];
+      if (m.len < CHIP_R * 3) continue;
+      // Several points per segment: one blocked midpoint should not cost
+      // the whole segment, which it did when a line crossed near the middle
+      var ts = [0.5, 0.35, 0.65, 0.25, 0.75];
+      for (var k = 0; k < ts.length; k++) {
+        var t = ts[k];
+        var at = {
+          x: m.a.x + t * (m.b.x - m.a.x),
+          y: m.a.y + t * (m.b.y - m.a.y),
+        };
+        var shared = segs.some(function (s) {
+          return s.key !== key &&
+            parallelSegments(m, s) &&
+            nearSegment(at, s, CHIP_R + 1);
+        });
+        if (!shared) return at;
+      }
+    }
+    return null;
+  }
+
+  function drawEdge(parent, e, nodes, th, segs) {
     var pr = e.properties || {};
     var color = edgeColor(pr, th);
     var g = el("g", {
@@ -355,6 +423,10 @@
       el("polyline", {
         class: "erd-line", points: ptsAttr, fill: "none", stroke: color,
         "stroke-width": 1.4, "stroke-dasharray": pr.identifying ? null : "6 4",
+        // Where two dashed edges still coincide, equal phase makes them
+        // read as one solid line. Offsetting by the edge's own key puts
+        // one line's dashes in the other's gaps.
+        "stroke-dashoffset": pr.identifying ? null : dashPhase(pr.key),
       }, g);
       var into = function (P, n) {
         return n && Math.abs(P.x - n.x) < 1 ? 1 : -1;
@@ -363,10 +435,10 @@
       drawMarker(g, pts[pts.length - 1], into(pts[pts.length - 1], tgt), kinds.parent, color, th.bg);
       // Source chip: none for declared, ✓ confirmed, M manual, ? to review
       var mark = CHIPS[pr.provenance];
-      if (mark) {
-        var mid = pointAtHalf(pts);
+      var mid = mark ? chipPoint(pts, pr.key, segs) : null;
+      if (mark && mid) {
         var chip = el("g", { class: "erd-chip" }, g);
-        el("circle", { cx: mid.x, cy: mid.y, r: 7, fill: th.bg, stroke: color, "stroke-width": 1 }, chip);
+        el("circle", { cx: mid.x, cy: mid.y, r: CHIP_R, fill: th.bg, stroke: color, "stroke-width": 1 }, chip);
         text(chip, mid.x, mid.y + 3.5, mark, {
           fill: color, "font-size": 10, "font-weight": 700, "text-anchor": "middle",
         });
@@ -477,8 +549,9 @@
       nodes[n.id] = n;
       drawCard(nodesG, n, th, props);
     });
+    var segs = allSegments(L.edges);
     (L.edges || []).forEach(function (e) {
-      drawEdge(edgesG, e, nodes, th);
+      drawEdge(edgesG, e, nodes, th, segs);
     });
 
     container.innerHTML = "";
