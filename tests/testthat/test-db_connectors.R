@@ -246,7 +246,7 @@ test_that("db_load_table uses TOP for sqlserver and LIMIT elsewhere", {
   )
 })
 
-test_that("db_load_table retries the other dialect when the type is unknown", {
+test_that("db_load_table loads with an unknown type", {
   skip_if_not_installed("RSQLite")
 
   tmp_db <- tempfile(fileext = ".sqlite")
@@ -255,7 +255,8 @@ test_that("db_load_table retries the other dialect when the type is unknown", {
   conn <- db_connect("sqlite", path = tmp_db)
   DBI::dbWriteTable(conn, "items", data.frame(id = 1:4))
 
-  # type = "" keeps the old dialect-blind behaviour, without a full read
+  # type = "" keeps the old dialect-blind behaviour, without a full read.
+  # SQLite accepts LIMIT, so this takes the first candidate, not the retry.
   msgs <- character(0)
   df <- db_load_table(
     conn,
@@ -267,6 +268,103 @@ test_that("db_load_table retries the other dialect when the type is unknown", {
   expect_length(msgs, 0)
 
   db_close(conn)
+})
+
+test_that("db_load_table retries with TOP when LIMIT is rejected", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:4))
+
+  # Stand in for a T-SQL backend reached with the type unknown: LIMIT is
+  # refused, so only the TOP candidate can succeed
+  seen <- character(0)
+  testthat::local_mocked_bindings(
+    dbGetQuery = function(conn, statement, ...) {
+      seen <<- c(seen, statement)
+      if (grepl("LIMIT", statement, fixed = TRUE)) {
+        stop("Incorrect syntax near 'LIMIT'.")
+      }
+      data.frame(id = 1:4)
+    },
+    .package = "DBI"
+  )
+
+  msgs <- character(0)
+  df <- db_load_table(
+    conn,
+    "items",
+    type = "",
+    notify_fn = function(m) msgs <<- c(msgs, m)
+  )
+  expect_equal(nrow(df), 4)
+  expect_length(msgs, 0)
+  expect_true(any(grepl("LIMIT", seen, fixed = TRUE)))
+  expect_true(any(grepl("SELECT TOP (", seen, fixed = TRUE)))
+
+  db_close(conn)
+})
+
+test_that("db_load_table drops a schema the backend does not have", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:10))
+
+  # The Schema box is hidden for sqlite but still reports "public", so a
+  # schema-qualified query has to fall back to the bare table name
+  msgs <- character(0)
+  df <- db_load_table(
+    conn,
+    "items",
+    schema = "public",
+    type = "sqlite",
+    notify_fn = function(m) msgs <<- c(msgs, m)
+  )
+  expect_equal(nrow(df), 10)
+  expect_length(msgs, 0)
+
+  db_close(conn)
+})
+
+test_that("db_load_table reports the first error, not the retry's syntax error", {
+  skip_if_not_installed("RSQLite")
+
+  tmp_db <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp_db))
+
+  conn <- db_connect("sqlite", path = tmp_db)
+  DBI::dbWriteTable(conn, "items", data.frame(id = 1:3))
+
+  msgs <- character(0)
+  df <- db_load_table(
+    conn,
+    "no_such_table",
+    type = "",
+    notify_fn = function(m) msgs <<- c(msgs, m)
+  )
+  expect_null(df)
+  expect_match(msgs[1], "no such table")
+  expect_false(grepl("syntax error", msgs[1], fixed = TRUE))
+
+  db_close(conn)
+})
+
+test_that("db_type_uses_schema only claims the backends that have one", {
+  expect_true(db_type_uses_schema("postgres"))
+  expect_true(db_type_uses_schema("sqlserver"))
+  expect_true(db_type_uses_schema("snowflake"))
+  expect_false(db_type_uses_schema("sqlite"))
+  expect_false(db_type_uses_schema("bigquery"))
+  expect_false(db_type_uses_schema("mysql"))
+  expect_false(db_type_uses_schema(""))
+  expect_false(db_type_uses_schema(NULL))
 })
 
 # ── db_close ─────────────────────────────────────────────────

@@ -192,7 +192,13 @@ mod_db_connect_server <- function(
 
       existing <- all_tables_rv()
       existing_meta <- table_meta_rv()
-      schema_val <- input$db_schema %||% "public"
+      # The Schema box sits in a conditionalPanel, which only hides it, so
+      # it still reports "public" for backends that have no schema
+      schema_val <- if (db_type_uses_schema(input$db_type)) {
+        input$db_schema %||% "public"
+      } else {
+        ""
+      }
       db_renames <- list()
 
       withProgress(message = "Loading tables...", value = 0, {
