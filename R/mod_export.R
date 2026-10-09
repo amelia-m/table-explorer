@@ -38,7 +38,7 @@ mod_export_ui <- function(id) {
         "o{ many, o| one. Inferred links are labelled with their confidence. ",
         "Mermaid connects tables, not rows (labels name the columns); for ",
         "row-accurate lines use the ELK graph, or the SVG / PNG buttons on ",
-        "the ERD Diagram tab (they save the view as shown: focus, detail level)."
+        "the ERD tab (they save the view as shown: focus, detail level)."
       ),
       tags$hr(),
       div(class = "section-title", "Session"),
