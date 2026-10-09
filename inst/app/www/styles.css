@@ -425,6 +425,44 @@
     .erd-panel-hint { color: var(--text-secondary); }
     .erd-panel-title { font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--accent); margin-bottom: 6px; word-break: break-all; }
     .erd-panel-rel { font-family: "IBM Plex Mono", monospace; margin-bottom: 8px; word-break: break-all; }
+    /* Relationship pair: role, table, column. Table names are long enough
+       to wrap, so the column name gets a cell of its own rather than
+       trailing after a dot. */
+    .erd-rel-grid {
+      width: 100%;
+      margin-bottom: 10px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      border-collapse: collapse;
+    }
+    .erd-rel-grid td {
+      padding: 3px 4px;
+      vertical-align: top;
+      border-top: 1px solid var(--border-sub);
+    }
+    .erd-rel-role {
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      width: 46px;
+      white-space: nowrap;
+    }
+    .erd-rel-table {
+      color: var(--text-primary);
+      overflow-wrap: anywhere;
+    }
+    .erd-rel-col {
+      color: var(--accent);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .erd-rel-col-same {
+      background: var(--accent-bg);
+      border-radius: 4px;
+      font-weight: 600;
+    }
     .erd-panel-meta { color: var(--text-secondary); margin-bottom: 8px; }
     .erd-panel dl { margin: 0 0 8px; }
     .erd-panel dt { color: var(--text-secondary); font-weight: 400; margin-top: 4px; }
