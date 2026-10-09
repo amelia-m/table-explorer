@@ -110,7 +110,9 @@ mod_erd_ui <- function(id) {
           choices = c(
             "Declared + detected" = "both",
             "Declared only" = "declared",
-            "Detected only" = "detected"
+            "Detected (all)" = "detected",
+            "Detected, confirmed" = "confirmed",
+            "Detected, to review" = "to_review"
           ),
           selected = "both",
           width = "180px"
