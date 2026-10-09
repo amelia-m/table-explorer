@@ -1,5 +1,71 @@
 # TODO
 
+## Open items from the 2026-10-09 session
+
+Decisions waiting on Amelia, in full wording so they can be answered later.
+
+- [ ] **Contrast remediation**: plan written at `docs/contrast-plan.md`, measured
+      with `_scratch/contrast_audit.R`. Amelia asked to hold implementation until
+      other work lands. Its own open question: after step 1 the tokens
+      `--text-faint`, `--text-secondary` and `--empty-text` all hold `#94a3b8` in
+      dark mode. Collapse them into one token, or give `--text-faint` a distinct
+      value that still clears 4.5:1?
+- [ ] **Column semantic types**: task contract at
+      `_scratch/contracts/2026-10-09-column-semantic-types.md`, covering validated
+      type guesses (ZIP first), a type confirmation queue reusing the Data
+      Dictionary review pattern, a privacy-respecting value preview, type-driven
+      FK matching (veto mismatched confirmed types, boost matched ones), bulk
+      approval of grouped links, and cross-table column-pair rules. Not approved,
+      not dispatched. Its open assumption: where does the list of valid 3-digit
+      SCF ZIP prefixes come from, and is a one-off fetch at build time (recorded
+      in a `dev/` script, generated data committed) acceptable on this machine?
+- [ ] **Commit hygiene on `feat/dict-review-and-scroll`** (branch unpushed): it
+      carries an empty commit of mine titled "placeholder", and commit `49fbd36`
+      sweeps both the DT scrollbar fix and the empty-flagged-column queue work
+      under a scrollbar-only message. Proposed fix: `git reset --soft HEAD~2` and
+      recommit as two honest commits. Needs Amelia's go-ahead, per the rule on
+      resets.
+- [ ] **Dictionary scrollbar height**: currently `scrollY = "62vh"` plus
+      `scrollCollapse`. Recommended instead:
+      `max-height: calc(100dvh - var(--dict-chrome, 360px))` in CSS, so the
+      offset lives in one place and the cap bites on short windows. The JS
+      measure-and-set alternative needs three listeners and a visibility guard
+      and was judged more fragile. Amelia to choose.
+- [ ] **Merge order and visual checks for the open PRs**: #23 drop golem, #24
+      schema quoting and port validation, #25 `db_load_table` dialect and strict
+      limit, #26 collapsible sidebar, #27 ERD chips off shared trunks, #28
+      relationship panel grid, #29 Table Details collapse. #27, #28 and #29 were
+      verified only on an empty app or not at all, and need a look on the real
+      schema before merging.
+- [ ] **Detection noise: value overlap on counts and low-cardinality integers**
+      (Amelia, 2026-10-09: its own PR, after the current PRs land). A count
+      column such as a `*_month_count` holding {0..12} overlaps any `tlk_*.id`
+      holding a contiguous 1..N almost perfectly, so `overlap_high` (weight
+      0.90) plus `format_match` (0.40, shape `int_code`) produces a 49% low
+      candidate. On the real schema this is a large share of the 357
+      low-confidence rows. The only guard today is
+      `is_fk_candidate()` at `R/utils_inference.R:748`, which rejects a column
+      only when `n_unique <= 2 && n > 10` and it is not key-named.
+      Agreed approach, rules 1 and 4:
+      1. Chance-overlap discount: estimate expected overlap from the parent's
+         domain density (distinct values `m` over range `R`) and score only the
+         excess, `max(0, observed - expected)`. Overlap on a dense integer
+         domain then carries almost no weight.
+      4. Two-signal floor: a single content signal cannot raise a candidate when
+         the child column's distinct count is below a threshold (start at 5);
+         it needs overlap plus cardinality, or a naming signal.
+      Rule 3 (a measure-name guard for `*_count`, `*_qty`, `*_amount`, `*_age`,
+      `*_days`, `*_month`, `*_year`, `*_total`) is held back: `is_key_name()`
+      already treats `_num` and `_no` as key-like, so the two lists contradict
+      and that has to be resolved first.
+      Acceptance: `Rscript dev/fixtures/score_detection.R` still reports 157 of
+      157 real links at medium+ with 0 false, and the low-confidence count on
+      Amelia's schema drops measurably (only she can measure that).
+- [ ] **`limit = 0` semantics** (`db_load_table`, PR #25): currently 0 means zero
+      rows, following `DBI::dbFetch()`. Useful only once a caller can use an
+      empty frame for a schema-only probe: `mod_db_connect.R` drops frames with
+      `nrow(df) == 0`. Build that path, or leave the semantics unused?
+
 - [x] Add a "Hide empty tables" toggle (0-row tables) to the sidebar that filters
       them out of the ERD, Table Details, and Relationships views.
 - [ ] (Maybe later) User-defined naming patterns for FK detection: a settings
