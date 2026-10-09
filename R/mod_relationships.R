@@ -68,8 +68,9 @@ mod_relationships_server <- function(
       if (!isTRUE(input$show_low)) {
         rels <- Filter(function(r) !identical(r$confidence, "low"), rels)
       }
-      # Independent of the source filter, which is single-select: this keeps
-      # declared and manual links visible while clearing the reviewed ones
+      # Narrows to links still awaiting a decision: declared, manual and
+      # confirmed all drop out. Independent of the source dropdown, which
+      # is single-select, so the two can be combined.
       if (isTRUE(input$hide_reviewed)) {
         rels <- Filter(function(r) identical(rel_source(r), "detected"), rels)
       }
@@ -204,14 +205,32 @@ mod_relationships_server <- function(
       )
     })
 
+    # Only whether there are rows, not which: a reactiveVal does not notify
+    # on an identical value, so the DTOutput is emitted once and the proxy
+    # keeps the page, sort and scroll. A plain reactive would re-render the
+    # widget on every confirm and undo the point of the proxy.
+    has_rows_rv <- reactiveVal(FALSE)
+    observe({
+      has_rows_rv(!is.null(rel_rows()))
+    })
+
     output$relationships_ui <- renderUI({
-      if (is.null(rel_rows())) {
+      if (!has_rows_rv()) {
+        filtered <- length(rels_rv()) > 0
         return(div(
           class = "empty-state",
-          h4("No relationships detected"),
+          h4(if (filtered) {
+            "No relationships match the current filters"
+          } else {
+            "No relationships detected"
+          }),
           p(
             style = "color:var(--text-muted); font-size:13px;",
-            "Try uploading more tables or adjusting the detection method."
+            if (filtered) {
+              "Clear the source filter, the confidence filter or \"To review only\" to see the rest."
+            } else {
+              "Try uploading more tables or adjusting the detection method."
+            }
           )
         ))
       }
@@ -323,7 +342,9 @@ mod_relationships_server <- function(
     # render and every proxy update
     .html_cols <- c("Source", "Method", "Actions")
 
-    output$rel_table <- DT::renderDT({
+    # server = TRUE is required by dataTableProxy below, and is spelled out
+    # because the other renderDT calls in this app pass server = FALSE
+    output$rel_table <- DT::renderDT(server = TRUE, {
       # Isolated on purpose: updates arrive through rel_proxy
       df <- isolate(rel_df())
       req(df)
@@ -385,8 +406,10 @@ mod_relationships_server <- function(
         df,
         resetPaging = FALSE,
         clearSelection = "all",
-        rownames = FALSE,
-        escape = setdiff(names(df), .html_cols)
+        rownames = FALSE
+        # No escape argument: DT::replaceData passes ... to dataTableAjax,
+        # which has no such formal, so passing it errors on every update.
+        # The escaping set at render time applies to the new data too.
       )
     }, ignoreInit = TRUE)
 
