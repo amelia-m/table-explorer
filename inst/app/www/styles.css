@@ -148,6 +148,7 @@
     body.light-mode #theme-toggle .toggle-thumb { left: 17px; }
     #theme-toggle .toggle-icon { font-size: 14px; line-height: 1; }
 
+    .rel-export { display: flex; justify-content: flex-end; margin-bottom: 8px; }
     .app-footer {
       padding: 10px 4px 18px;
       text-align: right;
