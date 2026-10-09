@@ -281,7 +281,12 @@ mod_dictionary_server <- function(
             length(new), if (length(new) == 1) " was" else "s were"
           ),
           type = "warning",
-          duration = 8
+          # Stays until dismissed: it arrives during a large upload, when
+          # attention is elsewhere, and it is the only prompt that the
+          # data needs a privacy decision. The banner on the tab repeats
+          # the count, but only once you are looking at that tab.
+          duration = NULL,
+          closeButton = TRUE
         )
         notified(union(notified(), keys))
       }
