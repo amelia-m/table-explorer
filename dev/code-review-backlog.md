@@ -324,9 +324,14 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   who already holds the credentials - so this is closer to a robustness bug than privilege
   escalation. A schema named `O'Brien` breaks it.
 
-- [ ] **P2. `db_load_table` SQL is not portable to SQL Server and fails silently.**
+- [x] **P2. `db_load_table` SQL is not portable to SQL Server and fails silently.**
   `LIMIT` is not valid T-SQL, so both the primary query and the backtick fallback fail, and
   `error = function(e2) NULL` returns `NULL` with no user-visible reason.
+  Done 2026-10-08: `sqlserver` now gets `SELECT TOP (n)`, every other type keeps `LIMIT`, and
+  an unknown type tries one then the other. Failures reach the user through `notify_fn`.
+  Identifiers are quoted by the driver (`DBI::Id()` / `dbQuoteIdentifier()`), so the
+  schema-dropping backtick fallback is gone. Decision: a limit that is `NA`, non-numeric or
+  below 1 (including 0) falls back to the 10000-row default, rather than meaning "no rows".
 
 - [ ] **P3. `read_access_db` re-downloads roughly 10 MB of UCanAccess JARs every session.**
   `R/utils_file_readers.R:446` targets `dirname(<uploaded .mdb>)/access_jars`, which under
