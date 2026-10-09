@@ -110,6 +110,9 @@ app_ui <- function(request) {
         )
       )
     ),
-    br()
+    br(),
+
+    # Which build is on screen: a trailing + means uncommitted changes
+    div(class = "app-footer", app_build_stamp())
   )
 }
