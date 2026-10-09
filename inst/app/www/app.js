@@ -8,6 +8,18 @@
             document.getElementById("toggle-label").textContent = isLight ? "Dark mode" : "Light mode";
           });
         }
+        // Table Details column lists open closed, and a DataTable laid out
+        // while hidden measures every column as zero wide. Re-measure when
+        // one is opened. The toggle event does not bubble, hence capture.
+        document.body.addEventListener("toggle", function(e) {
+          var d = e.target;
+          if (!d.classList || !d.classList.contains("tbl-cols") || !d.open) return;
+          if (window.jQuery && jQuery.fn.dataTable) {
+            jQuery(d).find("table.dataTable").each(function() {
+              jQuery(this).DataTable().columns.adjust();
+            });
+          }
+        }, true);
         // Per-table remove buttons (delegated - buttons are rendered dynamically)
         document.body.addEventListener("click", function(e) {
           if (e.target.classList.contains("btn-remove")) {
