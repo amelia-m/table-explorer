@@ -540,7 +540,6 @@
     .erd-panel { background: var(--tbl-card-bg); border: 1px solid var(--border-sub); border-radius: 8px; padding: 12px; margin-bottom: 10px; font-size: 12px; color: var(--text-primary); }
     .erd-panel-hint { color: var(--text-secondary); }
     .erd-panel-title { font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--accent); margin-bottom: 6px; word-break: break-all; }
-    .erd-panel-rel { font-family: "IBM Plex Mono", monospace; margin-bottom: 8px; word-break: break-all; }
     /* Relationship pair: role, table, column. Table names are long enough
        to wrap, so the column name gets a cell of its own rather than
        trailing after a dot. */
@@ -572,12 +571,19 @@
     .erd-rel-col {
       color: var(--accent);
       text-align: right;
-      white-space: nowrap;
+      /* Column names are long enough to need wrapping: the panel is about
+         236px wide and nowrap gave it a horizontal scrollbar */
+      overflow-wrap: anywhere;
     }
+    /* --accent-bg on the panel's --tbl-card-bg measures 1.02:1, which is
+       invisible. A left rule and an underline carry the full accent. */
     .erd-rel-col-same {
-      background: var(--accent-bg);
-      border-radius: 4px;
       font-weight: 600;
+      border-left: 3px solid var(--accent);
+      padding-left: 6px;
+      text-decoration: underline;
+      text-decoration-color: var(--accent);
+      text-underline-offset: 2px;
     }
     .erd-panel-meta { color: var(--text-secondary); margin-bottom: 8px; }
     .erd-panel dl { margin: 0 0 8px; }

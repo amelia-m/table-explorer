@@ -381,10 +381,7 @@ mod_erd_server <- function(
               same <- identical(r$from_col, to_col)
               col_cell <- function(value) {
                 tags$td(
-                  class = paste(
-                    "erd-rel-col",
-                    if (same) "erd-rel-col-same" else ""
-                  ),
+                  class = if (same) "erd-rel-col erd-rel-col-same" else "erd-rel-col",
                   value
                 )
               }
