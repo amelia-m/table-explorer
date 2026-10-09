@@ -164,6 +164,57 @@
     }
     .sidebar-box hr { border-color: var(--border); margin: 14px 0; }
 
+    /* ── Sidebar collapse ─────────────────────────────────────── */
+    /* Collapsed, the sidebar column is gone and the rail sits in its
+       place. The rail is the only way back, so it spans the full height
+       and is wide enough to hit without aiming. */
+    #app-body { position: relative; }
+    .sidebar-box { position: relative; }
+    .sidebar-collapse {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 22px; height: 22px;
+      padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-sub);
+      border-radius: 5px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      z-index: 2;
+    }
+    .sidebar-collapse:hover,
+    .sidebar-rail:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .sidebar-collapse:focus-visible,
+    .sidebar-rail:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .sidebar-chevron { font-size: 15px; line-height: 1; }
+    .sidebar-rail {
+      display: none;
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 24px;
+      padding: 0;
+      align-items: center; justify-content: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      z-index: 2;
+    }
+    #app-body.sidebar-collapsed .sidebar-rail { display: flex; }
+    #app-body.sidebar-collapsed .row > .col-sm-3 { display: none; }
+    #app-body.sidebar-collapsed .row > .col-sm-9 {
+      width: 100%;
+      padding-left: 38px;
+    }
+
     /* ── Form inputs ──────────────────────────────────────────── */
     label { color: var(--text-secondary) !important; font-size: 12px !important; }
     .form-control, .selectize-input {
