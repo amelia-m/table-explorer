@@ -317,12 +317,17 @@ db_introspect <- function(conn, type, schema = "public") {
 # Row-limit syntax is dialect-specific: T-SQL (sqlserver) has no LIMIT,
 # every other supported backend does. With the type unknown, try LIMIT
 # first and fall back to TOP, rather than reading the whole table.
+# Inf means no limit clause at all.
 
 db_row_limit_sql <- function(tbl_sql, limit, top = FALSE) {
+  if (is.infinite(limit)) {
+    return(paste0("SELECT * FROM ", tbl_sql))
+  }
+  n <- format(trunc(limit), scientific = FALSE)
   if (top) {
-    paste0("SELECT TOP (", limit, ") * FROM ", tbl_sql)
+    paste0("SELECT TOP (", n, ") * FROM ", tbl_sql)
   } else {
-    paste0("SELECT * FROM ", tbl_sql, " LIMIT ", limit)
+    paste0("SELECT * FROM ", tbl_sql, " LIMIT ", n)
   }
 }
 
@@ -334,11 +339,21 @@ db_load_table <- function(
   type = "",
   notify_fn = message
 ) {
-  # A limit that is missing, non-numeric or below 1 falls back to the
-  # default: the caller wants a preview, and 0 rows is never useful
-  limit <- suppressWarnings(as.integer(limit))
-  if (is.na(limit) || limit < 1L) {
-    limit <- 10000L
+  # Strict contract, as for DBI::dbFetch(): 0 means zero rows (columns and
+  # types only), Inf means no limit. Garbage is a caller bug, so it stops
+  # here rather than being quietly replaced; the module sanitises the
+  # user's input before it reaches this point.
+  if (
+    !is.numeric(limit) ||
+      length(limit) != 1L ||
+      is.na(limit) ||
+      limit < 0 ||
+      (is.finite(limit) && limit != trunc(limit))
+  ) {
+    stop(
+      "`limit` must be a single whole number >= 0, or Inf for no limit.",
+      call. = FALSE
+    )
   }
 
   tbl_ref <- if (nzchar(schema)) {

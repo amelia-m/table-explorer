@@ -330,8 +330,12 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   Done 2026-10-08: `sqlserver` now gets `SELECT TOP (n)`, every other type keeps `LIMIT`, and
   an unknown type tries one then the other. Failures reach the user through `notify_fn`.
   Identifiers are quoted by the driver (`DBI::Id()` / `dbQuoteIdentifier()`), so the
-  schema-dropping backtick fallback is gone. Decision: a limit that is `NA`, non-numeric or
-  below 1 (including 0) falls back to the 10000-row default, rather than meaning "no rows".
+  schema-dropping backtick fallback is gone. Decision (revised 2026-10-09): `limit` is a
+  strict contract, as for `DBI::dbFetch()`. `0` means zero rows (`LIMIT 0` / `TOP (0)`:
+  columns and types, no data), `Inf` means no limit clause, and anything else that is not a
+  single whole number >= 0 stops with an error rather than being replaced by a default.
+  Leniency belongs where the human types, as with the port in `R/mod_db_connect.R`; no UI
+  control sets `limit` today, so there is nothing to sanitise yet.
 
 - [ ] **P3. `read_access_db` re-downloads roughly 10 MB of UCanAccess JARs every session.**
   `R/utils_file_readers.R:446` targets `dirname(<uploaded .mdb>)/access_jars`, which under
