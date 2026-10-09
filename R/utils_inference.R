@@ -81,6 +81,13 @@ format_patterns <- list(
 clean_name <- function(name) {
   # Prefixed so an empty or "" input never becomes a zero-length env name
   key <- paste0("k:", paste(name, collapse = "\r"))
+  # Environment names are capped at 10000 bytes, and this is called with a
+  # whole table's column names at once (detect_pks), so a wide table or
+  # long names would otherwise stop detection with
+  # "variable names are limited to 10000 bytes"
+  if (nchar(key, type = "bytes") > 4000L) {
+    key <- paste0("h:", rlang::hash(name))
+  }
   hit <- .clean_name_cache[[key]]
   if (is.null(hit)) {
     hit <- janitor::make_clean_names(name)
