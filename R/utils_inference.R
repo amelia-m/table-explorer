@@ -23,6 +23,7 @@ weight_map <- c(
   naming_self = 0.90,
   cardinality_match = 0.95,
   overlap_high = 0.90,
+  name_identical = 0.60,
   name_sim = 0.60,
   overlap_medium = 0.55,
   dist_high = 0.50,
@@ -38,6 +39,11 @@ label_map <- c(
   naming_exact = "naming",
   naming_role = "naming",
   naming_self = "naming",
+  # Deliberately the same label as name_sim: detected_by feeds the Method
+  # chip, its CSS class, the ERD edge colour and the exports, and a new
+  # value would reach all four unhandled. The split lives in the signal
+  # name and the reason text, which is all the evidence line needs.
+  name_identical = "name_similarity",
   name_sim = "name_similarity",
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
@@ -491,10 +497,20 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
       reason = sprintf("FK naming with prefix (%s)", c1)
     )
   } else {
+    c2 <- clean_name(col2)
     stem1 <- sub("_(id|key|code|num|no)$", "", c1)
-    stem2 <- sub("_(id|key|code|num|no)$", "", clean_name(col2))
+    stem2 <- sub("_(id|key|code|num|no)$", "", c2)
     sim <- jaro_winkler_sim(stem1, stem2)
-    if (sim >= name_sim_high) {
+    # Identical names are reported as such: "name similarity 1.00" reads as
+    # a near miss, and the two cases are judged differently by a reviewer.
+    # Same weight as name_sim, so scores do not move.
+    if (identical(c1, c2)) {
+      list(
+        signal = "name_identical",
+        value = 1.0,
+        reason = sprintf("identical column name (%s)", c1)
+      )
+    } else if (sim >= name_sim_high) {
       list(
         signal = "name_sim",
         value = sim,
@@ -1393,7 +1409,7 @@ resolve_fk_parents <- function(rels) {
       fits <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_value_fit_signals), logical(1))]
       if (length(fits) >= 2) {
         # 2. Values fit several tables: only a clearly closer name can choose
-        close <- fits[vapply(rels[fits], function(r) "name_sim" %in% sig_names(r), logical(1))]
+        close <- fits[vapply(rels[fits], function(r) any(c("name_identical", "name_sim") %in% sig_names(r)), logical(1))]
         winners <- if (length(close) == 1) close else integer(0)
         n_fit <- length(fits)
         fit_names <- vapply(rels[fits], `[[`, "", "to_table")
