@@ -702,12 +702,29 @@ score_candidate <- function(
     reasons <- c(sprintf("only %.0f%% of values found in the parent", ov * 100), reasons)
   }
 
+  # Carried for the Relationships table: a reviewer needs to see how much
+  # the values actually overlap, and whether there were any values to
+  # compare, without opening another tab
+  if (n1 == 0 || n2 == 0) {
+    reasons <- c(
+      reasons,
+      sprintf(
+        "no rows to compare (child %s, parent %s)",
+        format(n1, big.mark = ","),
+        format(n2, big.mark = ",")
+      )
+    )
+  }
+
   list(
     signals = signals,
     reasons = reasons,
     score = score,
     confidence = confidence,
-    detected_by = detected_by
+    detected_by = detected_by,
+    overlap = ov,
+    n_from = n1,
+    n_to = n2
   )
 }
 
