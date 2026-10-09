@@ -966,3 +966,29 @@ test_that("detect_shared_columns needs the values to actually overlap", {
   )
   expect_length(detect_shared_columns(tables), 0)
 })
+
+test_that("score_candidate reports overlap and row counts for the table", {
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  df1 <- data.frame(client_id = c(1, 2, 3, 4))
+  df2 <- data.frame(client_id = c(1, 2, 3, 4, 5, 6))
+  res <- score_candidate("visits", "client_id", df1, "clients", "client_id", df2, flags)
+  expect_equal(res$n_from, 4L)
+  expect_equal(res$n_to, 6L)
+  expect_equal(res$overlap, 1)
+})
+
+test_that("score_candidate says when there were no rows to compare", {
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  empty <- data.frame(client_id = integer(0))
+  df2 <- data.frame(client_id = c(1, 2, 3))
+  res <- score_candidate("visits", "client_id", empty, "clients", "client_id", df2, flags)
+  expect_true(any(grepl("no rows to compare", res$reasons)))
+  expect_equal(res$n_from, 0L)
+  expect_true(is.na(res$overlap))
+})

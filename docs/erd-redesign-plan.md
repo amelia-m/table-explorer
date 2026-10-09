@@ -1,7 +1,7 @@
 # ERD redesign plan
 
 Status: **approved. Step 1 (relationship model + exports) done
-(amelia-m/table-explorer#17); step 2 (ERD Diagram tab, Network overview)
+(amelia-m/table-explorer#17); step 2 (ERD tab, Network overview)
 done.** Next: data dictionary, dbt constraints, session diff, lints.
 It is based on the reference diagrams in
 `docs/erd-examples/`, a web review of ERD best practices, and a map of the

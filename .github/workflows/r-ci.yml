@@ -1,0 +1,65 @@
+name: R CI
+
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The repository carries an renv.lock, but CI installs from DESCRIPTION.
+  # Without this renv bootstraps itself into a library that is not there
+  # and the session dies before the first test runs.
+  RENV_CONFIG_AUTOLOADER_ENABLED: "FALSE"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Install package dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: Imports
+          extra-packages: |
+            any::devtools
+            any::testthat
+            any::pkgload
+            any::jsonlite
+            any::yaml
+            any::RSQLite
+            any::stringdist
+
+      - name: Run test suite
+        shell: Rscript {0}
+        run: |
+          res <- testthat::test_local(reporter = "summary", stop_on_failure = FALSE)
+          df <- as.data.frame(res)
+          cat("failed:", sum(df$failed), " errors:", sum(df$error), "\n")
+          if (sum(df$failed) > 0 || sum(df$error) > 0) quit(status = 1)
+
+      # The real regression guard for detection: a scoring change that
+      # loses a link, or invents one, shows up here and not in the tests
+      - name: Score detection against the fixture
+        shell: Rscript {0}
+        run: |
+          out <- system2("Rscript", "dev/fixtures/score_detection.R", stdout = TRUE)
+          cat(out, sep = "\n")
+          line <- grep("^medium\\+:", out, value = TRUE)
+          if (length(line) != 1) stop("scorer produced no medium+ line")
+          real <- as.integer(sub(".*real: ([0-9]+) of ([0-9]+).*", "\\1", line))
+          want <- as.integer(sub(".*real: ([0-9]+) of ([0-9]+).*", "\\2", line))
+          false <- as.integer(sub(".*false: ([0-9]+).*", "\\1", line))
+          if (is.na(real) || is.na(want) || is.na(false)) stop("could not parse: ", line)
+          if (real < want) stop("detection lost links: ", real, " of ", want)
+          if (false > 0) stop("detection invented ", false, " false links")

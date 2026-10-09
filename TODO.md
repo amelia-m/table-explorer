@@ -75,7 +75,7 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       code lookups, role prefixes) are detected automatically already.
 
 - [ ] ERD redesign: see `docs/erd-redesign-plan.md` (done: model, exports,
-      ERD Diagram tab, data dictionary, dbt constraints; next: session diff,
+      ERD tab, data dictionary, dbt constraints; next: session diff,
       lints).
 - [x] Detection noise on Access-style schemas (lookups sharing ids 1..N):
       names now choose between parents that values can't tell apart, and
