@@ -37,6 +37,30 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       relationship panel grid, #29 Table Details collapse. #27, #28 and #29 were
       verified only on an empty app or not at all, and need a look on the real
       schema before merging.
+- [ ] **Detection noise: value overlap on counts and low-cardinality integers**
+      (Amelia, 2026-10-09: its own PR, after the current PRs land). A count
+      column such as a `*_month_count` holding {0..12} overlaps any `tlk_*.id`
+      holding a contiguous 1..N almost perfectly, so `overlap_high` (weight
+      0.90) plus `format_match` (0.40, shape `int_code`) produces a 49% low
+      candidate. On the real schema this is a large share of the 357
+      low-confidence rows. The only guard today is
+      `is_fk_candidate()` at `R/utils_inference.R:748`, which rejects a column
+      only when `n_unique <= 2 && n > 10` and it is not key-named.
+      Agreed approach, rules 1 and 4:
+      1. Chance-overlap discount: estimate expected overlap from the parent's
+         domain density (distinct values `m` over range `R`) and score only the
+         excess, `max(0, observed - expected)`. Overlap on a dense integer
+         domain then carries almost no weight.
+      4. Two-signal floor: a single content signal cannot raise a candidate when
+         the child column's distinct count is below a threshold (start at 5);
+         it needs overlap plus cardinality, or a naming signal.
+      Rule 3 (a measure-name guard for `*_count`, `*_qty`, `*_amount`, `*_age`,
+      `*_days`, `*_month`, `*_year`, `*_total`) is held back: `is_key_name()`
+      already treats `_num` and `_no` as key-like, so the two lists contradict
+      and that has to be resolved first.
+      Acceptance: `Rscript dev/fixtures/score_detection.R` still reports 157 of
+      157 real links at medium+ with 0 false, and the low-confidence count on
+      Amelia's schema drops measurably (only she can measure that).
 - [ ] **`limit = 0` semantics** (`db_load_table`, PR #25): currently 0 means zero
       rows, following `DBI::dbFetch()`. Useful only once a caller can use an
       empty frame for a schema-only probe: `mod_db_connect.R` drops frames with
