@@ -359,3 +359,17 @@ test_that("declared links are cleaned and de-duplicated when merged", {
   expect_equal(rel_key(merged[[1]]), "orders|customer_id|customers|id")
   expect_length(merge_declared_rels(merged, list(a)), 1)
 })
+
+test_that("the Access jar set pins the HSQLDB that UCanAccess expects", {
+  # HSQLDB 2.7 refuses to resolve UCanAccess's Java routines without
+  # hsqldb.method_class_names, which floods the console with
+  # "user lacks privilege or object not found" for every Access function
+  files <- vapply(ucanaccess_jars, `[[`, character(1), "file")
+  expect_true(any(grepl("^hsqldb-2[.]5[.]", files)))
+  expect_false(any(grepl("^hsqldb-2[.][67][.]", files)))
+  # Every jar is fetched from Maven Central over https
+  urls <- vapply(ucanaccess_jars, `[[`, character(1), "url")
+  expect_true(all(grepl("^https://repo1[.]maven[.]org/", urls)))
+  # The file named in each entry is the one the URL ends with
+  expect_equal(basename(urls), files)
+})

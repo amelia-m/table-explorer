@@ -1,5 +1,5 @@
 # ============================================================
-# mod_erd.R - ERD Diagram (standard physical ERD)
+# mod_erd.R - ERD tab (standard physical ERD)
 # ============================================================
 #
 # Table cards with PK/FK/UK badges, lines from the FK row to the PK row,
@@ -9,6 +9,28 @@
 # on in mod_network.R ("Network overview").
 
 erd_large_schema <- 40L
+# A card is as tall as its column list, so a handful of very wide tables
+# is as unreadable as many narrow ones. Six tables of 150 columns each
+# render as tall strips of 8px text, which the table count alone misses.
+erd_wide_table <- 40L
+erd_many_columns <- 300L
+
+# "keys" or "all", before the first draw. The user's own choice wins over
+# this and is handled by the caller.
+erd_auto_detail <- function(tables) {
+  if (length(tables) == 0) {
+    return("all")
+  }
+  n_cols <- vapply(
+    tables,
+    function(t) nrow(t$columns %||% data.frame()),
+    integer(1)
+  )
+  wide <- length(tables) > erd_large_schema ||
+    sum(n_cols) > erd_many_columns ||
+    max(n_cols) > erd_wide_table
+  if (wide) "keys" else "all"
+}
 
 #' ERD diagram module UI
 #' @noRd
@@ -88,7 +110,9 @@ mod_erd_ui <- function(id) {
           choices = c(
             "Declared + detected" = "both",
             "Declared only" = "declared",
-            "Detected only" = "detected"
+            "Detected (all)" = "detected",
+            "Detected, confirmed" = "confirmed",
+            "Detected, to review" = "to_review"
           ),
           selected = "both",
           width = "180px"
@@ -118,13 +142,15 @@ mod_erd_ui <- function(id) {
         class = "erd-layout",
         div(
           class = "erd-main",
-          div(id = ns("canvas"), class = "erd-canvas"),
+          # Above the canvas: below it the key sat off the bottom of a
+          # tall diagram, so the symbols went unexplained
           tags$details(
             class = "erd-legend",
             open = NA,
-            tags$summary("Legend"),
+            tags$summary("Key"),
             div(id = ns("legend"), class = "erd-legend-body")
-          )
+          ),
+          div(id = ns("canvas"), class = "erd-canvas")
         ),
         div(class = "erd-side", uiOutput(ns("side")))
       )
@@ -168,8 +194,7 @@ mod_erd_server <- function(
       }
     }, ignoreInit = TRUE)
     detail_rv <- reactive({
-      user_detail() %||%
-        if (length(model_rv()$tables) > erd_large_schema) "keys" else "all"
+      user_detail() %||% erd_auto_detail(model_rv()$tables)
     })
     # Lookup links: labels by default for large schemas, same handling of
     # the server's own radio updates as the detail level
@@ -348,13 +373,34 @@ mod_erd_server <- function(
           div(
             class = "erd-panel",
             div(class = "erd-panel-title", "Relationship"),
-            div(
-              class = "erd-panel-rel",
-              sprintf("%s.%s", r$from_table, r$from_col),
-              tags$br(),
-              "→ ",
-              sprintf("%s.%s", r$to_table, r$to_col %||% r$from_col)
-            ),
+            local({
+              # Table and column split into their own columns: long table
+              # names used to push the column name onto a second line, and
+              # the column names are what the reader is comparing. Matching
+              # names are highlighted, since that is the usual case and the
+              # exception is worth seeing at a glance.
+              to_col <- r$to_col %||% r$from_col
+              same <- identical(r$from_col, to_col)
+              col_cell <- function(value) {
+                tags$td(
+                  class = if (same) "erd-rel-col erd-rel-col-same" else "erd-rel-col",
+                  value
+                )
+              }
+              tags$table(
+                class = "erd-rel-grid",
+                tags$tr(
+                  tags$td(class = "erd-rel-role", "child"),
+                  tags$td(class = "erd-rel-table", r$from_table),
+                  col_cell(r$from_col)
+                ),
+                tags$tr(
+                  tags$td(class = "erd-rel-role", "parent"),
+                  tags$td(class = "erd-rel-table", r$to_table),
+                  col_cell(to_col)
+                )
+              )
+            }),
             tags$dl(
               tags$dt("Each child row has"),
               tags$dd(paste(words_parent[[r$parent_min]], "parent")),
