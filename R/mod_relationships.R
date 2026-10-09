@@ -196,6 +196,13 @@ mod_relationships_server <- function(
           function(r) paste(names(r$signals), collapse = ", "),
           character(1)
         ),
+        overlap = vapply(
+          rels,
+          function(r) r$overlap %||% NA_real_,
+          numeric(1)
+        ),
+        n_from = vapply(rels, function(r) r$n_from %||% NA_integer_, integer(1)),
+        n_to = vapply(rels, function(r) r$n_to %||% NA_integer_, integer(1)),
         reasons = vapply(
           rels,
           function(r) paste(r$reasons, collapse = "; "),
@@ -327,6 +334,22 @@ mod_relationships_server <- function(
           is.na(rows$score),
           "000",
           sprintf("%03d", as.integer(rows$score))
+        ),
+        # Row counts and overlap in the table itself: a 0-row table cannot
+        # produce value evidence, and that was invisible here before
+        `Child rows` = ifelse(is.na(rows$n_from), "", format(rows$n_from, big.mark = ",")),
+        from_sort = sprintf("%012d", ifelse(is.na(rows$n_from), 0L, rows$n_from)),
+        `Parent rows` = ifelse(is.na(rows$n_to), "", format(rows$n_to, big.mark = ",")),
+        to_sort = sprintf("%012d", ifelse(is.na(rows$n_to), 0L, rows$n_to)),
+        `Overlap %` = ifelse(
+          is.na(rows$overlap),
+          "n/a",
+          sprintf("%.0f%%", 100 * rows$overlap)
+        ),
+        overlap_sort = ifelse(
+          is.na(rows$overlap),
+          "-01",
+          sprintf("%03d", as.integer(round(100 * rows$overlap)))
         ),
         # The reasons carry the numbers ("value overlap 97%", "distribution
         # similarity 0.82"); the bare signal names say only which tests fired
