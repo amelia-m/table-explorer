@@ -9,10 +9,6 @@ importFrom(DT,
   renderDT,
   styleEqual
 )
-importFrom(golem,
-  get_golem_options,
-  with_golem_options
-)
 importFrom(janitor,
   clean_names,
   make_clean_names

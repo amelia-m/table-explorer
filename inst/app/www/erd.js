@@ -141,6 +141,16 @@
     return m;
   }
 
+  // Stable 0..9 phase from the edge key, so a redraw keeps the same
+  // offset and the diagram does not shimmer between renders
+  function dashPhase(key) {
+    var h = 0, s = String(key || "");
+    for (var i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) % 1000;
+    }
+    return h % 10;
+  }
+
   function edgeColor(pr, th) {
     return pr.provenance === "inferred" ? th.muted : th.text;
   }
@@ -325,6 +335,18 @@
     return out;
   }
 
+  // Two segments count as sharing a run only when they point the same way.
+  // Without this a perpendicular crossing scores a distance of 0 and every
+  // crossed edge loses its chip, which is most of a dense diagram.
+  function parallelSegments(a, b) {
+    var ax = a.b.x - a.a.x, ay = a.b.y - a.a.y;
+    var bx = b.b.x - b.a.x, by = b.b.y - b.a.y;
+    var la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la < 1e-6 || lb < 1e-6) return false;
+    // |cross product| of the unit vectors: 0 parallel, 1 perpendicular
+    return Math.abs((ax * by - ay * bx) / (la * lb)) < 0.26; // about 15 degrees
+  }
+
   function nearSegment(p, s, tol) {
     if (
       p.x < Math.min(s.a.x, s.b.x) - tol || p.x > Math.max(s.a.x, s.b.x) + tol ||
@@ -356,11 +378,22 @@
     for (var j = 0; j < mine.length; j++) {
       var m = mine[j];
       if (m.len < CHIP_R * 3) continue;
-      var mid = { x: (m.a.x + m.b.x) / 2, y: (m.a.y + m.b.y) / 2 };
-      var shared = segs.some(function (s) {
-        return s.key !== key && nearSegment(mid, s, CHIP_R + 1);
-      });
-      if (!shared) return mid;
+      // Several points per segment: one blocked midpoint should not cost
+      // the whole segment, which it did when a line crossed near the middle
+      var ts = [0.5, 0.35, 0.65, 0.25, 0.75];
+      for (var k = 0; k < ts.length; k++) {
+        var t = ts[k];
+        var at = {
+          x: m.a.x + t * (m.b.x - m.a.x),
+          y: m.a.y + t * (m.b.y - m.a.y),
+        };
+        var shared = segs.some(function (s) {
+          return s.key !== key &&
+            parallelSegments(m, s) &&
+            nearSegment(at, s, CHIP_R + 1);
+        });
+        if (!shared) return at;
+      }
     }
     return null;
   }
@@ -390,6 +423,10 @@
       el("polyline", {
         class: "erd-line", points: ptsAttr, fill: "none", stroke: color,
         "stroke-width": 1.4, "stroke-dasharray": pr.identifying ? null : "6 4",
+        // Where two dashed edges still coincide, equal phase makes them
+        // read as one solid line. Offsetting by the edge's own key puts
+        // one line's dashes in the other's gaps.
+        "stroke-dashoffset": pr.identifying ? null : dashPhase(pr.key),
       }, g);
       var into = function (P, n) {
         return n && Math.abs(P.x - n.x) < 1 ? 1 : -1;
