@@ -161,6 +161,16 @@
     return pts[0];
   }
 
+  // Stable 0..9 phase from the edge key, so a redraw keeps the same
+  // offset and the diagram does not shimmer between renders
+  function dashPhase(key) {
+    var h = 0, s = String(key || "");
+    for (var i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) % 1000;
+    }
+    return h % 10;
+  }
+
   function edgeColor(pr, th) {
     return pr.provenance === "inferred" ? th.muted : th.text;
   }
@@ -355,6 +365,10 @@
       el("polyline", {
         class: "erd-line", points: ptsAttr, fill: "none", stroke: color,
         "stroke-width": 1.4, "stroke-dasharray": pr.identifying ? null : "6 4",
+        // Where two dashed edges still coincide, equal phase makes them
+        // read as one solid line. Offsetting by the edge's own key puts
+        // one line's dashes in the other's gaps.
+        "stroke-dashoffset": pr.identifying ? null : dashPhase(pr.key),
       }, g);
       var into = function (P, n) {
         return n && Math.abs(P.x - n.x) < 1 ? 1 : -1;
