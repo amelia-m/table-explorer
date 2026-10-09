@@ -39,7 +39,11 @@ label_map <- c(
   naming_exact = "naming",
   naming_role = "naming",
   naming_self = "naming",
-  name_identical = "same_name",
+  # Deliberately the same label as name_sim: detected_by feeds the Method
+  # chip, its CSS class, the ERD edge colour and the exports, and a new
+  # value would reach all four unhandled. The split lives in the signal
+  # name and the reason text, which is all the evidence line needs.
+  name_identical = "name_similarity",
   name_sim = "name_similarity",
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
