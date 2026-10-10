@@ -1,0 +1,39 @@
+# Lahman Baseball Database, via the CRAN Lahman package (14.0.0).
+#
+# The CSV release carries no foreign key constraints, so this is written by
+# hand from the documented schema: People is keyed on playerID, Teams on
+# (yearID, teamID, lgID), Schools on schoolID, Parks on parkKey. Every
+# playing, award and appearance table carries playerID back to People, and
+# the team-level ones carry teamID back to Teams.
+#
+# Only single-column links are listed. This app detects single-column
+# foreign keys, so a link into Teams on (yearID, teamID, lgID) is listed as
+# its teamID part alone. That is a limitation of the measurement, not a
+# claim that teamID by itself identifies a team: it does not, and a precision
+# number computed against this file inherits that.
+#
+# Written from the package documentation, not read off constraints. If a pair
+# here is wrong, the recall and precision computed from it are wrong too.
+
+batting.playerid -> people.playerid
+pitching.playerid -> people.playerid
+fielding.playerid -> people.playerid
+fieldingof.playerid -> people.playerid
+fieldingofsplit.playerid -> people.playerid
+appearances.playerid -> people.playerid
+salaries.playerid -> people.playerid
+allstarfull.playerid -> people.playerid
+battingpost.playerid -> people.playerid
+pitchingpost.playerid -> people.playerid
+fieldingpost.playerid -> people.playerid
+halloffame.playerid -> people.playerid
+awardsplayers.playerid -> people.playerid
+awardsshareplayers.playerid -> people.playerid
+collegeplaying.playerid -> people.playerid
+managers.playerid -> people.playerid
+managershalf.playerid -> people.playerid
+awardsmanagers.playerid -> people.playerid
+awardssharemanagers.playerid -> people.playerid
+
+collegeplaying.schoolid -> schools.schoolid
+homegames.parkkey -> parks.parkkey

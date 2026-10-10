@@ -9,11 +9,11 @@
 #   chinook  MIT (lerocha/chinook-database)
 #   pagila   BSD (devrimgunduz/pagila)
 #   faers    US government work, public domain (FDA)
-#   lahman   SABR publishes it; the Baseball Databank derivative is
-#            CC BY-SA 3.0 and parts are licensed from Seamheads and
-#            Retrosheet. SABR's own statement is unclear, so treat the
-#            files as redistributable only by SABR, and keep them in the
-#            cache rather than in this repository.
+#   lahman   not fetched here: the canonical baseballdatabank repository
+#            returns 404, so the harness reads the CRAN Lahman package
+#            instead (install.packages("Lahman")). The data is Lahman's,
+#            CC BY-SA 3.0 for the Baseball Databank derivative, with parts
+#            licensed from Seamheads and Retrosheet.
 
 public_cache <- function() {
   file.path(tools::R_user_dir("tableexplorer", "cache"), "public-fixtures")
@@ -36,14 +36,6 @@ public_sources <- list(
     ),
     note = "Sakila for PostgreSQL; schema only, needs a server to load"
   ),
-  lahman = list(
-    file = "lahman.zip",
-    url = paste0(
-      "https://github.com/chadwickbureau/baseballdatabank/archive/",
-      "refs/heads/master.zip"
-    ),
-    note = "~27 CSVs, composite keys, yearID/teamID/lgID shared everywhere"
-  ),
   faers = list(
     file = "faers_ascii_2024q1.zip",
     url = paste0(
@@ -54,6 +46,15 @@ public_sources <- list(
 )
 
 fetch_one <- function(key) {
+  if (identical(key, "lahman")) {
+    have <- requireNamespace("Lahman", quietly = TRUE)
+    message(sprintf(
+      "%-8s %s", key,
+      if (have) "read from the CRAN Lahman package, nothing to fetch"
+      else "needs install.packages(\"Lahman\"); nothing to fetch"
+    ))
+    return(invisible(have))
+  }
   src <- public_sources[[key]]
   if (is.null(src)) {
     message("unknown dataset: ", key)
