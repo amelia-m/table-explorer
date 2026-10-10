@@ -38,6 +38,31 @@ cardinality_min_distinct <- 12L
 # distinct values by accident. Above this the discount is not applied.
 overlap_chance_max_distinct <- 25L
 
+# ── Containment thresholds ───────────────────────────────────
+# Containment is the structural definition of a foreign key: every value
+# the child holds appears in a parent column that identifies a row. It is
+# the one signal here that needs neither a naming convention nor a
+# distribution to agree, which is the whole point of it.
+
+# Strict containment: every distinct child value tested was found. Set as a
+# constant rather than written as "== 1" so the comparison reads the same
+# as the tier below it, and so the two tiers sit side by side.
+containment_full <- 1.0
+# A real extract arrives with orphan rows: a filtered parent, a soft-deleted
+# row, a child loaded after its parent snapshot. One value in a hundred
+# missing is that, not a different domain, so it keeps a weaker signal
+# rather than none. Below this the overlap signals in step 3 already cover
+# the pair, and calling 95% "contained" would be a claim the data does not
+# support.
+containment_near <- 0.99
+# Containment is free when the child has one or two distinct values: a flag
+# or a two-code column sits inside almost any key. Three distinct values is
+# the smallest set where being wholly inside a particular key says anything,
+# and it is the same floor detect_shared_columns() uses for the same reason.
+# A caller that wants a stricter scan raises it per scan: detect_fks() and
+# score_candidate() both take containment_min_distinct.
+containment_min_distinct_default <- 3L
+
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
 weight_map <- c(
@@ -45,7 +70,21 @@ weight_map <- c(
   naming_role = 0.90,
   naming_self = 0.90,
   cardinality_match = 0.95,
+  # Containment is stronger evidence than bare overlap (0.90), because it
+  # also knows the parent identifies a row, and weaker than two identical
+  # value sets (0.95), which says the same thing in both directions. On its
+  # own it reaches 0.92, so a link with no name evidence at all still lands
+  # at high confidence, which is where a structural foreign key belongs.
+  containment = 0.92,
   overlap_high = 0.90,
+  # Nearly contained. Below 0.92, and deliberately below the 0.85
+  # high-confidence threshold, so this tier can never assert a link on its
+  # own. In practice it never has to: a child needs 100 distinct values
+  # before one of them can be the missing 1%, and at that many the chance
+  # discount no longer applies, so containment_near at 0.99 always arrives
+  # alongside overlap_high (which fires from 0.98). What it adds is the
+  # parent-is-a-key half of the evidence, and the count in the reason text.
+  containment_near = 0.84,
   name_identical = 0.60,
   name_sim = 0.60,
   overlap_medium = 0.55,
@@ -71,6 +110,13 @@ label_map <- c(
   name_sim_weak = "name_similarity",
   overlap_high = "value_overlap",
   overlap_medium = "value_overlap",
+  # Same label as the overlap signals, for the reason given above
+  # name_identical: detected_by feeds the Method chip, its CSS class, the
+  # ERD edge colour and the exports, and a new value would reach all four
+  # unhandled. Containment is a value-overlap finding to a reviewer; the
+  # evidence line is where the difference is spelled out.
+  containment = "value_overlap",
+  containment_near = "value_overlap",
   cardinality_match = "cardinality",
   format_match = "format",
   dist_high = "distribution",
@@ -482,6 +528,11 @@ column_profile <- function(v, sample_cap = 5000) {
   counts <- table(count_vals)
   list(
     dtype = col_dtype_class(v),
+    # Rows with a value, counted before any sampling: with the distinct
+    # count it says whether this column identifies a row, which is what
+    # the containment signal needs of a parent. counts is sampled, so its
+    # total cannot answer that.
+    n_present = length(vals),
     uniq = uniq,
     uniq_sample = uniq_sample,
     counts = setNames(as.numeric(counts), names(counts)),
@@ -532,6 +583,42 @@ overlap_expected_by_chance <- function(p_child, p_parent) {
   vals <- suppressWarnings(as.numeric(p_child$uniq_sample))
   inside <- sum(!is.na(vals) & vals >= dom$lo & vals <= dom$hi)
   dom$density * inside / length(p_child$uniq_sample)
+}
+
+# ── Is this parent column a key? ─────────────────────────────
+# Containment only means something when the parent identifies a row:
+# episode.number_of_items sits wholly inside member.width_cm, and
+# a column of heights is not a key, which is what keeps that pair out.
+#
+# Mirrors the two tests detect_fks() already applies when it chooses target
+# columns, so a standalone score_candidate() call answers the question the
+# same way the scan does: pk_map (strictly unique, fully populated) and
+# near_unique_cols (parent_key_min_frac of both). Counts come off the
+# cached profile, so this adds no pass over the data. Same quick rejects as
+# both of those: a flag, a date and a block of free text are not keys
+# whatever their values do.
+#
+# Returns "key", "near key" (for the reason text) or NULL.
+parent_key_kind <- function(v, p, n) {
+  if (n == 0 || is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
+    return(NULL)
+  }
+  # isTRUE: an all-NA text column has no median and would error
+  if (is.character(v) && isTRUE(median(nchar(head(na.omit(v), 20))) > 60)) {
+    return(NULL)
+  }
+  present <- p$n_present
+  distinct <- length(p$uniq)
+  if (present == n && distinct == n) {
+    return("key")
+  }
+  if (
+    present >= n * parent_key_min_frac &&
+      distinct >= present * parent_key_min_frac
+  ) {
+    return("near key")
+  }
+  NULL
 }
 
 # ── Distribution similarity (cosine) ────────────────────────
@@ -736,7 +823,8 @@ score_candidate <- function(
   enable_flags,
   p1 = NULL,
   p2 = NULL,
-  t2_is_lookup = NULL
+  t2_is_lookup = NULL,
+  containment_min_distinct = containment_min_distinct_default
 ) {
   signals <- list()
   reasons <- character(0)
@@ -813,6 +901,64 @@ score_candidate <- function(
         reasons,
         sprintf("partial overlap %.0f%%%s", ov * 100, chance_note)
       )
+    }
+  }
+
+  # 3b. Containment: every value the child holds is present in a parent
+  # column that identifies a row. That is what a foreign key is, so this
+  # fires on a link whose name follows no convention and whose values are
+  # spread nothing like the parent's, which is where the other six signals
+  # between them have nothing to say.
+  #
+  # Deliberately exempt from step 3's chance-overlap discount. That
+  # discount exists because a short dense integer run sits inside any other
+  # dense run, and most of those runs are not keys at all: a count of
+  # items fits a column of widths, and the parent key test above is
+  # what rules that pair out rather than the density. The density still
+  # governs the overlap signals, so a pair whose only evidence is a count
+  # inside a non-key dense column still scores nothing. Two keys both
+  # containing the same handful of values remain a real hazard, and
+  # resolve_fk_parents' ambiguity rule is what answers it: the raw overlap
+  # it reads is at or above overlap_high whenever containment fires here.
+  #
+  # Reuses ov, which is already mean(child distinct in parent distinct),
+  # so containment costs no second pass and no larger sample.
+  if (
+    isTRUE(enable_flags[["value_overlap"]]) &&
+      n1 > 0 &&
+      n2 > 0 &&
+      !is.na(ov) &&
+      length(p1$uniq) >= containment_min_distinct
+  ) {
+    parent_kind <- parent_key_kind(df2[[col2]], p2, n2)
+    if (!is.null(parent_kind)) {
+      # The distinct values actually tested. Above column_profile's
+      # sampling cap that is a sample of the child's distinct values, so
+      # "all n values" is a claim about those n, which is why the count is
+      # in the reason text rather than a bare "all values".
+      n_tested <- length(p1$uniq_sample)
+      if (ov >= containment_full) {
+        signals[["containment"]] <- 1.0
+        reasons <- c(
+          reasons,
+          sprintf(
+            "all %d values present in a %s (contained)",
+            n_tested,
+            parent_kind
+          )
+        )
+      } else if (ov >= containment_near) {
+        signals[["containment_near"]] <- ov
+        reasons <- c(
+          reasons,
+          sprintf(
+            "%d of %d values present in a %s (nearly contained)",
+            round(ov * n_tested),
+            n_tested,
+            parent_kind
+          )
+        )
+      }
     }
   }
 
@@ -1135,6 +1281,12 @@ detect_composite_pks <- function(
 }
 
 # ── Foreign key detection (multi-signal) ─────────────────────
+#
+# containment_min_distinct: how many distinct values a child column needs
+# before being wholly inside a parent key counts as evidence. A per-scan
+# setting rather than a constant, because how much of a coincidence three
+# shared values are depends on the schema: pass a higher number for a
+# schema full of small code domains. Reaches score_candidate() from here.
 
 detect_fks <- function(
   tables,
@@ -1144,7 +1296,8 @@ detect_fks <- function(
   progress_fn = NULL,
   max_pairs = 50000L,
   focus_tables = NULL,
-  existing = list()
+  existing = list(),
+  containment_min_distinct = containment_min_distinct_default
 ) {
   if (method == "manual" || length(tables) < 2) {
     return(list())
@@ -1442,7 +1595,8 @@ detect_fks <- function(
               enable_flags,
               get_profile(t1, col1),
               get_profile(t2, col2),
-              lookup_flags[[t2]]
+              lookup_flags[[t2]],
+              containment_min_distinct
             ),
             error = function(e) NULL
           )
@@ -1632,6 +1786,8 @@ self_ref_match <- function(t1, col1, df1, pk_cols) {
 # again over cached plus new results and give the same answer.
 
 fk_name_signals <- c("naming_exact", "naming_role", "naming_self")
+# No containment entry is needed: containment only fires at 99% or above,
+# and the raw-overlap test below catches every such pair at overlap_high.
 fk_value_fit_signals <- c("cardinality_match", "overlap_high")
 
 resolve_fk_parents <- function(rels) {
