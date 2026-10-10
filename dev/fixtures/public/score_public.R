@@ -143,19 +143,31 @@ run_pagila <- function() {
 }
 
 run_lahman <- function() {
-  z <- file.path(public_cache(), "lahman.zip")
-  if (!file.exists(z)) {
-    cat("lahman   SKIP  not fetched\n")
+  # The CRAN package rather than a download: the canonical
+  # chadwickbureau/baseballdatabank repository returns 404, and the package
+  # ships the same tables as data frames. Licence: the package is GPL, the
+  # data is Lahman's, CC BY-SA 3.0 for the Baseball Databank derivative.
+  if (!requireNamespace("Lahman", quietly = TRUE)) {
+    cat("lahman   SKIP  install.packages(\"Lahman\")
+")
     return(invisible(NULL))
   }
-  dir <- file.path(public_cache(), "lahman")
-  if (!dir.exists(dir)) {
-    utils::unzip(z, exdir = dir)
+  items <- utils::data(package = "Lahman")$results[, "Item"]
+  # Only the data frames: the package also ships label vectors
+  tables <- list()
+  env <- new.env(parent = emptyenv())
+  for (nm in items) {
+    # Lazy-loaded data: data() rather than get() on the namespace
+    ok <- tryCatch({
+      utils::data(list = nm, package = "Lahman", envir = env)
+      TRUE
+    }, error = function(e) FALSE, warning = function(w) FALSE)
+    if (!ok) next
+    obj <- tryCatch(get(nm, envir = env), error = function(e) NULL)
+    if (is.data.frame(obj) && nrow(obj) > 0) {
+      tables[[tolower(nm)]] <- obj
+    }
   }
-  csvs <- list.files(dir, pattern = "[.]csv$", recursive = TRUE, full.names = TRUE)
-  csvs <- csvs[grepl("/core/", csvs, fixed = TRUE)]
-  tables <- lapply(csvs, function(f) utils::read.csv(f, stringsAsFactors = FALSE))
-  names(tables) <- tools::file_path_sans_ext(basename(csvs))
   truth_file <- "dev/fixtures/public/truth/lahman.txt"
   truth <- if (file.exists(truth_file)) {
     tr <- trimws(readLines(truth_file, warn = FALSE))
