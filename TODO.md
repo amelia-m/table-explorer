@@ -31,14 +31,13 @@ Read these with their limits in mind:
 
 Open items from this work:
 
-- [ ] **Pagila is identified but not measured.** It needs a running Postgres
-      instance (portable binaries, Docker, or the Windows installer), which
-      is the only one of the four datasets that is not a file or a CRAN
-      package. Amelia asked what setting one up involves and the answer was
-      given; no decision was recorded either way. Recommendation was to skip
-      it for now, because Chinook already covers the conventionally named,
-      declared-constraint case. **Decision needed: set up Postgres for
-      Pagila, or drop Pagila from the harness and say so in its README?**
+- [ ] **Pagila is deferred** (Amelia, 2026-10-10). It needs a running Postgres
+      instance, the only one of the four datasets that is not a file or a CRAN
+      package. Chinook already covers the conventionally named,
+      declared-constraint case, so nothing is blocked. Left open rather than
+      closed because the harness still names Pagila in its dataset list and
+      `score_public.R pagila` prints a SKIP line: either leave it as a known
+      gap or say so in the harness README.
 - [ ] **The Lahman package lives in the user library, not the project renv
       library.** It was installed with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
       so that worktrees can see it. A clone on another machine, and CI, will
@@ -69,23 +68,31 @@ Open items from this work:
       worktree** and does not set it itself, so the first run in a new
       worktree fails on a missing library rather than saying why. Either set
       it inside the script or print the reason.
-- [ ] **PR #54 (`feat/detection-rules-scoring`) should not merge as it
-      stands.** It roughly doubles precision on Chinook and FAERS but drops
-      recall, and the lost links share a shape: the child name does not match
-      the parent table, the values are small dense integers, and the parent
-      is a key. That is exactly what the containment signal is meant to
-      recover, so #54's fate waits on the containment work landing and being
-      measured. **Decision needed once containment lands: merge #54, or keep
-      its chance-overlap discount and drop the rest?**
-- [ ] **The detection presets contract is still a draft** at
-      `docs/contracts/2026-10-10-detection-presets-draft.md` with two open
-      assumptions: which presets to offer (proposed Conventional names,
-      Balanced, Unconventional names, Custom), and whether the rules
-      currently hard-coded (the chance discount, the cardinality floor, the
-      possible-key names) become settings in that contract or stay fixed
-      with presets only selecting among existing toggles. Proposed: they
-      become settings, since otherwise the presets cannot differ in the ways
-      that matter.
+- [ ] **PR #54 (`feat/detection-rules-scoring`) merges behind settings**
+      (Amelia, 2026-10-10). It holds three rules: the chance-overlap discount,
+      the cardinality floor at 12 distinct values, and the requirement that a
+      foreign key's parent be a key or near key. Together they roughly double
+      precision on Chinook and FAERS and drop recall, and the lost links share
+      a shape: the child name does not match the parent table, the values are
+      small dense integers, the parent is a key. Since the hard-coded rules
+      are becoming settings, the question is no longer whether to merge #54
+      but which of its three rules are on by default. **That is decided from
+      the sweep, not before it**, and nobody has yet measured the three rules
+      separately: all three figures quoted anywhere are for all three applied
+      at once. The sweep's per-rule rows will settle it.
+- [ ] **Detection presets, now three pieces.** The hard-coded rules become
+      settings and the preset list is chosen from measurement, not proposed
+      (Amelia, 2026-10-10). So: the containment signal lands first (contract
+      `docs/contracts/2026-10-10-containment-signal.md`, agent running); then
+      the settings and sweep contract
+      (`docs/contracts/2026-10-10-detection-settings-and-sweep.md`, approved,
+      waiting on containment because both change `R/utils_inference.R`); then
+      Amelia reads the sweep, picks candidate presets, checks them against her
+      own real extract, and the preset UI contract
+      (`docs/contracts/2026-10-10-detection-presets-draft.md`) is finished
+      with that list and dispatched. Its one remaining open question is
+      whether a chosen preset is remembered between sessions; proposed per
+      session only, recorded in the export.
 
 ## Open items from the 2026-10-09 session
 
