@@ -1,0 +1,20 @@
+# FAERS 2024Q1 ASCII, documented relationships (ASC_NTS.pdf).
+# DEMO is the parent: one row per report, keyed on primaryid.
+# Every other file carries primaryid and caseid back to it, and the two
+# drug-detail files carry a drug sequence number back to DRUG.
+#
+# Written by hand from the FDA documentation, so it is a claim about the
+# schema rather than a constraint read off a database. If a pair here is
+# wrong, the precision and recall numbers are wrong with it.
+#
+# Table names carry the quarter: demo24q1, drug24q1, and so on. That is
+# deliberate, and is the case the table-name stamp stripping exists for.
+
+drug24q1.primaryid -> demo24q1.primaryid
+reac24q1.primaryid -> demo24q1.primaryid
+outc24q1.primaryid -> demo24q1.primaryid
+rpsr24q1.primaryid -> demo24q1.primaryid
+ther24q1.primaryid -> demo24q1.primaryid
+indi24q1.primaryid -> demo24q1.primaryid
+ther24q1.dsg_drug_seq -> drug24q1.drug_seq
+indi24q1.indi_drug_seq -> drug24q1.drug_seq
