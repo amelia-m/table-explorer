@@ -61,6 +61,22 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       Acceptance: `Rscript dev/fixtures/score_detection.R` still reports 157 of
       157 real links at medium+ with 0 false, and the low-confidence count on
       Amelia's schema drops measurably (only she can measure that).
+      Status 2026-10-09, branch `feat/detection-rules-scoring`: rule 1 is done
+      (`overlap_expected_by_chance()` in `R/utils_inference.R`). Rule 4 is
+      **not**. What landed beside rule 1 is narrower than rule 4: a floor on
+      `cardinality_match` alone (`cardinality_min_distinct = 12`), not a floor
+      on any single content signal. The gap is real and visible in the
+      fixture: once chance overlap is discounted, the unhelpfully named `code`
+      columns in access52 reach 0.70 medium on `dist_high` (0.50) plus
+      `format_match` (0.40), with no naming signal and no value evidence left
+      at all, and the only thing keeping them out of the medium+ count is
+      `resolve_fk_parents()`' ambiguity guard, which needs two or more
+      candidate parents before it fires. The same column with a single
+      candidate parent would be reported at medium. Question for whoever
+      takes rule 4: should a candidate carrying only `dist_high`/`dist_med`
+      and `format_match` be capped at low whatever the child's distinct
+      count, or should the floor be on the child's distinct count as
+      originally written (start at 5)?
 - [ ] **`limit = 0` semantics** (`db_load_table`, PR #25): currently 0 means zero
       rows, following `DBI::dbFetch()`. Useful only once a caller can use an
       empty frame for a schema-only probe: `mod_db_connect.R` drops frames with
@@ -98,6 +114,74 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
 - [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
       tables, start focused on the most-connected table with 2 hops instead
       of drawing everything.
+
+## Follow-ups from the FK precision rules (2026-10-09)
+
+Branch `feat/detection-rules-scoring`: the parent-must-be-a-key rule and the
+chance-overlap and cardinality discounts. Deliberately left out of that
+branch, in full wording. Measurement there was `Rscript dev/check.R` (1188
+passed, 0 failed, 0 errors, 4 skipped) plus the access52 scorer (157 of 157
+at medium+, 0 false, unchanged before and after).
+
+- [ ] **Not checked: the effect on the real 52-table extract.** Everything
+      measured on this branch is the synthetic access52 fixture and unit
+      tests. The three named false links were reproduced from their shape, as
+      invented data, and are gone; whether the real extract loses any genuine
+      link to these two rules has not been measured, and only Amelia can
+      measure it. The check that would settle it: run detection on the
+      extract before and after and diff the medium+ link list.
+- [ ] **`parent_key_min_frac = 0.99` is a share, so below 100 rows it is
+      exactly strict uniqueness.** A small dirty lookup parent, say 7
+      distinct codes in 8 rows, is therefore no longer offered as a parent at
+      all, and any real link into it is lost rather than demoted. Assumed not
+      to occur, not checked: access52 cannot show it either way, because
+      every table in the fixture has at least one strictly unique column, so
+      the near-unique fallback never runs there. The check that would settle
+      it: for each table in the real extract with no fully unique column,
+      print the row count and the distinct and non-missing counts per column.
+      If small dirty parents do occur, the fix is an absolute tolerance (for
+      example "at most one duplicate row, whatever the table's size")
+      alongside the share.
+- [ ] **The chance discount silences `overlap_high` for any numeric parent
+      whose integer domain is denser than about 0.02**, and `overlap_medium`
+      above about 0.20, which includes every contiguous id run. That is the
+      rule working as specified, and it is also its cost: a real link into a
+      contiguous id parent with no naming match now rests on format and
+      distribution alone and drops from medium to low. In access52 every real
+      link carries `naming_exact`, so nothing moved there. Decide whether a
+      perfect overlap on a dense domain should keep a floor of
+      `overlap_medium` rather than nothing.
+- [ ] **`resolve_fk_parents()` was changed beyond the two rules.** Its
+      "values fit several tables" test now reads the raw overlap carried on
+      the relationship (`overlap`, added to `make_rel()`) as well as the
+      `cardinality_match`/`overlap_high` signals. Without it the ambiguity
+      guard switched off for exactly the candidates the discount silences and
+      the fixture went to 32 false links at medium+. Flagged because it was
+      not in the brief: whether the ambiguity guard should read raw values
+      while the score reads discounted ones is a design call worth a second
+      opinion.
+- [ ] **The legacy root `inference.R` still holds the old detection engine**
+      and was not updated with either rule. It is a known dead duplicate,
+      sourced by nothing (backlog items I10 and D4 in
+      `dev/code-review-backlog.md`), which is why it was left. If D4 is
+      answered by keeping the root files rather than deleting them, both
+      rules have to be ported into it.
+- [ ] **`detect_fks()`' 1:1 path draws targets from `pk_map` only.** A unique
+      key-named child column (`src_unique`) looks for its parent in
+      `pk_map[[t2]]`, so a table whose key is merely near-unique offers it no
+      target and the 1:1 link is not found at all. Noticed while writing the
+      survival test for the parent-key rule and left alone, because the brief
+      scoped that rule to the `target_cols` fallback. Decide whether 1:1
+      links should accept a dirty parent key too.
+- [ ] **`Rscript dev/check.R` needs `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
+      in a fresh worktree.** A new worktree has no `renv` library, so
+      `renv/activate.R` bootstraps renv at R startup, points the library at
+      an empty project library and the suite aborts with "there is no package
+      called 'testthat'". `dev/check.R` already sets that variable, but from
+      inside the script, which is too late for its own startup (it does reach
+      the scorer subprocess). Every run quoted for this branch set it on the
+      command line. Worth deciding whether the repository should carry an
+      `.Renviron`, or whether `dev/check.R` should re-exec itself.
 
 ## Follow-ups from the data dictionary work (PR #20)
 
