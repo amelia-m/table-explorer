@@ -922,6 +922,51 @@ test_that("is_lookup_table re-checks a table whose content changed", {
   expect_true(is_lookup_table("statuses_x", a))
 })
 
+# ── Shared columns ───────────────────────────────────────────
+
+test_that("detect_shared_columns finds a shared attribute neither side keys", {
+  tables <- list(
+    toxicology = data.frame(
+      victim_substance_id = 1:6,
+      incident_year = c(2023, 2024, 2024, 2025, 2025, 2025)
+    ),
+    document = data.frame(
+      document_id = 1:5,
+      incident_year = c(2024, 2024, 2025, 2025, 2023)
+    )
+  )
+  out <- detect_shared_columns(tables)
+  expect_length(out, 1)
+  expect_equal(out[[1]]$column, "incident_year")
+  expect_equal(out[[1]]$overlap, 1)
+  expect_true(out[[1]]$contained)
+})
+
+test_that("detect_shared_columns leaves foreign keys to detect_fks", {
+  # client_id is unique in clients, so this pair is an FK question
+  tables <- list(
+    visits = data.frame(visit_id = 1:4, client_id = c(1, 1, 2, 3)),
+    clients = data.frame(client_id = 1:3, name = letters[1:3])
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
+
+test_that("detect_shared_columns ignores flags and tiny domains", {
+  tables <- list(
+    a = data.frame(id = 1:6, is_active = rep(c(TRUE, FALSE), 3)),
+    b = data.frame(id = 1:6, is_active = rep(c(TRUE, FALSE), 3))
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
+
+test_that("detect_shared_columns needs the values to actually overlap", {
+  tables <- list(
+    a = data.frame(k = 1:6, year = c(2001, 2002, 2003, 2004, 2005, 2006)),
+    b = data.frame(k = 1:6, year = c(2011, 2012, 2013, 2014, 2015, 2016))
+  )
+  expect_length(detect_shared_columns(tables), 0)
+})
+
 test_that("score_candidate reports overlap and row counts for the table", {
   flags <- list(
     naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
@@ -946,4 +991,50 @@ test_that("score_candidate says when there were no rows to compare", {
   expect_true(any(grepl("no rows to compare", res$reasons)))
   expect_equal(res$n_from, 0L)
   expect_true(is.na(res$overlap))
+})
+
+# ── Precision rules ──────────────────────────────────────────
+
+test_that("a date-stamped table name still matches its key column", {
+  # incident_6_30_26 reads as incident, so incident_id is exact FK naming
+  # rather than a loose name similarity that gets demoted as ambiguous
+  expect_equal(table_entity("incident_6_30_26"), "incident")
+  expect_equal(table_entity("visits_2024"), "visit")
+  expect_equal(table_entity("claims_20240630"), "claim")
+  expect_equal(table_entity("orders_v2"), "order")
+  expect_equal(table_entity("people_final"), "person")
+  # A name that is only a stamp keeps its own text rather than emptying
+  expect_true(nzchar(table_entity("2024")))
+  # Digits that carry meaning are left alone
+  expect_equal(table_entity("icd10"), "icd10")
+})
+
+test_that("identical generic key names are not evidence of a link", {
+  flags <- list(
+    naming = TRUE, value_overlap = FALSE, cardinality = FALSE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  df <- data.frame(record_id = c(1, 2, 3))
+  # record_id is this extract's house surrogate key: every table has one
+  res <- score_candidate("tbl_a", "record_id", df, "tbl_b", "record_id", df, flags)
+  expect_null(res)
+  # An entity-named key still counts
+  df2 <- data.frame(client_id = c(1, 2, 3))
+  res2 <- score_candidate("tbl_a", "client_id", df2, "tbl_b", "client_id", df2, flags)
+  expect_true("name_identical" %in% names(res2$signals))
+})
+
+test_that("a name-only candidate with no rows to compare cannot reach medium", {
+  flags <- list(
+    naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  empty <- data.frame(client_id = integer(0))
+  res <- score_candidate("tbl_a", "client_id", empty, "tbl_b", "client_id", empty, flags)
+  expect_equal(res$confidence, "low")
+  expect_lte(res$score, 0.54)
+  # Survival check: the same pair with rows and matching values is not capped
+  full <- data.frame(client_id = c(1, 2, 3))
+  res2 <- score_candidate("tbl_a", "client_id", full, "tbl_b", "client_id", full, flags)
+  expect_true(res2$confidence %in% c("medium", "high"))
 })

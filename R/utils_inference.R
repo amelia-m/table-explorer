@@ -115,6 +115,24 @@ table_prefix_re <- paste0(
   "^(tbl|tlk|tlu|tb|lkp|lk|lu|lookup|ref|dim|fact|fct|stg|raw|mst|master)_"
 )
 table_suffix_re <- "_(lookup|lkp|lu|ref|dim|tbl|table|codes|types)$"
+# Extract and snapshot suffixes: incident_6_30_26, visits_2024,
+# claims_20240630, orders_v2, people_final, data_bak. Dropped before a
+# table name is compared with a column name, or incident_id never
+# matches incident_6_30_26 and the link is demoted as ambiguous.
+table_stamp_re <- paste0(
+  "(",
+  "_[0-9]{1,2}_[0-9]{1,2}_[0-9]{2,4}",    # 6_30_26
+  "|_[0-9]{4}[-_]?[0-9]{2}[-_]?[0-9]{2}", # 20240630, 2024_06_30
+  "|_(19|20)[0-9]{2}",                    # _2024
+  "|_v[0-9]+",                            # _v2
+  "|_(final|draft|copy|bak|backup|old|new|tmp|temp|snapshot)",
+  ")+$"
+)
+
+strip_table_stamp <- function(tname_clean) {
+  out <- sub(table_stamp_re, "", tname_clean)
+  if (nzchar(out)) out else tname_clean
+}
 lookup_name_re <- paste0(
   "^(tlk|tlu|lkp|lk|lu|lookup|ref|code|cd)_|",
   "_(lookup|lkp|lu|ref|codes|types)$"
@@ -126,6 +144,19 @@ key_suffix_re <- paste0(
 key_prefix_re <- "^(id|fk|key)_"
 # Target-column names that identify a row on their own
 generic_key_names <- c("id", "pk", "key", "code", "uuid", "guid")
+
+# House-style surrogate keys: every table has one and none of them point
+# at each other, so two of the same name is not evidence of a link.
+generic_key_full <- c(
+  generic_key_names,
+  "record_id", "row_id", "rowid", "record_key", "record_number",
+  "seq", "seq_id", "sequence", "sk", "surrogate_key", "uid", "oid",
+  "objectid", "object_id", "autonumber", "counter"
+)
+
+is_generic_key <- function(col_clean) {
+  isTRUE(col_clean %in% generic_key_full)
+}
 
 strip_table_prefix <- function(tname_clean) {
   stripped <- sub(schema_prefix_re, "", tname_clean)
@@ -172,7 +203,7 @@ singularize <- function(name) {
 # The entity a table is named for: tlk_providers -> provider,
 # dbo_customer_lookup -> customer, tlk_city_id -> city
 table_entity <- function(tname_clean) {
-  x <- strip_table_prefix(tname_clean)
+  x <- strip_table_stamp(strip_table_prefix(tname_clean))
   y <- sub(table_suffix_re, "", x)
   if (nzchar(y)) x <- y
   y <- sub("_(id|key|code|cd)$", "", x)
@@ -511,7 +542,12 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
     # Identical names are reported as such: "name similarity 1.00" reads as
     # a near miss, and the two cases are judged differently by a reviewer.
     # Same weight as name_sim, so scores do not move.
-    if (identical(c1, c2)) {
+    # A house-style surrogate key on both sides is not evidence, and
+    # blocking only the identical-name signal would hand the same pair to
+    # the similarity branch at 1.00, which says the same thing louder
+    if (identical(c1, c2) && is_generic_key(c1)) {
+      NULL
+    } else if (identical(c1, c2)) {
       list(
         signal = "name_identical",
         value = 1.0,
@@ -690,6 +726,18 @@ score_candidate <- function(
   } else {
     "low"
   }
+  # Nothing to compare: with no rows on one side the content signals never
+  # ran, so a name on its own is carrying the whole score. Medium implies
+  # corroboration that does not exist here.
+  if (
+    (n1 == 0 || n2 == 0) &&
+      !any(names(signals) %in% c("naming_exact", "naming_role", "naming_self")) &&
+      confidence != "low"
+  ) {
+    confidence <- "low"
+    score <- min(score, 0.54)
+  }
+
   # Values veto: with data on both sides, a link whose values mostly aren't in
   # the parent can't rest on format or loose name likeness alone
   if (
@@ -1473,4 +1521,88 @@ sort_rels <- function(rels) {
     -vapply(rels, function(r) r$score %||% 0, numeric(1))
   )
   rels[order_idx]
+}
+
+# ── Shared columns (not foreign keys) ────────────────────────
+# A column that appears in two tables under the same name, holds
+# overlapping values, and is a key in neither. incident_year to
+# incident_year is the example: useful for joining, not a reference, and
+# detect_fks() never sees it because targets are drawn from unique
+# columns only. Reported as its own class so it is visible without
+# being mislabelled as an FK.
+
+detect_shared_columns <- function(
+  tables,
+  min_overlap = 0.5,
+  min_distinct = 3L,
+  max_pairs = 20000L
+) {
+  tnames <- names(tables)
+  if (length(tnames) < 2) {
+    return(list())
+  }
+  unique_cols <- lapply(tables, function(df) {
+    n <- nrow(df)
+    if (n == 0) {
+      return(character(0))
+    }
+    names(df)[vapply(
+      names(df),
+      function(c) !anyNA(df[[c]]) && length(unique(df[[c]])) == n,
+      logical(1)
+    )]
+  })
+  names(unique_cols) <- tnames
+
+  out <- list()
+  pairs <- 0L
+  for (i in seq_len(length(tnames) - 1L)) {
+    for (j in seq.int(i + 1L, length(tnames))) {
+      t1 <- tnames[[i]]
+      t2 <- tnames[[j]]
+      df1 <- tables[[t1]]
+      df2 <- tables[[t2]]
+      if (nrow(df1) == 0 || nrow(df2) == 0) {
+        next
+      }
+      common <- intersect(names(df1), names(df2))
+      for (cn in common) {
+        if (pairs >= max_pairs) {
+          return(out)
+        }
+        pairs <- pairs + 1L
+        # A key on either side is a foreign key question, not this one
+        if (cn %in% unique_cols[[t1]] || cn %in% unique_cols[[t2]]) {
+          next
+        }
+        v1 <- df1[[cn]][!is.na(df1[[cn]])]
+        v2 <- df2[[cn]][!is.na(df2[[cn]])]
+        u1 <- unique(v1)
+        u2 <- unique(v2)
+        # Two-valued flags shared by every table say nothing
+        if (length(u1) < min_distinct || length(u2) < min_distinct) {
+          next
+        }
+        shared <- intersect(u1, u2)
+        if (length(shared) == 0) {
+          next
+        }
+        ov <- length(shared) / min(length(u1), length(u2))
+        if (ov < min_overlap) {
+          next
+        }
+        out[[length(out) + 1]] <- list(
+          from_table = t1,
+          to_table = t2,
+          column = cn,
+          n_shared = length(shared),
+          n_distinct_from = length(u1),
+          n_distinct_to = length(u2),
+          overlap = ov,
+          contained = length(shared) == min(length(u1), length(u2))
+        )
+      }
+    }
+  }
+  out
 }

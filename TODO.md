@@ -109,6 +109,28 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
 - [ ] (Maybe later) ERD, large schemas: **open focused**. With more than 40
       tables, start focused on the most-connected table with 2 hops instead
       of drawing everything.
+- [ ] **Shared columns (branch `feat/shared-columns-ui`), deferred decisions.**
+      The section on the Relationships tab shows `detect_shared_columns()`
+      results and nothing else consumes them yet.
+      (a) Should shared columns reach the ERD, the exports and the data
+      dictionary, and if so how are they drawn so nobody reads them as
+      references? The brief called this a later decision, so the UI says in
+      words that they are not included.
+      (b) A scan with scope "new" (the incremental triage path) rescans every
+      table pair for shared columns rather than only the pairs the new tables
+      bring, because `detect_shared_columns()` has no focus argument and this
+      branch must not touch `R/utils_inference.R`. Measured at 1.6 s for a
+      synthetic 52-table, 1.7M-row schema, so it was left alone. Add a
+      `focus_tables` argument there, or leave it?
+      (c) `detect_shared_columns()` stops at its 20,000 column-pair cap and
+      returns what it has with no signal that it stopped, so a very wide
+      schema would silently show a partial list. `detect_fks()` sets a
+      `truncated` attribute for exactly this and the app warns on it. Worth
+      the same there? Question for whoever owns `R/utils_inference.R`.
+      (d) Minimum confidence is mapped to the overlap threshold (low 0.3,
+      medium 0.5, high 0.8) because a shared column has no score of its own.
+      Invented mapping, not measured against anything. Is it the behaviour
+      Amelia wants, or should the section have its own threshold control?
 
 ## Follow-ups from the data dictionary work (PR #20)
 
