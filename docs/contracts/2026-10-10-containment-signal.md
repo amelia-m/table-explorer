@@ -58,19 +58,36 @@ otherwise). Users are reviewers on the Relationships tab and the ERD.
   It parses every R and JS file, runs the suite with counts, runs the synthetic
   scorer, and exits non-zero on any failure.
 - Public measurement: `dev/fixtures/public/fetch.R` then
-  `dev/fixtures/public/score_public.R chinook faers`. Chinook and FAERS are
-  already in the user cache. The harness reads whole tables: do not reintroduce
-  a row cap, which previously produced recall figures that were artefacts.
+  `dev/fixtures/public/score_public.R chinook faers lahman`. Chinook and FAERS
+  are already in the user cache; Lahman is read from the CRAN `Lahman` package,
+  which must be installed into the user library, not the project renv library,
+  or a worktree cannot see it: put `install.packages("Lahman")` in a script
+  file and run the file with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` set. The
+  harness reads whole tables: do not reintroduce a row cap, which previously
+  produced recall figures that were artefacts.
 - Measured baselines on the base branch, to beat: Chinook recall 81.8 percent,
   precision 31.0 percent; FAERS recall 75.0 percent, precision 50.0 percent;
-  synthetic scorer 157 of 157 real at medium+, 0 false.
-- On `main`, for reference: Chinook 90.9 / 14.7, FAERS 100.0 / 12.3.
+  Lahman recall 95.2 percent, precision 90.9 percent; synthetic scorer 157 of
+  157 real at medium+, 0 false.
+- On `main`, for reference: Chinook 90.9 / 14.7, FAERS 100.0 / 12.3, Lahman
+  71.4 / 0.9.
+- Lahman is the third dataset because it is the one the naming rules already
+  handle well: 31 tables, 21 single-column links, nearly all of them
+  `playerid` into `people.playerid`. It is there to catch a regression, not to
+  be improved. Its ground truth is written by hand from the package
+  documentation (`dev/fixtures/public/truth/lahman.txt`), and links into
+  `Teams` are composite with only the `teamID` part listed, so its precision
+  figure inherits that limitation.
 
 ## Constraints
 
 - The synthetic scorer must still report `real: 157 of 157` with `false: 0`.
 - Chinook and FAERS recall must both rise above the baselines above, and
   neither precision may fall below the `main` figure for that dataset.
+- Lahman is a regression guard: its recall must not fall below 95.2 percent
+  and its precision must not fall below 90.9 percent. A new signal that
+  recovers unconventional links by admitting junk shows up here first,
+  because Lahman has 31 tables sharing a handful of column names.
 - The signal must not require a key-shaped column name. That is the point.
 - Containment is computed from the profiles already built. Do not add a second
   pass over the data, and do not raise the sampling caps.
@@ -122,9 +139,10 @@ otherwise). Users are reviewers on the Relationships tab and the ERD.
 
 1. `dev/check.R` prints ALL CHECKS PASSED, with the scorer line showing
    `real: 157 of 157` and `false: 0`.
-2. `score_public.R chinook faers` shows Chinook recall above 81.8 percent and
-   FAERS recall above 75.0 percent, with precision at or above 14.7 and 12.3
-   respectively.
+2. `score_public.R chinook faers lahman` shows Chinook recall above 81.8
+   percent and FAERS recall above 75.0 percent, with precision at or above
+   14.7 and 12.3 respectively, and Lahman at or above 95.2 recall and 90.9
+   precision.
 3. `customer.supportrepid -> employee.employeeid` appears in the Chinook run.
 4. `ther24q1.dsg_drug_seq -> drug24q1.drug_seq` and
    `indi24q1.indi_drug_seq -> drug24q1.drug_seq` appear in the FAERS run.
