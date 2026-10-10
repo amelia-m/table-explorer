@@ -202,7 +202,9 @@ test_that("score_candidate returns NULL with no signals triggered", {
 })
 
 test_that("score_candidate detects high value overlap", {
-  ids <- c(1, 2, 3, 4, 5)
+  # Scattered ids, not 1..5: a contiguous run is a domain any small number
+  # lands in, and overlap on one is discounted as chance
+  ids <- c(104, 2071, 3318, 4290, 5307)
   df1 <- data.frame(cust_ref = ids)
   df2 <- data.frame(pk = ids)
   flags <- list(
@@ -436,8 +438,12 @@ test_that("near-identical column names still report as similarity", {
 })
 
 test_that("splitting out name_identical leaves the score and the label alone", {
-  df1 <- data.frame(provider_id = c(1, 2, 3))
-  df2 <- data.frame(provider_id = c(1, 2, 3))
+  # Fifteen scattered ids, so the value signals are still evidence: three
+  # values out of a contiguous 1..3 run is both too small a set for
+  # cardinality_match and too dense an overlap to count
+  ids <- (1:15) * 100
+  df1 <- data.frame(provider_id = ids)
+  df2 <- data.frame(provider_id = ids)
   flags <- list(
     naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
     format = FALSE, distribution = FALSE, null_pattern = FALSE
@@ -861,9 +867,12 @@ test_that("values that fit several lookups with no name to go on are low", {
 })
 
 test_that("a content-only match to a single parent is left alone", {
+  # Scattered keys, so the overlap is evidence rather than the free fit any
+  # small number gets inside a contiguous 1..5 run
+  keys <- c(104, 2071, 3318, 4290, 5307)
   tbls <- list(
-    parent = data.frame(pk = 1:5, label = letters[1:5]),
-    child = data.frame(row = 1:20, cust_ref = rep(1:5, 4))
+    parent = data.frame(pk = keys, label = letters[1:5]),
+    child = data.frame(row = 1:20, cust_ref = rep(keys, 4))
   )
   rels <- detect_fks(tbls, "both", "medium")
   r <- Filter(function(r) r$from_col == "cust_ref", rels)
@@ -1037,4 +1046,67 @@ test_that("a name-only candidate with no rows to compare cannot reach medium", {
   full <- data.frame(client_id = c(1, 2, 3))
   res2 <- score_candidate("tbl_a", "client_id", full, "tbl_b", "client_id", full, flags)
   expect_true(res2$confidence %in% c("medium", "high"))
+})
+
+test_that("overlap inside a dense integer run is not evidence", {
+  flags <- list(
+    naming = FALSE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  # A weapon count of 0..12 sits inside any contiguous 1..N id column, so
+  # 92% of its values are "found" without anything being tested
+  counts <- data.frame(number_of_weapons = rep(0:12, 5))
+  dense <- data.frame(height_inches = 1:60)
+  expect_null(score_candidate(
+    "incident", "number_of_weapons", counts,
+    "victim", "height_inches", dense, flags
+  ))
+  # Survival check: the same overlap over a sparse domain is still evidence,
+  # because landing on 13 scattered values is not something a count does by
+  # accident
+  spread <- (0:12) * 500
+  sparse_child <- data.frame(number_of_weapons = rep(spread, 5))
+  sparse_parent <- data.frame(ticket_no = spread)
+  res <- score_candidate(
+    "incident", "number_of_weapons", sparse_child,
+    "ticket", "ticket_no", sparse_parent, flags
+  )
+  expect_true("overlap_high" %in% names(res$signals))
+})
+
+test_that("identical value sets on a small domain are not evidence", {
+  flags <- list(
+    naming = FALSE, value_overlap = FALSE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  # Two code columns over 1..8 both end up holding all eight values: the
+  # match is the expected outcome, not a coincidence worth 0.95
+  severity <- data.frame(severity = rep(1:8, 10))
+  priority <- data.frame(priority = rep(1:8, 4))
+  expect_null(score_candidate(
+    "incident", "severity", severity, "task", "priority", priority, flags
+  ))
+  # Survival check: past the floor an exact set match still counts
+  dx <- sprintf("D%03d", 1:14)
+  res <- score_candidate(
+    "claim", "dx", data.frame(dx = rep(dx, 3)),
+    "tlk_dx", "dx_code", data.frame(dx_code = rep(dx, 2)), flags
+  )
+  expect_true("cardinality_match" %in% names(res$signals))
+})
+
+test_that("a genuine lookup link with six distinct values is still found", {
+  # Survival check for both value rules at once: a real FK into a small
+  # lookup has no value evidence left once chance overlap and tiny
+  # identical sets are discounted, and has to reach medium+ on its name
+  tbls <- list(
+    tlk_statuses = data.frame(id = 1:6, label = paste("status", 1:6)),
+    tbl_visit = data.frame(visit_id = 1:40, status_id = rep(1:6, length.out = 40))
+  )
+  rels <- detect_fks(tbls, "both", "medium")
+  link <- Filter(function(r) r$from_col == "status_id", rels)
+  expect_length(link, 1)
+  expect_equal(link[[1]]$to_table, "tlk_statuses")
+  expect_equal(link[[1]]$to_col, "id")
+  expect_true("naming_exact" %in% names(link[[1]]$signals))
 })

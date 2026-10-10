@@ -14,6 +14,14 @@ name_sim_high <- 0.85
 name_sim_med <- 0.72
 dist_sim_high <- 0.90
 dist_sim_med <- 0.75
+# Identical value sets are evidence only when the sets are large enough
+# that holding the same one is a coincidence. Hand-maintained code domains
+# run to about a dozen entries (the 52-table extract's lookups hold eight;
+# months, weekdays and Likert scales all sit below twelve), and over any
+# realistic row count two columns drawn from such a domain both end up
+# holding the whole domain, so the match is the expected outcome rather
+# than a finding. Past a dozen distinct values it stops being free.
+cardinality_min_distinct <- 12L
 
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
@@ -385,6 +393,29 @@ format_fingerprint <- function(col, sample_size = 200) {
 # Everything the content signals need from one column, computed once per
 # column rather than once per candidate pair.
 
+# The whole-number range a numeric column covers and how densely it fills
+# it: 1..60 with no gaps has density 1, thirteen ids scattered over 14,000
+# has density 0.001. NULL for anything that is not whole numbers, strings
+# and measurements included: those have no positions to count, so there is
+# no chance overlap to subtract from them.
+integer_domain <- function(v) {
+  if (!is.numeric(v)) {
+    return(NULL)
+  }
+  x <- v[!is.na(v)]
+  x <- x[is.finite(x)]
+  if (length(x) < 2 || any(x != floor(x))) {
+    return(NULL)
+  }
+  lo <- min(x)
+  hi <- max(x)
+  positions <- hi - lo + 1
+  if (positions <= 1) {
+    return(NULL)
+  }
+  list(lo = lo, hi = hi, density = min(length(unique(x)) / positions, 1))
+}
+
 column_profile <- function(v, sample_cap = 5000) {
   vals <- as.character(v[!is.na(v)])
   uniq <- unique(vals)
@@ -402,7 +433,8 @@ column_profile <- function(v, sample_cap = 5000) {
     uniq = uniq,
     uniq_sample = uniq_sample,
     counts = setNames(as.numeric(counts), names(counts)),
-    fingerprint = format_fingerprint(v)
+    fingerprint = format_fingerprint(v),
+    int_domain = integer_domain(v)
   )
 }
 
@@ -420,6 +452,30 @@ value_overlap <- function(v1, v2, sample_cap = 5000) {
     column_profile(v1, sample_cap),
     column_profile(v2, sample_cap)
   )
+}
+
+# How much of an overlap a dense parent domain hands out for free.
+#
+# A count column holding 0..12 sits inside any contiguous 1..N id column,
+# so raw overlap reports "nearly every value found" when nothing was
+# really tested: incident.number_of_suspects scored 94% against
+# victim.height_inches on exactly that. The parent's density is the chance
+# that an arbitrary whole number in its range is present, so it is also
+# the overlap a child drawn from that range gets for nothing. Only child
+# values inside the parent's range can be found by chance; the rest miss
+# either way, so they are not counted here.
+#
+# Returns 0 when the parent has no integer domain (a string column, a
+# measurement, a single repeated value), which leaves those pairs scoring
+# exactly as they did before.
+overlap_expected_by_chance <- function(p_child, p_parent) {
+  dom <- p_parent$int_domain
+  if (is.null(dom) || length(p_child$uniq_sample) == 0) {
+    return(0.0)
+  }
+  vals <- suppressWarnings(as.numeric(p_child$uniq_sample))
+  inside <- sum(!is.na(vals) & vals >= dom$lo & vals <= dom$hi)
+  dom$density * inside / length(p_child$uniq_sample)
 }
 
 # ── Distribution similarity (cosine) ────────────────────────
@@ -636,30 +692,51 @@ score_candidate <- function(
     }
   }
 
-  # 3. Value overlap
+  # 3. Value overlap, less the part a dense parent domain gives away for
+  # free. The raw figure is still what gets reported and what the values
+  # veto below reads: a reviewer wants to know how much of the child was
+  # found, and the discount only decides whether that counts as evidence.
   ov <- NA_real_
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
     ov <- overlap_from_profiles(p1, p2)
-    if (ov >= overlap_high) {
+    ov_chance <- overlap_expected_by_chance(p1, p2)
+    ov_evidence <- max(0, ov - ov_chance)
+    chance_note <- if (ov_chance >= 0.01) {
+      sprintf(", %.0f%% of it expected by chance", ov_chance * 100)
+    } else {
+      ""
+    }
+    if (ov_evidence >= overlap_high) {
       signals[["overlap_high"]] <- ov
-      reasons <- c(reasons, sprintf("value overlap %.0f%%", ov * 100))
-    } else if (ov >= overlap_medium) {
+      reasons <- c(
+        reasons,
+        sprintf("value overlap %.0f%%%s", ov * 100, chance_note)
+      )
+    } else if (ov_evidence >= overlap_medium) {
       signals[["overlap_medium"]] <- ov
-      reasons <- c(reasons, sprintf("partial overlap %.0f%%", ov * 100))
+      reasons <- c(
+        reasons,
+        sprintf("partial overlap %.0f%%%s", ov * 100, chance_note)
+      )
     }
   }
 
-  # 4. Exact cardinality match
+  # 4. Exact cardinality match, above the floor where it says something.
+  # Two tiny code domains holding the same handful of values is the
+  # expected outcome, not a coincidence (cardinality_min_distinct).
   if (isTRUE(enable_flags[["cardinality"]]) && n1 > 0 && n2 > 0) {
     u1 <- p1$uniq
     u2 <- p2$uniq
     if (
-      length(u1) > 0 &&
+      length(u1) >= cardinality_min_distinct &&
         length(u1) == length(u2) &&
         all(u1 %in% u2)
     ) {
       signals[["cardinality_match"]] <- 1.0
-      reasons <- c(reasons, "identical value sets")
+      reasons <- c(
+        reasons,
+        sprintf("identical value sets (%d values)", length(u1))
+      )
     }
   }
 
@@ -1120,7 +1197,11 @@ detect_fks <- function(
       confidence = res$confidence,
       score = res$score,
       reasons = res$reasons,
-      signals = res$signals
+      signals = res$signals,
+      # Raw overlap, for resolve_fk_parents' ambiguity test: whether the
+      # values fit a table is a different question from whether the fit is
+      # evidence, and the chance discount only answers the second
+      overlap = res$overlap
     )
   }
 
@@ -1478,7 +1559,15 @@ resolve_fk_parents <- function(rels) {
       }
       idx <- named
     } else {
-      fits <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_value_fit_signals), logical(1))]
+      # A column whose values sit inside eight lookups' domains fits all
+      # eight, whether or not that fit counted as evidence: the chance
+      # discount in score_candidate must not switch this guard off, so the
+      # raw overlap is read here alongside the signals
+      value_fit <- function(r) {
+        any(sig_names(r) %in% fk_value_fit_signals) ||
+          isTRUE((r$overlap %||% NA_real_) >= overlap_high)
+      }
+      fits <- idx[vapply(rels[idx], value_fit, logical(1))]
       if (length(fits) >= 2) {
         # 2. Values fit several tables: only a clearly closer name can choose
         close <- fits[vapply(rels[fits], function(r) any(c("name_identical", "name_sim") %in% sig_names(r)), logical(1))]
