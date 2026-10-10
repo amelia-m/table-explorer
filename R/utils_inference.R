@@ -115,6 +115,24 @@ table_prefix_re <- paste0(
   "^(tbl|tlk|tlu|tb|lkp|lk|lu|lookup|ref|dim|fact|fct|stg|raw|mst|master)_"
 )
 table_suffix_re <- "_(lookup|lkp|lu|ref|dim|tbl|table|codes|types)$"
+# Extract and snapshot suffixes: incident_6_30_26, visits_2024,
+# claims_20240630, orders_v2, people_final, data_bak. Dropped before a
+# table name is compared with a column name, or incident_id never
+# matches incident_6_30_26 and the link is demoted as ambiguous.
+table_stamp_re <- paste0(
+  "(",
+  "_[0-9]{1,2}_[0-9]{1,2}_[0-9]{2,4}",    # 6_30_26
+  "|_[0-9]{4}[-_]?[0-9]{2}[-_]?[0-9]{2}", # 20240630, 2024_06_30
+  "|_(19|20)[0-9]{2}",                    # _2024
+  "|_v[0-9]+",                            # _v2
+  "|_(final|draft|copy|bak|backup|old|new|tmp|temp|snapshot)",
+  ")+$"
+)
+
+strip_table_stamp <- function(tname_clean) {
+  out <- sub(table_stamp_re, "", tname_clean)
+  if (nzchar(out)) out else tname_clean
+}
 lookup_name_re <- paste0(
   "^(tlk|tlu|lkp|lk|lu|lookup|ref|code|cd)_|",
   "_(lookup|lkp|lu|ref|codes|types)$"
@@ -126,6 +144,19 @@ key_suffix_re <- paste0(
 key_prefix_re <- "^(id|fk|key)_"
 # Target-column names that identify a row on their own
 generic_key_names <- c("id", "pk", "key", "code", "uuid", "guid")
+
+# House-style surrogate keys: every table has one and none of them point
+# at each other, so two of the same name is not evidence of a link.
+generic_key_full <- c(
+  generic_key_names,
+  "record_id", "row_id", "rowid", "record_key", "record_number",
+  "seq", "seq_id", "sequence", "sk", "surrogate_key", "uid", "oid",
+  "objectid", "object_id", "autonumber", "counter"
+)
+
+is_generic_key <- function(col_clean) {
+  isTRUE(col_clean %in% generic_key_full)
+}
 
 strip_table_prefix <- function(tname_clean) {
   stripped <- sub(schema_prefix_re, "", tname_clean)
@@ -172,7 +203,7 @@ singularize <- function(name) {
 # The entity a table is named for: tlk_providers -> provider,
 # dbo_customer_lookup -> customer, tlk_city_id -> city
 table_entity <- function(tname_clean) {
-  x <- strip_table_prefix(tname_clean)
+  x <- strip_table_stamp(strip_table_prefix(tname_clean))
   y <- sub(table_suffix_re, "", x)
   if (nzchar(y)) x <- y
   y <- sub("_(id|key|code|cd)$", "", x)
@@ -511,7 +542,12 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
     # Identical names are reported as such: "name similarity 1.00" reads as
     # a near miss, and the two cases are judged differently by a reviewer.
     # Same weight as name_sim, so scores do not move.
-    if (identical(c1, c2)) {
+    # A house-style surrogate key on both sides is not evidence, and
+    # blocking only the identical-name signal would hand the same pair to
+    # the similarity branch at 1.00, which says the same thing louder
+    if (identical(c1, c2) && is_generic_key(c1)) {
+      NULL
+    } else if (identical(c1, c2)) {
       list(
         signal = "name_identical",
         value = 1.0,
@@ -690,6 +726,18 @@ score_candidate <- function(
   } else {
     "low"
   }
+  # Nothing to compare: with no rows on one side the content signals never
+  # ran, so a name on its own is carrying the whole score. Medium implies
+  # corroboration that does not exist here.
+  if (
+    (n1 == 0 || n2 == 0) &&
+      !any(names(signals) %in% c("naming_exact", "naming_role", "naming_self")) &&
+      confidence != "low"
+  ) {
+    confidence <- "low"
+    score <- min(score, 0.54)
+  }
+
   # Values veto: with data on both sides, a link whose values mostly aren't in
   # the parent can't rest on format or loose name likeness alone
   if (
