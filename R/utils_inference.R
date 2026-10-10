@@ -290,6 +290,43 @@ is_key_name <- function(col_clean) {
     grepl("^(id|fk)_.", col_clean)
 }
 
+# Words that end in "id" and are not keys. Without this list, a rule that
+# reads any trailing "id" as a key turns is_valid, amount_paid, covid_test
+# and rapid_review into key candidates, which is noise in exactly the
+# real extracts this app is pointed at.
+not_key_words <- c(
+  "valid", "invalid", "paid", "unpaid", "prepaid", "void", "avoid",
+  "said", "aid", "acid", "fluid", "liquid", "rapid", "solid", "humid",
+  "hybrid", "grid", "candid", "timid", "vivid", "lucid", "rigid", "arid",
+  "covid", "medicaid", "mid", "kid", "lid", "bid", "did", "hid", "rid",
+  "squid", "druid", "cupid", "morbid", "placid", "stupid", "torrid"
+)
+
+# Weaker than is_key_name: a name ending in "id" that is not one of those
+# words. It earns no naming weight and no score of its own. It only buys
+# the column a hearing: it is not dropped for low cardinality, and it may
+# take the one-to-one path. primaryid, caseid and supportrepid are the
+# cases that matter, none of which the strict test recognises.
+# Word stems that begin with "id" and are not keys. ideation matters
+# here: a violent-death or behavioural-health extract has columns like
+# suicidal_ideation, and identified_gender is just as plausible.
+not_key_prefixes <- "^(idea|ident|ideol|idio|idl|idol|idyl)"
+
+is_possible_key_name <- function(col_clean) {
+  # Leading id counts too (idnum, id2, idcode), but not a word that
+  # merely starts with those letters
+  head_id <- grepl("^id", col_clean) & !grepl(not_key_prefixes, col_clean)
+  tail_id <- grepl("id$", col_clean) | head_id
+  word <- sub("^.*_", "", col_clean)
+  # A bare "id" names no entity, and every lookup table has one, so
+  # treating it as a key makes each of them a parent for all the others.
+  # is_key_name() excludes it for the same reason.
+  tail_id &
+    !(col_clean %in% generic_key_full) &
+    !(col_clean %in% not_key_words) &
+    !(word %in% not_key_words)
+}
+
 # Stricter than is_pk_name: the table is named for the key's entity
 # (customers owns customer_id, order_items does not own order_id).
 owns_key <- function(col_clean, tname_clean) {
@@ -969,7 +1006,8 @@ is_fk_candidate <- function(col, col_name) {
   # Boolean / low-cardinality columns are not FKs, unless named like a key
   # (provider_id holding one or two providers is still a foreign key)
   n_unique <- length(unique(na.omit(col)))
-  if (n_unique <= 2 && n > 10 && !is_key_name(clean_name(col_name))) {
+  cn <- clean_name(col_name)
+  if (n_unique <= 2 && n > 10 && !is_key_name(cn) && !is_possible_key_name(cn)) {
     return(FALSE)
   }
 
@@ -1193,8 +1231,11 @@ detect_fks <- function(
     pks <- pk_map[[t]]
     pks_clean <- clean_name(pks)
     tclean <- strip_table_prefix(clean_name(t))
+    # Possible key names count here too: a one-row-per-client table keyed
+    # on primaryid or caseid is the same shape as one keyed on client_id,
+    # and the strict test does not recognise a glued name
     pks[
-      is_key_name(pks_clean) &
+      (is_key_name(pks_clean) | is_possible_key_name(pks_clean)) &
         !vapply(pks_clean, owns_key, logical(1), tname_clean = tclean)
     ]
   })

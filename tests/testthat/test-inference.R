@@ -1166,3 +1166,49 @@ test_that("a wide child column keeps its overlap evidence on a dense parent", {
     score_candidate("child_t", "n", counts, "parent_t", "pid", parent, flags)
   )
 })
+
+test_that("a name ending in id is a possible key, unless it is a word", {
+  # The strict test wants a separator, so glued names never qualified
+  expect_false(is_key_name("primaryid"))
+  expect_true(is_possible_key_name("primaryid"))
+  expect_true(is_possible_key_name("caseid"))
+  expect_true(is_possible_key_name("supportrepid"))
+  # Words that end in id are not keys, plain or suffixed
+  expect_false(is_possible_key_name("valid"))
+  expect_false(is_possible_key_name("covid"))
+  expect_false(is_possible_key_name("medicaid"))
+  expect_false(is_possible_key_name("amount_paid"))
+  expect_false(is_possible_key_name("is_valid"))
+  expect_false(is_possible_key_name("fluid"))
+  # Not a key name at all
+  expect_false(is_possible_key_name("width_cm"))
+})
+
+test_that("a low-cardinality column named like a key is still a candidate", {
+  # Two distinct values over many rows is normally dropped outright
+  col <- rep(c(1, 2), 60)
+  expect_false(is_fk_candidate(col, "status_label"))
+  expect_true(is_fk_candidate(col, "siteid"))
+  expect_true(is_fk_candidate(col, "site_id"))
+})
+
+test_that("a bare id is not a possible key name", {
+  # Every lookup table has one, so treating it as a key made each lookup
+  # a parent for all the others: 7 false links in the fixture
+  expect_false(is_possible_key_name("id"))
+  expect_false(is_possible_key_name("uuid"))
+  expect_false(is_possible_key_name("guid"))
+  expect_true(is_possible_key_name("clientid"))
+})
+
+test_that("a name starting with id is a possible key, unless it is a word", {
+  expect_true(is_possible_key_name("idnum"))
+  expect_true(is_possible_key_name("idcode"))
+  # Words beginning with those letters are not keys. ideation is the one
+  # that matters: behavioural-health extracts carry suicidal_ideation
+  expect_false(is_possible_key_name("ideation"))
+  expect_false(is_possible_key_name("suicidal_ideation"))
+  expect_false(is_possible_key_name("identity"))
+  expect_false(is_possible_key_name("identified_gender"))
+  expect_false(is_possible_key_name("idle"))
+})
