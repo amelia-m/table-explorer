@@ -1,5 +1,92 @@
 # TODO
 
+## Detection measurement on public datasets (2026-10-10)
+
+Harness: `dev/fixtures/public/fetch.R` then
+`dev/fixtures/public/score_public.R chinook faers lahman`. It reads whole
+tables, no row cap. Chinook's ground truth is read from its declared foreign
+key constraints; FAERS and Lahman have none, so theirs are hand-written files
+under `dev/fixtures/public/truth/`.
+
+| dataset | truth links | `main` recall / precision | `feat/possible-key-names` recall / precision |
+|---|---|---|---|
+| chinook | 11 | 90.9 / 14.7 | 81.8 / 31.0 |
+| faers | 4 | 100.0 / 12.3 | 75.0 / 50.0 |
+| lahman | 21 | 71.4 / 0.9 | 95.2 / 90.9 |
+
+Read these with their limits in mind:
+
+- Lahman's ground truth is written from the CRAN package documentation, not
+  read off database constraints. Only single-column links are listed, and
+  links into `Teams` are composite on (yearID, teamID, lgID) with the
+  `teamID` part alone listed, so Lahman precision inherits that.
+- FAERS has no declared constraints either; its truth file is hand-written
+  from the FDA's documented layout.
+- Lahman's one miss on the rules branch is
+  `homegames.parkkey -> parks.parkkey`.
+- Lahman is the easy case: 31 tables but nearly every real link is
+  `playerid` into `people.playerid`, which the naming rules already catch.
+  It earns its place as a regression guard, because a signal that recovers
+  unconventional links by admitting junk shows up there first.
+
+Open items from this work:
+
+- [ ] **Pagila is identified but not measured.** It needs a running Postgres
+      instance (portable binaries, Docker, or the Windows installer), which
+      is the only one of the four datasets that is not a file or a CRAN
+      package. Amelia asked what setting one up involves and the answer was
+      given; no decision was recorded either way. Recommendation was to skip
+      it for now, because Chinook already covers the conventionally named,
+      declared-constraint case. **Decision needed: set up Postgres for
+      Pagila, or drop Pagila from the harness and say so in its README?**
+- [ ] **The Lahman package lives in the user library, not the project renv
+      library.** It was installed with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
+      so that worktrees can see it. A clone on another machine, and CI, will
+      not have it: `score_public.R lahman` prints a SKIP line there rather
+      than failing, so a CI run that silently stops measuring Lahman is
+      possible. Either add Lahman to the renv lockfile, or make the harness
+      exit non-zero when a dataset named on the command line is unavailable.
+- [ ] **`dev/check.R` runs only the synthetic scorer, not the public
+      harness.** The public figures are therefore measured by hand and can
+      drift from the branch they are quoted against. Decide whether
+      `dev/check.R` (and CI) should run Chinook and Lahman, which take about
+      a minute together, or whether the public harness stays a manual step.
+- [ ] **Rule 4 (two-signal floor) from the detection work is still not
+      done**: a single content signal cannot raise a candidate when the
+      child column's distinct count is below a threshold (start at 5); it
+      needs overlap plus cardinality, or a naming signal. It is listed in
+      the 2026-10-09 block above and has not been built.
+- [ ] **`detect_shared_columns()` has no `truncated` attribute**, so a
+      shared-columns list cut short by a cap cannot be told from a complete
+      one where it is shown. Assumed, not verified: the cap is reachable on
+      a wide schema. Checking `attributes()` of the return value on the
+      real extract would settle it.
+- [ ] **The 1:1 relationship path draws from `pk_map` only**, so a pair whose
+      parent is near-unique rather than strictly unique is never labelled
+      one-to-one. Not verified against the real extract; reading the
+      cardinality column for a known near-unique parent would settle it.
+- [ ] **`dev/check.R` needs `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` in a fresh
+      worktree** and does not set it itself, so the first run in a new
+      worktree fails on a missing library rather than saying why. Either set
+      it inside the script or print the reason.
+- [ ] **PR #54 (`feat/detection-rules-scoring`) should not merge as it
+      stands.** It roughly doubles precision on Chinook and FAERS but drops
+      recall, and the lost links share a shape: the child name does not match
+      the parent table, the values are small dense integers, and the parent
+      is a key. That is exactly what the containment signal is meant to
+      recover, so #54's fate waits on the containment work landing and being
+      measured. **Decision needed once containment lands: merge #54, or keep
+      its chance-overlap discount and drop the rest?**
+- [ ] **The detection presets contract is still a draft** at
+      `docs/contracts/2026-10-10-detection-presets-draft.md` with two open
+      assumptions: which presets to offer (proposed Conventional names,
+      Balanced, Unconventional names, Custom), and whether the rules
+      currently hard-coded (the chance discount, the cardinality floor, the
+      possible-key names) become settings in that contract or stay fixed
+      with presets only selecting among existing toggles. Proposed: they
+      become settings, since otherwise the presets cannot differ in the ways
+      that matter.
+
 ## Open items from the 2026-10-09 session
 
 - [ ] **Vendored JavaScript is watched by nothing.** `inst/app/www/vendor/`
