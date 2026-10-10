@@ -31,6 +31,13 @@ parent_key_min_frac <- 0.99
 # than a finding. Past a dozen distinct values it stops being free.
 cardinality_min_distinct <- 12L
 
+# Overlap inside a dense integer run is only a coincidence when the child
+# has few distinct values to place. A column holding 500 distinct values,
+# every one of them present in the parent key, is a reference whatever the
+# parent's density: a count or a code column cannot reach that many
+# distinct values by accident. Above this the discount is not applied.
+overlap_chance_max_distinct <- 25L
+
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
 weight_map <- c(
@@ -479,6 +486,10 @@ value_overlap <- function(v1, v2, sample_cap = 5000) {
 overlap_expected_by_chance <- function(p_child, p_parent) {
   dom <- p_parent$int_domain
   if (is.null(dom) || length(p_child$uniq_sample) == 0) {
+    return(0.0)
+  }
+  # Too many distinct values on the child side for containment to be luck
+  if (length(p_child$uniq) >= overlap_chance_max_distinct) {
     return(0.0)
   }
   vals <- suppressWarnings(as.numeric(p_child$uniq_sample))

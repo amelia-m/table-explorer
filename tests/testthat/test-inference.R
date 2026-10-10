@@ -1145,3 +1145,24 @@ test_that("a genuine lookup link with six distinct values is still found", {
   expect_equal(link[[1]]$to_col, "id")
   expect_true("naming_exact" %in% names(link[[1]]$signals))
 })
+
+test_that("a wide child column keeps its overlap evidence on a dense parent", {
+  # Coincidence needs a small child domain. 500 distinct values all
+  # present in a contiguous 1..1000 key is a reference, not luck, and
+  # discounting it by the parent's density lost the link entirely.
+  flags <- list(
+    naming = FALSE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  parent <- data.frame(pid = 1:1000)
+  child <- data.frame(ref = with_local_seed(1, sample(1:1000, 500)))
+  res <- score_candidate("child_t", "ref", child, "parent_t", "pid", parent, flags)
+  expect_false(is.null(res))
+  expect_true("overlap_high" %in% names(res$signals))
+
+  # The coincidence the discount exists for, same parent, still rejected
+  counts <- data.frame(n = with_local_seed(2, sample(0:12, 400, replace = TRUE)))
+  expect_null(
+    score_candidate("child_t", "n", counts, "parent_t", "pid", parent, flags)
+  )
+})
