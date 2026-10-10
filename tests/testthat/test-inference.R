@@ -461,7 +461,12 @@ test_that("splitting out name_identical leaves the score and the label alone", {
   expect_equal(name_only$detected_by, "name_similarity")
   # Same weight as name_sim, so the noisy-OR is unchanged
   expect_equal(unname(weight_map[["name_identical"]]), unname(weight_map[["name_sim"]]))
-  expect_equal(res$score, 1 - (1 - 0.95) * (1 - 0.90) * (1 - 0.60))
+  # cardinality_match, overlap_high, containment (the ids are a key in
+  # tbl_b and all fifteen are found) and name_identical
+  expect_equal(
+    res$score,
+    round(1 - (1 - 0.95) * (1 - 0.92) * (1 - 0.90) * (1 - 0.60), 3)
+  )
   # And detected_by keeps its old value: the Method chip, its CSS class,
   # the ERD edge colour and the exports all read this string
   expect_equal(res$detected_by, "cardinality")
@@ -1199,6 +1204,192 @@ test_that("a bare id is not a possible key name", {
   expect_false(is_possible_key_name("uuid"))
   expect_false(is_possible_key_name("guid"))
   expect_true(is_possible_key_name("clientid"))
+})
+
+# ── Containment ──────────────────────────────────────────────
+
+# Every containment test needs value_overlap on, because that is the flag
+# containment is gated behind: it is a value-overlap finding, and a new
+# flag of its own would be invisible to the caller in app_server.R, which
+# passes an explicit list.
+containment_flags <- function(...) {
+  utils::modifyList(
+    list(
+      naming = TRUE, value_overlap = TRUE, cardinality = TRUE,
+      format = FALSE, distribution = FALSE, null_pattern = FALSE
+    ),
+    list(...)
+  )
+}
+
+test_that("containment is evidence on a key parent with no name to go on", {
+  # The Chinook shape: customer.supportrepid holds three of employee's
+  # eight ids under a name no convention connects to that table, and is
+  # spread nothing like the key. The chance discount removed the only
+  # signal the pair had, so the link was lost entirely.
+  staff <- data.frame(employeeid = 1:8, surname = paste0("s", 1:8))
+  customers <- data.frame(
+    custid = 1:59,
+    supportrepid = rep(c(3, 4, 5), length.out = 59)
+  )
+  res <- score_candidate(
+    "customers", "supportrepid", customers,
+    "staff", "employeeid", staff, containment_flags()
+  )
+  expect_true("containment" %in% names(res$signals))
+  expect_equal(res$confidence, "high")
+  expect_match(
+    paste(res$reasons, collapse = " | "),
+    "all 3 values present in a key \\(contained\\)"
+  )
+  # Nothing else fired: no naming convention connects the two names, and
+  # three values inside a contiguous 1..8 run is exactly the overlap the
+  # chance discount exists to take away
+  expect_equal(names(res$signals), "containment")
+})
+
+test_that("full containment in a column that is not a key is not evidence", {
+  # incident.number_of_suspects against victim.height_inches: every count
+  # is somewhere among the heights, and a column of heights identifies no
+  # row, so being inside it says nothing
+  flags <- containment_flags(naming = FALSE)
+  counts <- data.frame(number_of_suspects = rep(1:5, 24))
+  heights <- data.frame(height_inches = rep(1:60, 2))
+  expect_null(score_candidate(
+    "incident", "number_of_suspects", counts,
+    "victim", "height_inches", heights, flags
+  ))
+  # Survival check: the same values inside a column of the same shape that
+  # does identify a row are evidence, which is the whole signal
+  key <- data.frame(victim_no = 1:60)
+  res <- score_candidate(
+    "incident", "number_of_suspects", counts,
+    "victim", "victim_no", key, flags
+  )
+  expect_equal(names(res$signals), "containment")
+})
+
+test_that("a near-unique parent counts as a key, and the reason says so", {
+  # A key column in a real extract arrives with a duplicate row or two.
+  # near_pk_map is detect_fks' name for that tolerance, and containment
+  # has to read a parent the same way the scan chose it.
+  parent <- data.frame(client_num = c(1:199, 199L))
+  child <- data.frame(ref = rep((1:30) * 6, 4))
+  res <- score_candidate(
+    "visit", "ref", child,
+    "client", "client_num", parent, containment_flags(naming = FALSE)
+  )
+  expect_true("containment" %in% names(res$signals))
+  expect_match(
+    paste(res$reasons, collapse = " | "),
+    "all 30 values present in a near key \\(contained\\)"
+  )
+  # Survival check the other way: 199 distinct values over 400 rows is not
+  # a key by any tolerance, and the same child gets no containment from it
+  not_key <- data.frame(client_num = rep(1:199, 2))
+  res2 <- score_candidate(
+    "visit", "ref", child,
+    "client", "client_num", not_key, containment_flags(naming = FALSE)
+  )
+  expect_false("containment" %in% names(res2$signals))
+})
+
+test_that("orphan rows leave a weaker nearly contained signal", {
+  # A filtered parent extract, or a child loaded after the parent
+  # snapshot: one value in two hundred has no parent row. Treating that as
+  # "not contained" loses a real link to one missing row.
+  flags <- containment_flags(naming = FALSE)
+  parent <- data.frame(pid = 1:1000)
+  child <- data.frame(ref = c((1:199) * 5, 5000))
+  res <- score_candidate("child_t", "ref", child, "parent_t", "pid", parent, flags)
+  expect_true("containment_near" %in% names(res$signals))
+  expect_false("containment" %in% names(res$signals))
+  expect_match(
+    paste(res$reasons, collapse = " | "),
+    "199 of 200 values present in a key \\(nearly contained\\)"
+  )
+  # Below the tier there is no containment claim of either kind: at 95%
+  # the overlap signals already describe the pair, and calling one in
+  # twenty missing "contained" is a claim the data does not support
+  loose <- data.frame(ref = c((1:190) * 5, (1:10) * 5000))
+  res2 <- score_candidate("child_t", "ref", loose, "parent_t", "pid", parent, flags)
+  expect_false(any(
+    c("containment", "containment_near") %in% names(res2$signals)
+  ))
+})
+
+test_that("a child with two distinct values gives no containment signal", {
+  # Trivially satisfied: a two-code column sits inside almost any key, so
+  # below the minimum it is not evidence of anything. format_match keeps
+  # the pair scorable, so this is about the signal and not about the pair
+  # being thrown out for some other reason.
+  flags <- containment_flags(naming = FALSE, format = TRUE)
+  parent <- data.frame(status_id = 1:40)
+  two <- data.frame(flagcode = rep(c(7, 9), 30))
+  res <- score_candidate(
+    "visit", "flagcode", two, "tlk_status", "status_id", parent, flags
+  )
+  expect_equal(names(res$signals), "format_match")
+  # Survival check at the default minimum of 3: one more distinct value
+  # and the same shape is evidence
+  three <- data.frame(flagcode = rep(c(7, 9, 11), 20))
+  res2 <- score_candidate(
+    "visit", "flagcode", three, "tlk_status", "status_id", parent, flags
+  )
+  expect_true("containment" %in% names(res2$signals))
+})
+
+test_that("the containment minimum is honoured when a caller raises it", {
+  # The minimum is a per-scan parameter, not a constant: how much of a
+  # coincidence a handful of shared values is depends on the schema.
+  flags <- containment_flags(naming = FALSE, format = TRUE)
+  parent <- data.frame(status_id = 1:40)
+  six <- data.frame(flagcode = rep(c(2, 4, 6, 8, 10, 12), 10))
+  res_default <- score_candidate(
+    "visit", "flagcode", six, "tlk_status", "status_id", parent, flags
+  )
+  expect_true("containment" %in% names(res_default$signals))
+  res_strict <- score_candidate(
+    "visit", "flagcode", six, "tlk_status", "status_id", parent, flags,
+    containment_min_distinct = 12L
+  )
+  expect_false("containment" %in% names(res_strict$signals))
+
+  # And through detect_fks, which is how a caller sets it for a scan: the
+  # no-name link from the first test rests on containment alone, so a
+  # raised minimum drops it below medium and out of the results
+  tbls <- list(
+    staff = data.frame(employeeid = 1:8, surname = paste0("s", 1:8)),
+    customers = data.frame(
+      custid = 1:59,
+      supportrepid = rep(c(3, 4, 5), length.out = 59)
+    )
+  )
+  found <- function(rels) {
+    Filter(function(r) r$from_col == "supportrepid", rels)
+  }
+  expect_length(found(detect_fks(tbls, "both", "medium")), 1)
+  expect_length(
+    found(detect_fks(tbls, "both", "medium", containment_min_distinct = 12L)),
+    0
+  )
+})
+
+test_that("a unique child column wholly inside a parent key is one-to-one", {
+  # A shared-primary-key extension table: the child column is itself
+  # unique, and requiring a non-unique child would lose the link. The ERD
+  # reads that uniqueness as a one-to-one.
+  tbls <- list(
+    clients = data.frame(client_id = 1:40, name = paste0("c", 1:40)),
+    client_profile = data.frame(client_id = 1:25, risk = (1:25) * 3)
+  )
+  rels <- detect_fks(tbls, "both", "medium")
+  link <- Filter(function(r) r$from_table == "client_profile", rels)
+  expect_length(link, 1)
+  expect_equal(link[[1]]$to_table, "clients")
+  expect_true("containment" %in% names(link[[1]]$signals))
+  m <- erd_model(tbls, link, list(clients = "client_id"))
+  expect_equal(m$rels[[1]]$child_max, "one")
 })
 
 test_that("a name starting with id is a possible key, unless it is a word", {
