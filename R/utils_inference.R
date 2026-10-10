@@ -14,6 +14,29 @@ name_sim_high <- 0.85
 name_sim_med <- 0.72
 dist_sim_high <- 0.90
 dist_sim_med <- 0.75
+# A foreign key's parent has to identify a row. pk_map holds the columns
+# that are strictly unique and fully populated; in a real extract a key
+# column arrives with a few duplicate or missing rows, so a column at or
+# above this share of distinct, non-missing values counts as the dirty
+# version of the same thing. Below 100 rows the share can only be met by
+# exact uniqueness, which pk_map already covers, so the tolerance is for
+# the larger tables, which is where duplicates actually turn up.
+parent_key_min_frac <- 0.99
+# Identical value sets are evidence only when the sets are large enough
+# that holding the same one is a coincidence. Hand-maintained code domains
+# run to about a dozen entries (the 52-table extract's lookups hold eight;
+# months, weekdays and Likert scales all sit below twelve), and over any
+# realistic row count two columns drawn from such a domain both end up
+# holding the whole domain, so the match is the expected outcome rather
+# than a finding. Past a dozen distinct values it stops being free.
+cardinality_min_distinct <- 12L
+
+# Overlap inside a dense integer run is only a coincidence when the child
+# has few distinct values to place. A column holding 500 distinct values,
+# every one of them present in the parent key, is a reference whatever the
+# parent's density: a count or a code column cannot reach that many
+# distinct values by accident. Above this the discount is not applied.
+overlap_chance_max_distinct <- 25L
 
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
@@ -115,6 +138,24 @@ table_prefix_re <- paste0(
   "^(tbl|tlk|tlu|tb|lkp|lk|lu|lookup|ref|dim|fact|fct|stg|raw|mst|master)_"
 )
 table_suffix_re <- "_(lookup|lkp|lu|ref|dim|tbl|table|codes|types)$"
+# Extract and snapshot suffixes: incident_6_30_26, visits_2024,
+# claims_20240630, orders_v2, people_final, data_bak. Dropped before a
+# table name is compared with a column name, or incident_id never
+# matches incident_6_30_26 and the link is demoted as ambiguous.
+table_stamp_re <- paste0(
+  "(",
+  "_[0-9]{1,2}_[0-9]{1,2}_[0-9]{2,4}",    # 6_30_26
+  "|_[0-9]{4}[-_]?[0-9]{2}[-_]?[0-9]{2}", # 20240630, 2024_06_30
+  "|_(19|20)[0-9]{2}",                    # _2024
+  "|_v[0-9]+",                            # _v2
+  "|_(final|draft|copy|bak|backup|old|new|tmp|temp|snapshot)",
+  ")+$"
+)
+
+strip_table_stamp <- function(tname_clean) {
+  out <- sub(table_stamp_re, "", tname_clean)
+  if (nzchar(out)) out else tname_clean
+}
 lookup_name_re <- paste0(
   "^(tlk|tlu|lkp|lk|lu|lookup|ref|code|cd)_|",
   "_(lookup|lkp|lu|ref|codes|types)$"
@@ -126,6 +167,19 @@ key_suffix_re <- paste0(
 key_prefix_re <- "^(id|fk|key)_"
 # Target-column names that identify a row on their own
 generic_key_names <- c("id", "pk", "key", "code", "uuid", "guid")
+
+# House-style surrogate keys: every table has one and none of them point
+# at each other, so two of the same name is not evidence of a link.
+generic_key_full <- c(
+  generic_key_names,
+  "record_id", "row_id", "rowid", "record_key", "record_number",
+  "seq", "seq_id", "sequence", "sk", "surrogate_key", "uid", "oid",
+  "objectid", "object_id", "autonumber", "counter"
+)
+
+is_generic_key <- function(col_clean) {
+  isTRUE(col_clean %in% generic_key_full)
+}
 
 strip_table_prefix <- function(tname_clean) {
   stripped <- sub(schema_prefix_re, "", tname_clean)
@@ -172,7 +226,7 @@ singularize <- function(name) {
 # The entity a table is named for: tlk_providers -> provider,
 # dbo_customer_lookup -> customer, tlk_city_id -> city
 table_entity <- function(tname_clean) {
-  x <- strip_table_prefix(tname_clean)
+  x <- strip_table_stamp(strip_table_prefix(tname_clean))
   y <- sub(table_suffix_re, "", x)
   if (nzchar(y)) x <- y
   y <- sub("_(id|key|code|cd)$", "", x)
@@ -354,6 +408,29 @@ format_fingerprint <- function(col, sample_size = 200) {
 # Everything the content signals need from one column, computed once per
 # column rather than once per candidate pair.
 
+# The whole-number range a numeric column covers and how densely it fills
+# it: 1..60 with no gaps has density 1, thirteen ids scattered over 14,000
+# has density 0.001. NULL for anything that is not whole numbers, strings
+# and measurements included: those have no positions to count, so there is
+# no chance overlap to subtract from them.
+integer_domain <- function(v) {
+  if (!is.numeric(v)) {
+    return(NULL)
+  }
+  x <- v[!is.na(v)]
+  x <- x[is.finite(x)]
+  if (length(x) < 2 || any(x != floor(x))) {
+    return(NULL)
+  }
+  lo <- min(x)
+  hi <- max(x)
+  positions <- hi - lo + 1
+  if (positions <= 1) {
+    return(NULL)
+  }
+  list(lo = lo, hi = hi, density = min(length(unique(x)) / positions, 1))
+}
+
 column_profile <- function(v, sample_cap = 5000) {
   vals <- as.character(v[!is.na(v)])
   uniq <- unique(vals)
@@ -371,7 +448,8 @@ column_profile <- function(v, sample_cap = 5000) {
     uniq = uniq,
     uniq_sample = uniq_sample,
     counts = setNames(as.numeric(counts), names(counts)),
-    fingerprint = format_fingerprint(v)
+    fingerprint = format_fingerprint(v),
+    int_domain = integer_domain(v)
   )
 }
 
@@ -389,6 +467,34 @@ value_overlap <- function(v1, v2, sample_cap = 5000) {
     column_profile(v1, sample_cap),
     column_profile(v2, sample_cap)
   )
+}
+
+# How much of an overlap a dense parent domain hands out for free.
+#
+# A count column holding 0..12 sits inside any contiguous 1..N id column,
+# so raw overlap reports "nearly every value found" when nothing was
+# really tested: incident.number_of_suspects scored 94% against
+# victim.height_inches on exactly that. The parent's density is the chance
+# that an arbitrary whole number in its range is present, so it is also
+# the overlap a child drawn from that range gets for nothing. Only child
+# values inside the parent's range can be found by chance; the rest miss
+# either way, so they are not counted here.
+#
+# Returns 0 when the parent has no integer domain (a string column, a
+# measurement, a single repeated value), which leaves those pairs scoring
+# exactly as they did before.
+overlap_expected_by_chance <- function(p_child, p_parent) {
+  dom <- p_parent$int_domain
+  if (is.null(dom) || length(p_child$uniq_sample) == 0) {
+    return(0.0)
+  }
+  # Too many distinct values on the child side for containment to be luck
+  if (length(p_child$uniq) >= overlap_chance_max_distinct) {
+    return(0.0)
+  }
+  vals <- suppressWarnings(as.numeric(p_child$uniq_sample))
+  inside <- sum(!is.na(vals) & vals >= dom$lo & vals <= dom$hi)
+  dom$density * inside / length(p_child$uniq_sample)
 }
 
 # ── Distribution similarity (cosine) ────────────────────────
@@ -476,6 +582,45 @@ detect_pks <- function(df, table_name, method = "both") {
   candidates
 }
 
+# ── Near-unique columns (dirty keys) ─────────────────────────
+#
+# Parent candidates for a table that has no strictly unique column at all.
+# A foreign key's parent is a key, so a column whose values repeat is not
+# one; a key that arrives with a few duplicate or missing rows still is
+# (parent_key_min_frac). Without this, every plausible column in such a
+# table was offered as a target, which is where
+# incident.number_of_suspects -> victim.height_inches came from at 94%.
+#
+# Same quick rejects as detect_fks' pk_map: a flag, a date and a block of
+# free text are not keys whatever their uniqueness.
+near_unique_cols <- function(df) {
+  n <- nrow(df)
+  if (n == 0) {
+    return(character(0))
+  }
+  keep <- vapply(
+    names(df),
+    function(cn) {
+      v <- df[[cn]]
+      if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
+        return(FALSE)
+      }
+      # isTRUE: an all-NA text column has no median and would error
+      if (
+        is.character(v) &&
+          isTRUE(median(nchar(head(na.omit(v), 20))) > 60)
+      ) {
+        return(FALSE)
+      }
+      present <- sum(!is.na(v))
+      present >= n * parent_key_min_frac &&
+        length(unique(v[!is.na(v)])) >= present * parent_key_min_frac
+    },
+    logical(1)
+  )
+  names(df)[keep]
+}
+
 # ── Naming signal (memoised) ─────────────────────────────────
 # Depends only on the three names, which repeat across tables (client_id,
 # e2id, ...), so large scans hit the cache for most pairs.
@@ -511,7 +656,12 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
     # Identical names are reported as such: "name similarity 1.00" reads as
     # a near miss, and the two cases are judged differently by a reviewer.
     # Same weight as name_sim, so scores do not move.
-    if (identical(c1, c2)) {
+    # A house-style surrogate key on both sides is not evidence, and
+    # blocking only the identical-name signal would hand the same pair to
+    # the similarity branch at 1.00, which says the same thing louder
+    if (identical(c1, c2) && is_generic_key(c1)) {
+      NULL
+    } else if (identical(c1, c2)) {
       list(
         signal = "name_identical",
         value = 1.0,
@@ -600,30 +750,51 @@ score_candidate <- function(
     }
   }
 
-  # 3. Value overlap
+  # 3. Value overlap, less the part a dense parent domain gives away for
+  # free. The raw figure is still what gets reported and what the values
+  # veto below reads: a reviewer wants to know how much of the child was
+  # found, and the discount only decides whether that counts as evidence.
   ov <- NA_real_
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
     ov <- overlap_from_profiles(p1, p2)
-    if (ov >= overlap_high) {
+    ov_chance <- overlap_expected_by_chance(p1, p2)
+    ov_evidence <- max(0, ov - ov_chance)
+    chance_note <- if (ov_chance >= 0.01) {
+      sprintf(", %.0f%% of it expected by chance", ov_chance * 100)
+    } else {
+      ""
+    }
+    if (ov_evidence >= overlap_high) {
       signals[["overlap_high"]] <- ov
-      reasons <- c(reasons, sprintf("value overlap %.0f%%", ov * 100))
-    } else if (ov >= overlap_medium) {
+      reasons <- c(
+        reasons,
+        sprintf("value overlap %.0f%%%s", ov * 100, chance_note)
+      )
+    } else if (ov_evidence >= overlap_medium) {
       signals[["overlap_medium"]] <- ov
-      reasons <- c(reasons, sprintf("partial overlap %.0f%%", ov * 100))
+      reasons <- c(
+        reasons,
+        sprintf("partial overlap %.0f%%%s", ov * 100, chance_note)
+      )
     }
   }
 
-  # 4. Exact cardinality match
+  # 4. Exact cardinality match, above the floor where it says something.
+  # Two tiny code domains holding the same handful of values is the
+  # expected outcome, not a coincidence (cardinality_min_distinct).
   if (isTRUE(enable_flags[["cardinality"]]) && n1 > 0 && n2 > 0) {
     u1 <- p1$uniq
     u2 <- p2$uniq
     if (
-      length(u1) > 0 &&
+      length(u1) >= cardinality_min_distinct &&
         length(u1) == length(u2) &&
         all(u1 %in% u2)
     ) {
       signals[["cardinality_match"]] <- 1.0
-      reasons <- c(reasons, "identical value sets")
+      reasons <- c(
+        reasons,
+        sprintf("identical value sets (%d values)", length(u1))
+      )
     }
   }
 
@@ -690,6 +861,18 @@ score_candidate <- function(
   } else {
     "low"
   }
+  # Nothing to compare: with no rows on one side the content signals never
+  # ran, so a name on its own is carrying the whole score. Medium implies
+  # corroboration that does not exist here.
+  if (
+    (n1 == 0 || n2 == 0) &&
+      !any(names(signals) %in% c("naming_exact", "naming_role", "naming_self")) &&
+      confidence != "low"
+  ) {
+    confidence <- "low"
+    score <- min(score, 0.54)
+  }
+
   # Values veto: with data on both sides, a link whose values mostly aren't in
   # the parent can't rest on format or loose name likeness alone
   if (
@@ -977,6 +1160,18 @@ detect_fks <- function(
   })
   names(pk_map) <- tnames
 
+  # Fallback parents for a table with no strictly unique column at all:
+  # its near-unique columns only, never every plausible column. Computed
+  # once per table because the target list is read for every source column
+  # that reaches the table.
+  near_pk_map <- lapply(tnames, function(t) {
+    if (length(pk_map[[t]]) > 0 || nrow(tables[[t]]) == 0) {
+      return(character(0))
+    }
+    near_unique_cols(tables[[t]])
+  })
+  names(near_pk_map) <- tnames
+
   # Pre-compute FK-candidate columns per table (skip non-FK-like columns).
   # Empty tables have no values to screen, so their key-named columns are
   # candidates for name matching.
@@ -1072,7 +1267,11 @@ detect_fks <- function(
       confidence = res$confidence,
       score = res$score,
       reasons = res$reasons,
-      signals = res$signals
+      signals = res$signals,
+      # Raw overlap, for resolve_fk_parents' ambiguity test: whether the
+      # values fit a table is a different question from whether the fit is
+      # evidence, and the chance discount only answers the second
+      overlap = res$overlap
     )
   }
 
@@ -1166,7 +1365,9 @@ detect_fks <- function(
             logical(1)
           )]
         } else {
-          fk_candidates[[t2]]
+          # A parent has to be a key: near-unique columns only, and no
+          # targets at all for a table where nothing identifies a row
+          near_pk_map[[t2]]
         }
         if (src_unique) {
           # A unique key only links to the same key, unique in the parent
@@ -1430,7 +1631,15 @@ resolve_fk_parents <- function(rels) {
       }
       idx <- named
     } else {
-      fits <- idx[vapply(rels[idx], function(r) any(sig_names(r) %in% fk_value_fit_signals), logical(1))]
+      # A column whose values sit inside eight lookups' domains fits all
+      # eight, whether or not that fit counted as evidence: the chance
+      # discount in score_candidate must not switch this guard off, so the
+      # raw overlap is read here alongside the signals
+      value_fit <- function(r) {
+        any(sig_names(r) %in% fk_value_fit_signals) ||
+          isTRUE((r$overlap %||% NA_real_) >= overlap_high)
+      }
+      fits <- idx[vapply(rels[idx], value_fit, logical(1))]
       if (length(fits) >= 2) {
         # 2. Values fit several tables: only a clearly closer name can choose
         close <- fits[vapply(rels[fits], function(r) any(c("name_identical", "name_sim") %in% sig_names(r)), logical(1))]
@@ -1473,4 +1682,88 @@ sort_rels <- function(rels) {
     -vapply(rels, function(r) r$score %||% 0, numeric(1))
   )
   rels[order_idx]
+}
+
+# ── Shared columns (not foreign keys) ────────────────────────
+# A column that appears in two tables under the same name, holds
+# overlapping values, and is a key in neither. incident_year to
+# incident_year is the example: useful for joining, not a reference, and
+# detect_fks() never sees it because targets are drawn from unique
+# columns only. Reported as its own class so it is visible without
+# being mislabelled as an FK.
+
+detect_shared_columns <- function(
+  tables,
+  min_overlap = 0.5,
+  min_distinct = 3L,
+  max_pairs = 20000L
+) {
+  tnames <- names(tables)
+  if (length(tnames) < 2) {
+    return(list())
+  }
+  unique_cols <- lapply(tables, function(df) {
+    n <- nrow(df)
+    if (n == 0) {
+      return(character(0))
+    }
+    names(df)[vapply(
+      names(df),
+      function(c) !anyNA(df[[c]]) && length(unique(df[[c]])) == n,
+      logical(1)
+    )]
+  })
+  names(unique_cols) <- tnames
+
+  out <- list()
+  pairs <- 0L
+  for (i in seq_len(length(tnames) - 1L)) {
+    for (j in seq.int(i + 1L, length(tnames))) {
+      t1 <- tnames[[i]]
+      t2 <- tnames[[j]]
+      df1 <- tables[[t1]]
+      df2 <- tables[[t2]]
+      if (nrow(df1) == 0 || nrow(df2) == 0) {
+        next
+      }
+      common <- intersect(names(df1), names(df2))
+      for (cn in common) {
+        if (pairs >= max_pairs) {
+          return(out)
+        }
+        pairs <- pairs + 1L
+        # A key on either side is a foreign key question, not this one
+        if (cn %in% unique_cols[[t1]] || cn %in% unique_cols[[t2]]) {
+          next
+        }
+        v1 <- df1[[cn]][!is.na(df1[[cn]])]
+        v2 <- df2[[cn]][!is.na(df2[[cn]])]
+        u1 <- unique(v1)
+        u2 <- unique(v2)
+        # Two-valued flags shared by every table say nothing
+        if (length(u1) < min_distinct || length(u2) < min_distinct) {
+          next
+        }
+        shared <- intersect(u1, u2)
+        if (length(shared) == 0) {
+          next
+        }
+        ov <- length(shared) / min(length(u1), length(u2))
+        if (ov < min_overlap) {
+          next
+        }
+        out[[length(out) + 1]] <- list(
+          from_table = t1,
+          to_table = t2,
+          column = cn,
+          n_shared = length(shared),
+          n_distinct_from = length(u1),
+          n_distinct_to = length(u2),
+          overlap = ov,
+          contained = length(shared) == min(length(u1), length(u2))
+        )
+      }
+    }
+  }
+  out
 }
