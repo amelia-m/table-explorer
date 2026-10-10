@@ -1048,6 +1048,41 @@ test_that("a name-only candidate with no rows to compare cannot reach medium", {
   expect_true(res2$confidence %in% c("medium", "high"))
 })
 
+test_that("a parent column whose values repeat is not offered as a target", {
+  # Nothing in victim identifies a row: every value appears twice. Before
+  # this rule a table like that offered every plausible column as a target,
+  # and a free-text description matched a label column on values alone.
+  labs <- sprintf("label_%02d", 1:15)
+  victim <- data.frame(
+    homeless_label = rep(labs, 2),
+    height_inches = rep(60:74, 2)
+  )
+  pdo <- data.frame(
+    pdo_id = 1:30,
+    witnessed_drug_use_description = rep(labs, 2)
+  )
+  expect_equal(near_unique_cols(victim), character(0))
+  rels <- detect_fks(list(pdo = pdo, victim = victim), "both", "medium")
+  expect_false(any(vapply(rels, `[[`, "", "to_table") == "victim"))
+})
+
+test_that("a key with a few duplicate rows is still a parent", {
+  # Survival check for the rule above: five repeated ids in a thousand rows
+  # is a dirty key, not a non-key, and the strict uniqueness test in
+  # detect_fks' pk_map misses it
+  client <- data.frame(
+    client_id = c(1:995, 1:5),
+    region = rep(c("north", "south", "east", "west", "central"), 200)
+  )
+  visit <- data.frame(visit_id = 1:200, client_id = rep(1:100, 2))
+  expect_equal(near_unique_cols(client), "client_id")
+  rels <- detect_fks(list(visit = visit, client = client), "both", "medium")
+  to_client <- Filter(function(r) r$to_table == "client", rels)
+  expect_length(to_client, 1)
+  expect_equal(to_client[[1]]$from_col, "client_id")
+  expect_equal(to_client[[1]]$to_col, "client_id")
+})
+
 test_that("overlap inside a dense integer run is not evidence", {
   flags <- list(
     naming = FALSE, value_overlap = TRUE, cardinality = TRUE,

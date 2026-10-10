@@ -14,6 +14,14 @@ name_sim_high <- 0.85
 name_sim_med <- 0.72
 dist_sim_high <- 0.90
 dist_sim_med <- 0.75
+# A foreign key's parent has to identify a row. pk_map holds the columns
+# that are strictly unique and fully populated; in a real extract a key
+# column arrives with a few duplicate or missing rows, so a column at or
+# above this share of distinct, non-missing values counts as the dirty
+# version of the same thing. Below 100 rows the share can only be met by
+# exact uniqueness, which pk_map already covers, so the tolerance is for
+# the larger tables, which is where duplicates actually turn up.
+parent_key_min_frac <- 0.99
 # Identical value sets are evidence only when the sets are large enough
 # that holding the same one is a coincidence. Hand-maintained code domains
 # run to about a dozen entries (the 52-table extract's lookups hold eight;
@@ -563,6 +571,45 @@ detect_pks <- function(df, table_name, method = "both") {
   candidates
 }
 
+# ── Near-unique columns (dirty keys) ─────────────────────────
+#
+# Parent candidates for a table that has no strictly unique column at all.
+# A foreign key's parent is a key, so a column whose values repeat is not
+# one; a key that arrives with a few duplicate or missing rows still is
+# (parent_key_min_frac). Without this, every plausible column in such a
+# table was offered as a target, which is where
+# incident.number_of_suspects -> victim.height_inches came from at 94%.
+#
+# Same quick rejects as detect_fks' pk_map: a flag, a date and a block of
+# free text are not keys whatever their uniqueness.
+near_unique_cols <- function(df) {
+  n <- nrow(df)
+  if (n == 0) {
+    return(character(0))
+  }
+  keep <- vapply(
+    names(df),
+    function(cn) {
+      v <- df[[cn]]
+      if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
+        return(FALSE)
+      }
+      # isTRUE: an all-NA text column has no median and would error
+      if (
+        is.character(v) &&
+          isTRUE(median(nchar(head(na.omit(v), 20))) > 60)
+      ) {
+        return(FALSE)
+      }
+      present <- sum(!is.na(v))
+      present >= n * parent_key_min_frac &&
+        length(unique(v[!is.na(v)])) >= present * parent_key_min_frac
+    },
+    logical(1)
+  )
+  names(df)[keep]
+}
+
 # ── Naming signal (memoised) ─────────────────────────────────
 # Depends only on the three names, which repeat across tables (client_id,
 # e2id, ...), so large scans hit the cache for most pairs.
@@ -1102,6 +1149,18 @@ detect_fks <- function(
   })
   names(pk_map) <- tnames
 
+  # Fallback parents for a table with no strictly unique column at all:
+  # its near-unique columns only, never every plausible column. Computed
+  # once per table because the target list is read for every source column
+  # that reaches the table.
+  near_pk_map <- lapply(tnames, function(t) {
+    if (length(pk_map[[t]]) > 0 || nrow(tables[[t]]) == 0) {
+      return(character(0))
+    }
+    near_unique_cols(tables[[t]])
+  })
+  names(near_pk_map) <- tnames
+
   # Pre-compute FK-candidate columns per table (skip non-FK-like columns).
   # Empty tables have no values to screen, so their key-named columns are
   # candidates for name matching.
@@ -1295,7 +1354,9 @@ detect_fks <- function(
             logical(1)
           )]
         } else {
-          fk_candidates[[t2]]
+          # A parent has to be a key: near-unique columns only, and no
+          # targets at all for a table where nothing identifies a row
+          near_pk_map[[t2]]
         }
         if (src_unique) {
           # A unique key only links to the same key, unique in the parent
