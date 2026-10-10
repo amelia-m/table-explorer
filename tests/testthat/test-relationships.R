@@ -134,3 +134,112 @@ test_that("the row data carries the evidence the table shows", {
     }
   )
 })
+
+# ── Shared columns (joinable, not foreign keys) ──────────────
+# Invented tables: incident_id / inspection_id are unique, so they are keys
+# and belong to FK detection; incident_year is a key in neither side.
+
+shared_fixture_tables <- function() {
+  list(
+    incidents = data.frame(
+      incident_id = 1:6,
+      incident_year = c(2019L, 2019L, 2020L, 2020L, 2021L, 2021L)
+    ),
+    inspections = data.frame(
+      inspection_id = 1:5,
+      incident_year = c(2019L, 2020L, 2021L, 2021L, 2019L)
+    )
+  )
+}
+
+shared_settings <- function(...) {
+  utils::modifyList(
+    list(method = "both", min_conf = "medium", value_overlap = TRUE),
+    list(...)
+  )
+}
+
+shared_cache_env <- function() {
+  e <- new.env(parent = emptyenv())
+  e$result <- list()
+  e$handled_id <- NULL
+  e
+}
+
+test_that("shared_columns_for_scan reports the shared column with its counts", {
+  found <- shared_columns_for_scan(
+    shared_fixture_tables(),
+    list(id = 1L, scope = "all", strategy = "auto"),
+    shared_settings(),
+    shared_cache_env()
+  )
+  expect_length(found, 1)
+  expect_equal(found[[1]]$column, "incident_year")
+  expect_equal(found[[1]]$from_table, "incidents")
+  expect_equal(found[[1]]$to_table, "inspections")
+  expect_equal(found[[1]]$n_distinct_from, 3L)
+  expect_equal(found[[1]]$n_distinct_to, 3L)
+  expect_equal(found[[1]]$n_shared, 3L)
+  expect_equal(found[[1]]$overlap, 1)
+  expect_true(found[[1]]$contained)
+})
+
+test_that("settings that ask for no value comparison skip the scan and say why", {
+  tbls <- shared_fixture_tables()
+  naming <- shared_columns_for_scan(
+    tbls,
+    list(id = 1L, scope = "all", strategy = "naming_only"),
+    shared_settings(),
+    shared_cache_env()
+  )
+  expect_length(naming, 0)
+  expect_match(attr(naming, "skipped"), "naming only")
+
+  no_overlap <- shared_columns_for_scan(
+    tbls,
+    list(id = 1L, scope = "all", strategy = "auto"),
+    shared_settings(value_overlap = FALSE),
+    shared_cache_env()
+  )
+  expect_length(no_overlap, 0)
+  expect_match(attr(no_overlap, "skipped"), "value overlap")
+})
+
+test_that("the cached scan is reused per request id and filtered to loaded tables", {
+  cache <- shared_cache_env()
+  req1 <- list(id = 7L, scope = "all", strategy = "auto")
+  expect_length(
+    shared_columns_for_scan(
+      shared_fixture_tables(), req1, shared_settings(), cache
+    ),
+    1
+  )
+
+  # A third table that would add two more pairs if a scan ran again. Same
+  # request id, so it must not: this is the unrelated-change case.
+  tbls <- shared_fixture_tables()
+  tbls$reviews <- data.frame(
+    review_id = 1:4,
+    incident_year = c(2019L, 2020L, 2021L, 2019L)
+  )
+  expect_length(
+    shared_columns_for_scan(tbls, req1, shared_settings(), cache),
+    1
+  )
+
+  # A new request id does scan, and picks up the pairs the new table brings
+  req2 <- list(id = 8L, scope = "all", strategy = "auto")
+  expect_length(
+    shared_columns_for_scan(tbls, req2, shared_settings(), cache),
+    3
+  )
+
+  # Dropping a table filters its rows out of the cached result, no rescan
+  expect_length(
+    shared_columns_for_scan(
+      tbls[c("incidents", "inspections")], req2, shared_settings(), cache
+    ),
+    1
+  )
+})
+
