@@ -2,6 +2,17 @@
 
 ## Open items from the 2026-10-09 session
 
+- [ ] **Vendored JavaScript is watched by nothing.** `inst/app/www/vendor/`
+      carries elkjs and svg-pan-zoom as checked-in files, so Dependabot
+      cannot see them (it reads manifests, not vendored source) and no
+      advisory will ever reach us for them. Check them by hand
+      occasionally: compare the version in each file's header against the
+      project's releases, and read its changelog for security fixes.
+      Alternative, if the manual check keeps slipping: add a tiny
+      `package.json` listing both as dependencies purely so Dependabot
+      watches them, and keep vendoring the built files.
+
+
 Decisions waiting on Amelia, in full wording so they can be answered later.
 
 - [ ] **Contrast remediation**: plan written at `docs/contrast-plan.md`, measured
