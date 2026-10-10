@@ -40,7 +40,8 @@ test_that("rel_rows carries the evidence the table columns are built from", {
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
-      confirmed_rels_rv = shiny::reactiveVal(list())
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      shared_cols_rv = shiny::reactive(list())
     ),
     {
       session$setInputs(source_filter = "all", show_low = TRUE)
@@ -65,7 +66,8 @@ test_that("'To review only' keeps just the links still awaiting a decision", {
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
-      confirmed_rels_rv = shiny::reactiveVal(list())
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      shared_cols_rv = shiny::reactive(list())
     ),
     {
       session$setInputs(source_filter = "all", show_low = TRUE, hide_reviewed = FALSE)
@@ -98,7 +100,8 @@ test_that("the source filter and 'To review only' combine", {
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
-      confirmed_rels_rv = shiny::reactiveVal(list())
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      shared_cols_rv = shiny::reactive(list())
     ),
     {
       # Declared plus to-review is empty: nothing is both at once
@@ -121,7 +124,8 @@ test_that("the row data carries the evidence the table shows", {
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
-      confirmed_rels_rv = shiny::reactiveVal(list())
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      shared_cols_rv = shiny::reactive(list())
     ),
     {
       session$setInputs(source_filter = "all", show_low = TRUE, hide_reviewed = FALSE)
@@ -243,3 +247,97 @@ test_that("the cached scan is reused per request id and filtered to loaded table
   )
 })
 
+shared_found_fixture <- function() {
+  list(
+    list(
+      from_table = "incidents", to_table = "inspections",
+      column = "incident_year", n_shared = 3L,
+      n_distinct_from = 3L, n_distinct_to = 4L,
+      overlap = 0.75, contained = FALSE
+    ),
+    list(
+      from_table = "incidents", to_table = "reviews",
+      column = "county_code", n_shared = 12L,
+      n_distinct_from = 12L, n_distinct_to = 40L,
+      overlap = 1, contained = TRUE
+    )
+  )
+}
+
+shared_server_args <- function(found) {
+  list(
+    all_tables_rv = shiny::reactiveVal(
+      list(incidents = data.frame(incident_year = 1:3))
+    ),
+    all_rels_rv = shiny::reactive(list()),
+    false_positives_rv = shiny::reactiveVal(character(0)),
+    conf_overrides_rv = shiny::reactiveVal(list()),
+    confirmed_rels_rv = shiny::reactiveVal(list()),
+    shared_cols_rv = shiny::reactive(found)
+  )
+}
+
+test_that("the shared-column rows reaching the table carry the counts", {
+  skip_if_not_installed("shiny")
+  shiny::testServer(
+    mod_relationships_server,
+    args = shared_server_args(shared_found_fixture()),
+    {
+      session$flushReact()
+      rows <- shared_rows()
+      expect_equal(rows$table_a, c("incidents", "incidents"))
+      expect_equal(rows$column, c("incident_year", "county_code"))
+      expect_equal(rows$n_distinct_a, c(3L, 12L))
+      expect_equal(rows$n_distinct_b, c(4L, 40L))
+      expect_equal(rows$n_shared, c(3L, 12L))
+
+      df <- shared_df()
+      expect_true(all(
+        c(
+          "Table A", "Table B", "Column", "Distinct in A", "Distinct in B",
+          "Shared values", "Overlap %", "Contained"
+        ) %in%
+          names(df)
+      ))
+      expect_equal(df$`Shared values`, c("3", "12"))
+      expect_equal(df$`Overlap %`, c("75%", "100%"))
+      expect_equal(df$Contained, c("no", "yes"))
+      # Hidden sort columns are zero-padded so DT sorts them as numbers
+      expect_equal(df$a_sort, c("000000000003", "000000000012"))
+      expect_equal(df$shared_sort, c("000000000003", "000000000012"))
+      expect_equal(df$overlap_sort, c("075", "100"))
+    }
+  )
+})
+
+test_that("no shared columns renders one quiet line, and says if none were sought", {
+  skip_if_not_installed("shiny")
+  html_of <- function(x) paste(as.character(x$html), collapse = " ")
+
+  shiny::testServer(
+    mod_relationships_server,
+    args = shared_server_args(list()),
+    {
+      session$flushReact()
+      expect_null(shared_rows())
+      html <- html_of(output$shared_cols_ui)
+      expect_match(html, "No shared columns")
+      # No table at all, empty or otherwise
+      expect_false(grepl("shared_table", html, fixed = TRUE))
+    }
+  )
+
+  # Zero because nothing was looked for is a different answer, and says so
+  shiny::testServer(
+    mod_relationships_server,
+    args = shared_server_args(
+      structure(list(), skipped = "the last scan was naming only")
+    ),
+    {
+      session$flushReact()
+      html <- html_of(output$shared_cols_ui)
+      expect_match(html, "not scanned")
+      expect_match(html, "naming only")
+    }
+  )
+})

@@ -16,6 +16,9 @@ mod_relationships_ui <- function(id) {
     ),
     uiOutput(ns("relationships_summary")),
     uiOutput(ns("relationships_ui")),
+    # Shared columns sit beneath the relationship table, collapsed, because
+    # they answer a different question and must not be read as references
+    uiOutput(ns("shared_cols_ui")),
     br()
   )
 }
@@ -29,6 +32,10 @@ mod_relationships_ui <- function(id) {
 #' @param conf_overrides_rv reactiveVal holding confidence overrides
 #' @param confirmed_rels_rv reactiveVal: named list (rel_key -> rel) of
 #'   relationships the user confirmed
+#' @param shared_cols_rv reactive returning detect_shared_columns() records:
+#'   columns that carry the same name in two tables, overlap in values and
+#'   are a key in neither. Not foreign keys. A zero-length result may carry
+#'   a `skipped` attribute saying why no scan was made.
 #' @noRd
 mod_relationships_server <- function(
   id,
@@ -36,7 +43,8 @@ mod_relationships_server <- function(
   all_rels_rv,
   false_positives_rv,
   conf_overrides_rv,
-  confirmed_rels_rv
+  confirmed_rels_rv,
+  shared_cols_rv
 ) {
   moduleServer(id, function(input, output, session) {
     method_labels <- c(
@@ -473,6 +481,156 @@ mod_relationships_server <- function(
         "All suppressed relationships restored.",
         type = "message",
         duration = 3
+      )
+    })
+
+    # ---- Shared columns (joinable, not foreign keys) ----
+    # Row data first, in the order detect_shared_columns() returned
+    shared_rows <- reactive({
+      found <- shared_cols_rv()
+      if (length(found) == 0) {
+        return(NULL)
+      }
+      int_of <- function(field) {
+        vapply(found, function(s) as.integer(s[[field]]), integer(1))
+      }
+      data.frame(
+        table_a = vapply(found, `[[`, character(1), "from_table"),
+        table_b = vapply(found, `[[`, character(1), "to_table"),
+        column = vapply(found, `[[`, character(1), "column"),
+        n_distinct_a = int_of("n_distinct_from"),
+        n_distinct_b = int_of("n_distinct_to"),
+        n_shared = int_of("n_shared"),
+        overlap = vapply(found, function(s) as.numeric(s$overlap), numeric(1)),
+        contained = vapply(found, function(s) isTRUE(s$contained), logical(1)),
+        stringsAsFactors = FALSE
+      )
+    })
+
+    shared_df <- reactive({
+      rows <- shared_rows()
+      req(rows)
+      num <- function(x) format(x, big.mark = ",", trim = TRUE)
+      pad <- function(x) sprintf("%012d", x)
+      data.frame(
+        # A and B, not from and to: the pair is unordered and neither side
+        # points at the other
+        `Table A` = rows$table_a,
+        `Table B` = rows$table_b,
+        Column = rows$column,
+        # Numbers passed as text for the reason given at rel_df() above: DT
+        # gives a numeric column a range-slider filter that needs the
+        # noUiSlider library, and a failed load there stalls every later
+        # Shiny update on the page. Hidden zero-padded copies keep the sort
+        # numeric.
+        `Distinct in A` = num(rows$n_distinct_a),
+        a_sort = pad(rows$n_distinct_a),
+        `Distinct in B` = num(rows$n_distinct_b),
+        b_sort = pad(rows$n_distinct_b),
+        `Shared values` = num(rows$n_shared),
+        shared_sort = pad(rows$n_shared),
+        `Overlap %` = sprintf("%.0f%%", 100 * rows$overlap),
+        overlap_sort = sprintf("%03d", as.integer(round(100 * rows$overlap))),
+        # The smaller side's distinct values all appear in the larger side
+        Contained = ifelse(rows$contained, "yes", "no"),
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+
+    output$shared_cols_ui <- renderUI({
+      if (length(all_tables_rv()) == 0) {
+        return(NULL)
+      }
+      found <- shared_cols_rv()
+      n <- length(found)
+      muted <- "color:var(--text-faint); font-size:11px; line-height:1.6;"
+      if (n == 0) {
+        skipped <- attr(found, "skipped")
+        # One quiet line, never an empty table. "None found" and "never
+        # looked" are different answers, so the reason is spelled out.
+        return(div(
+          style = paste0(muted, "margin-top:18px;"),
+          if (is.null(skipped)) {
+            paste0(
+              "No shared columns: no column name appears in two tables with ",
+              "overlapping values and a key in neither."
+            )
+          } else {
+            paste0("Shared columns not scanned, because ", skipped, ".")
+          }
+        ))
+      }
+      tags$details(
+        style = "margin-top:18px;",
+        tags$summary(
+          style = paste0(
+            "font-size:12px; color:var(--text-muted); cursor:pointer; ",
+            "font-family:'IBM Plex Mono', monospace;"
+          ),
+          sprintf("Shared columns (%d) - joinable, not foreign keys", n)
+        ),
+        div(
+          style = "padding:8px 0 0 2px;",
+          p(
+            style = paste0(muted, "margin-bottom:4px;"),
+            paste0(
+              "Same column name in both tables, overlapping values, and a ",
+              "key in neither side: useful for joining, not a reference."
+            )
+          ),
+          p(
+            style = muted,
+            paste0(
+              "Counts come from the same sample the scan used, up to 10,000 ",
+              "rows per table. Not included in the ERD or the exports."
+            )
+          ),
+          DT::DTOutput(session$ns("shared_table"))
+        )
+      )
+    })
+
+    # server = FALSE like the other secondary tables in this app: there is
+    # no proxy here, the data changes only when a scan runs
+    output$shared_table <- DT::renderDT(server = FALSE, {
+      df <- shared_df()
+      req(df)
+      idx <- function(name) which(names(df) == name) - 1L
+      hidden <- c(
+        idx("a_sort"),
+        idx("b_sort"),
+        idx("shared_sort"),
+        idx("overlap_sort")
+      )
+      DT::datatable(
+        df,
+        rownames = FALSE,
+        selection = "none",
+        options = list(
+          pageLength = 10,
+          lengthMenu = list(c(10, 25, 50, -1), c("10", "25", "50", "All")),
+          order = list(list(idx("Overlap %"), "desc")),
+          # The table renders inside a collapsed <details>, where DT cannot
+          # measure anything, so it must not try to
+          autoWidth = FALSE,
+          scrollX = TRUE,
+          columnDefs = list(
+            list(targets = idx("Distinct in A"), orderData = idx("a_sort")),
+            list(targets = idx("Distinct in B"), orderData = idx("b_sort")),
+            list(targets = idx("Shared values"), orderData = idx("shared_sort")),
+            list(targets = idx("Overlap %"), orderData = idx("overlap_sort")),
+            list(targets = hidden, visible = FALSE, searchable = FALSE),
+            list(
+              className = "dt-center",
+              targets = c(
+                idx("Distinct in A"), idx("Distinct in B"),
+                idx("Shared values"), idx("Overlap %"), idx("Contained")
+              )
+            )
+          )
+        ),
+        class = "compact hover rel-dt"
       )
     })
 

@@ -393,7 +393,8 @@ app_server <- function(input, output, session) {
     visible_rels_rv,
     false_positives_rv,
     conf_overrides_rv,
-    confirmed_rels_rv
+    confirmed_rels_rv,
+    shared_cols_rv = visible_shared_cols_rv
   )
 
   mod_dictionary_server(
