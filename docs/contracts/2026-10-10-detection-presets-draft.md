@@ -14,19 +14,20 @@ rules take Chinook precision from 14.7 to 31.0 percent and FAERS from 12.3 to
 A conventionally named schema wants the strict rules; a legacy extract with
 names like `primaryid` and `supportrepid` wants the permissive ones.
 
-In scope: named presets in the sidebar that bundle the existing signal toggles
-and the new rules, the plumbing that records which preset produced a scan, and
-showing each preset's measured recall and precision so the choice is made on
-evidence rather than on the names.
+In scope: named presets in the sidebar that bundle the detection settings, the
+plumbing that records which preset produced a scan, and showing each preset's
+measured recall and precision so the choice is made on evidence rather than on
+the names. The presets themselves are chosen from the sweep in the settings
+contract, not invented here.
 
 Users are reviewers choosing how to scan a schema they have just loaded.
 
 ## Non-goals
 
-- No new detection rules and no changes to scoring. Do not touch
-  `R/utils_inference.R` except to read settings that already exist. The
-  containment signal is the other contract and may land before or after this
-  one.
+- No new detection rules, no changes to scoring, and no new settings. Do not
+  touch `R/utils_inference.R`: by the time this is dispatched, the settings
+  contract has already turned the hard-coded rules into parameters, and this
+  contract only selects among them. The containment signal lands before both.
 - Do not change the meaning of any existing toggle, only which combinations a
   preset selects.
 - Do not remove the existing "Signal toggles" controls; the Custom preset
@@ -52,9 +53,10 @@ Users are reviewers choosing how to scan a schema they have just loaded.
   (`is_possible_key_name`). Several are currently unconditional rather than
   settings.
 - Measurement harness: `dev/fixtures/public/fetch.R` and
-  `dev/fixtures/public/score_public.R chinook faers`, which reads whole tables
+  `dev/fixtures/public/score_public.R chinook faers lahman`, which reads whole tables
   and prints tables, rows, truth, found, hit, recall, precision and seconds.
-  Chinook and FAERS are in the user cache already.
+  Chinook and FAERS are in the user cache; Lahman comes from the CRAN package.
+  Pagila is deferred (Amelia, 2026-10-10): it needs a Postgres instance.
 - Session export and restore carry detection settings; see `R/mod_export.R`
   and `R/utils_export.R`.
 - R is at "C:\Program Files\R\R-4.6.1\bin\Rscript.exe". Never run `Rscript -e`
@@ -134,20 +136,25 @@ Users are reviewers choosing how to scan a schema they have just loaded.
   could not measure, and every claim it did not verify directly, each with the
   check that would settle it.
 
+## Settled (Amelia, 2026-10-10)
+
+- The rules currently hard-coded (the chance-overlap discount, the cardinality
+  floor, the possible-key names, the parent-must-be-a-key fallback) become
+  settings. "Yes to the hard-coated rules becoming settings." That work is its
+  own contract, `2026-10-10-detection-settings-and-sweep.md`, and lands before
+  this one, because a preset cannot select among constants.
+- The preset list is not decided in advance. "Presets will be determined based
+  on testing across several different public data sets and then I'll follow up
+  with some of my own." So the sweep in the settings contract produces the
+  measurements, Amelia picks the candidate presets from them, checks them
+  against her own data, and this contract is finished with the
+  chosen list before it is dispatched.
+
 ## Open assumptions
 
-- `<preset list>`: proposed four. **Conventional names** (strict rules, for
-  Rails, Django or Access-style schemas), **Balanced** (default, strict rules
-  plus possible-key names and containment), **Unconventional names** (chance
-  discount softened or off, containment weighted up, low confidence shown),
-  **Custom** (reveals the individual toggles).
-- Which preset is the default: proposed Balanced, on the condition in
-  Constraints that the default reproduces current behaviour. If Balanced does
-  not reproduce it, the default is whichever preset does, and Balanced is
-  offered second.
-- Whether the rules currently hard-coded (chance discount, cardinality floor,
-  possible-key names) become settings in this contract, or stay fixed with
-  presets only selecting among existing toggles. Proposed: they become
-  settings, since otherwise the presets cannot differ in the ways that matter.
+- `<preset list>`: comes from the sweep. Not a guess to be made here.
+- Which preset is the default: follows from the list, on the condition in
+  Constraints that the default reproduces the behaviour of the branch it lands
+  on.
 - Whether presets are per session only, or remembered between sessions.
   Proposed: per session, recorded in the export, not remembered otherwise.
