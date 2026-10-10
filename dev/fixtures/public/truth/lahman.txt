@@ -1,39 +1,55 @@
 # Lahman Baseball Database, via the CRAN Lahman package (14.0.0).
 #
-# The CSV release carries no foreign key constraints, so this is written by
-# hand from the documented schema: People is keyed on playerID, Teams on
-# (yearID, teamID, lgID), Schools on schoolID, Parks on parkKey. Every
-# playing, award and appearance table carries playerID back to People, and
-# the team-level ones carry teamID back to Teams.
+# The package carries no foreign key constraints, so this file is written by
+# hand. Every pair below was checked against the data on 2026-10-10 with
+# _scratch/verify_lahman_truth.R: the parent column is unique and non-missing
+# over its whole table, and every distinct non-missing child value is present
+# in it. The printed check is in that script's output, not inferred from the
+# documentation.
 #
-# Only single-column links are listed. This app detects single-column
-# foreign keys, so a link into Teams on (yearID, teamID, lgID) is listed as
-# its teamID part alone. That is a limitation of the measurement, not a
-# claim that teamID by itself identifies a team: it does not, and a precision
-# number computed against this file inherits that.
+# Parent keys, verified unique over the whole table:
+#   People.playerID            24270 rows, 24270 distinct
+#   Schools.schoolID            1287 rows,  1287 distinct
+#   Parks.park.key               345 rows,   345 distinct
+#   TeamsFranchises.franchID     203 rows,   203 distinct
 #
-# Written from the package documentation, not read off constraints. If a pair
-# here is wrong, the recall and precision computed from it are wrong too.
+# Teams is deliberately absent. Its key is (yearID, lgID, teamID): teamID
+# alone has 257 distinct values over 3614 rows, so no single-column link into
+# Teams exists, and the columns that carry teamID (Batting, Appearances,
+# HomeGames.team.key and the rest) are not listed as links to anything. The
+# same holds for yearID and lgID. This app detects single-column foreign keys,
+# so a composite link is out of scope for the measurement rather than a miss.
+#
+# Column names are the package's own, which are inconsistent: most tables use
+# camel case (playerID, schoolID, franchID) but HomeGames and Parks use dotted
+# names (park.key, team.key, year.key). The dots are part of the name.
+#
+# TeamsFranchises.NAassoc is a self-reference: 12 distinct values, all present
+# in TeamsFranchises.franchID. It is a real link and is counted here. The app
+# cannot currently find it, because detect_fks() skips a table against itself
+# on the content path, so only the naming path can reach a self-reference.
 
+allstarfull.playerid -> people.playerid
+appearances.playerid -> people.playerid
+awardsmanagers.playerid -> people.playerid
+awardsplayers.playerid -> people.playerid
+awardssharemanagers.playerid -> people.playerid
+awardsshareplayers.playerid -> people.playerid
 batting.playerid -> people.playerid
-pitching.playerid -> people.playerid
+battingpost.playerid -> people.playerid
+collegeplaying.playerid -> people.playerid
 fielding.playerid -> people.playerid
 fieldingof.playerid -> people.playerid
 fieldingofsplit.playerid -> people.playerid
-appearances.playerid -> people.playerid
-salaries.playerid -> people.playerid
-allstarfull.playerid -> people.playerid
-battingpost.playerid -> people.playerid
-pitchingpost.playerid -> people.playerid
 fieldingpost.playerid -> people.playerid
 halloffame.playerid -> people.playerid
-awardsplayers.playerid -> people.playerid
-awardsshareplayers.playerid -> people.playerid
-collegeplaying.playerid -> people.playerid
 managers.playerid -> people.playerid
 managershalf.playerid -> people.playerid
-awardsmanagers.playerid -> people.playerid
-awardssharemanagers.playerid -> people.playerid
+pitching.playerid -> people.playerid
+pitchingpost.playerid -> people.playerid
+salaries.playerid -> people.playerid
 
 collegeplaying.schoolid -> schools.schoolid
-homegames.parkkey -> parks.parkkey
+homegames.park.key -> parks.park.key
+teams.franchid -> teamsfranchises.franchid
+teamsfranchises.naassoc -> teamsfranchises.franchid
