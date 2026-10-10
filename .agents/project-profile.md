@@ -10,6 +10,26 @@ research notes and synthetic test fixtures, review code, and commit the
 results. The Python version (`app.py`) is secondary and changes only when
 asked.
 
+## Correctness outweighs speed
+
+Amelia, 2026-10-10. Where the two conflict, take the slower, complete
+answer. This came from a measurement harness that read the first 20,000
+rows of each file so a comparison would finish in seconds: a foreign key
+is a claim about value containment, so reading part of each table broke
+the property being measured and produced recall figures that were
+artefacts of the cap. The numbers were reported before anyone noticed.
+
+In practice:
+- Measurement reads whole tables. If a cap is unavoidable, sample by key
+  so related rows survive together, and print the cap on every line of
+  output so a partial run cannot be read as a clean one.
+- The app's own sampling (10,000-row profiles, the 20,000 column-pair
+  cap, the 60-column trim) is a different trade, made for an interactive
+  session, and stays. It belongs in the open list, not in silence: a
+  count drawn from a sample says so where it is shown.
+- A slow check that answers the question beats a fast one that answers a
+  different question.
+
 ## Review, push and merge
 
 Amelia, 2026-10-09, for this repository only. Her GitHub Copilot and Codex

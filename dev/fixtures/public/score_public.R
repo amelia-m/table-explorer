@@ -48,14 +48,15 @@ truth_from_sqlite <- function(path) {
   unique(out)
 }
 
-tables_from_sqlite <- function(path, limit = 20000L) {
+tables_from_sqlite <- function(path) {
   con <- DBI::dbConnect(RSQLite::SQLite(), path)
   on.exit(DBI::dbDisconnect(con))
   tabs <- DBI::dbListTables(con)
   out <- lapply(tabs, function(t) {
-    DBI::dbGetQuery(con, sprintf(
-      "SELECT * FROM %s LIMIT %d", DBI::dbQuoteIdentifier(con, t), limit
-    ))
+    # Whole tables. A foreign key is a claim about value containment, so
+    # reading part of a table breaks the property being measured: the
+    # child rows kept are not the ones whose parents were kept.
+    DBI::dbGetQuery(con, sprintf("SELECT * FROM %s", DBI::dbQuoteIdentifier(con, t)))
   })
   stats::setNames(out, tabs)
 }
@@ -153,7 +154,7 @@ run_lahman <- function() {
   }
   csvs <- list.files(dir, pattern = "[.]csv$", recursive = TRUE, full.names = TRUE)
   csvs <- csvs[grepl("/core/", csvs, fixed = TRUE)]
-  tables <- lapply(csvs, function(f) utils::read.csv(f, stringsAsFactors = FALSE, nrows = 20000))
+  tables <- lapply(csvs, function(f) utils::read.csv(f, stringsAsFactors = FALSE))
   names(tables) <- tools::file_path_sans_ext(basename(csvs))
   truth_file <- "dev/fixtures/public/truth/lahman.txt"
   truth <- if (file.exists(truth_file)) {
@@ -178,7 +179,8 @@ run_faers <- function() {
   txts <- list.files(dir, pattern = "[.]txt$", recursive = TRUE, full.names = TRUE)
   txts <- txts[grepl("/ascii/", tolower(txts), fixed = TRUE)]
   tables <- lapply(txts, function(f) {
-    utils::read.delim(f, sep = "$", stringsAsFactors = FALSE, nrows = 20000, quote = "")
+    message("  reading ", basename(f), " (", round(file.size(f) / 1024^2), " MB)")
+    utils::read.delim(f, sep = "$", stringsAsFactors = FALSE, quote = "", comment.char = "")
   })
   names(tables) <- tolower(tools::file_path_sans_ext(basename(txts)))
   truth_file <- "dev/fixtures/public/truth/faers.txt"
