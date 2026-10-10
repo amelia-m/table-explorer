@@ -1,5 +1,99 @@
 # TODO
 
+## Detection measurement on public datasets (2026-10-10)
+
+Harness: `dev/fixtures/public/fetch.R` then
+`dev/fixtures/public/score_public.R chinook faers lahman`. It reads whole
+tables, no row cap. Chinook's ground truth is read from its declared foreign
+key constraints; FAERS and Lahman have none, so theirs are hand-written files
+under `dev/fixtures/public/truth/`.
+
+| dataset | truth links | `main` recall / precision | `feat/possible-key-names` recall / precision |
+|---|---|---|---|
+| chinook | 11 | 90.9 / 14.7 | 81.8 / 31.0 |
+| faers | 4 | 100.0 / 12.3 | 75.0 / 50.0 |
+| lahman | 21 | 71.4 / 0.9 | 95.2 / 90.9 |
+
+Read these with their limits in mind:
+
+- Lahman's ground truth is written from the CRAN package documentation, not
+  read off database constraints. Only single-column links are listed, and
+  links into `Teams` are composite on (yearID, teamID, lgID) with the
+  `teamID` part alone listed, so Lahman precision inherits that.
+- FAERS has no declared constraints either; its truth file is hand-written
+  from the FDA's documented layout.
+- Lahman's one miss on the rules branch is
+  `homegames.parkkey -> parks.parkkey`.
+- Lahman is the easy case: 31 tables but nearly every real link is
+  `playerid` into `people.playerid`, which the naming rules already catch.
+  It earns its place as a regression guard, because a signal that recovers
+  unconventional links by admitting junk shows up there first.
+
+Open items from this work:
+
+- [ ] **Pagila is deferred** (Amelia, 2026-10-10). It needs a running Postgres
+      instance, the only one of the four datasets that is not a file or a CRAN
+      package. Chinook already covers the conventionally named,
+      declared-constraint case, so nothing is blocked. Left open rather than
+      closed because the harness still names Pagila in its dataset list and
+      `score_public.R pagila` prints a SKIP line: either leave it as a known
+      gap or say so in the harness README.
+- [ ] **The Lahman package lives in the user library, not the project renv
+      library.** It was installed with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
+      so that worktrees can see it. A clone on another machine, and CI, will
+      not have it: `score_public.R lahman` prints a SKIP line there rather
+      than failing, so a CI run that silently stops measuring Lahman is
+      possible. Either add Lahman to the renv lockfile, or make the harness
+      exit non-zero when a dataset named on the command line is unavailable.
+- [ ] **`dev/check.R` runs only the synthetic scorer, not the public
+      harness.** The public figures are therefore measured by hand and can
+      drift from the branch they are quoted against. Decide whether
+      `dev/check.R` (and CI) should run Chinook and Lahman, which take about
+      a minute together, or whether the public harness stays a manual step.
+- [ ] **Rule 4 (two-signal floor) from the detection work is still not
+      done**: a single content signal cannot raise a candidate when the
+      child column's distinct count is below a threshold (start at 5); it
+      needs overlap plus cardinality, or a naming signal. It is listed in
+      the 2026-10-09 block above and has not been built.
+- [ ] **`detect_shared_columns()` has no `truncated` attribute**, so a
+      shared-columns list cut short by a cap cannot be told from a complete
+      one where it is shown. Assumed, not verified: the cap is reachable on
+      a wide schema. Checking `attributes()` of the return value on the
+      real extract would settle it.
+- [ ] **The 1:1 relationship path draws from `pk_map` only**, so a pair whose
+      parent is near-unique rather than strictly unique is never labelled
+      one-to-one. Not verified against the real extract; reading the
+      cardinality column for a known near-unique parent would settle it.
+- [ ] **`dev/check.R` needs `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` in a fresh
+      worktree** and does not set it itself, so the first run in a new
+      worktree fails on a missing library rather than saying why. Either set
+      it inside the script or print the reason.
+- [ ] **PR #54 (`feat/detection-rules-scoring`) merges behind settings**
+      (Amelia, 2026-10-10). It holds three rules: the chance-overlap discount,
+      the cardinality floor at 12 distinct values, and the requirement that a
+      foreign key's parent be a key or near key. Together they roughly double
+      precision on Chinook and FAERS and drop recall, and the lost links share
+      a shape: the child name does not match the parent table, the values are
+      small dense integers, the parent is a key. Since the hard-coded rules
+      are becoming settings, the question is no longer whether to merge #54
+      but which of its three rules are on by default. **That is decided from
+      the sweep, not before it**, and nobody has yet measured the three rules
+      separately: all three figures quoted anywhere are for all three applied
+      at once. The sweep's per-rule rows will settle it.
+- [ ] **Detection presets, now three pieces.** The hard-coded rules become
+      settings and the preset list is chosen from measurement, not proposed
+      (Amelia, 2026-10-10). So: the containment signal lands first (contract
+      `docs/contracts/2026-10-10-containment-signal.md`, agent running); then
+      the settings and sweep contract
+      (`docs/contracts/2026-10-10-detection-settings-and-sweep.md`, approved,
+      waiting on containment because both change `R/utils_inference.R`); then
+      Amelia reads the sweep, picks candidate presets, checks them against her
+      own real extract, and the preset UI contract
+      (`docs/contracts/2026-10-10-detection-presets-draft.md`) is finished
+      with that list and dispatched. Its one remaining open question is
+      whether a chosen preset is remembered between sessions; proposed per
+      session only, recorded in the export.
+
 ## Open items from the 2026-10-09 session
 
 - [ ] **Vendored JavaScript is watched by nothing.** `inst/app/www/vendor/`
