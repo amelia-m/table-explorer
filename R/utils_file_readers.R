@@ -513,6 +513,41 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       skipped
     ))
   }
+
+  # Candidates this app wrote into its own namespaced block. They come
+  # back as detected links awaiting review, never as declared ones: an
+  # unconfirmed guess that survives a round trip must still be reviewed.
+  ext <- schema[["x-tableexplorer"]]
+  n_cand <- 0L
+  for (cdef in ext$candidate_relationships %||% list()) {
+    if (
+      is.null(cdef$from_table) || is.null(cdef$from_col) ||
+        is.null(cdef$to_table) || is.null(cdef$to_col)
+    ) {
+      next
+    }
+    n_cand <- n_cand + 1L
+    relationships[[length(relationships) + 1]] <- list(
+      from_table = txt(cdef$from_table),
+      from_col = txt(cdef$from_col),
+      to_table = txt(cdef$to_table),
+      to_col = txt(cdef$to_col),
+      detected_by = txt(cdef$detected_by %||% "import"),
+      confidence = txt(cdef$confidence %||% "low"),
+      score = suppressWarnings(as.numeric(cdef$score %||% NA_real_)),
+      signals = list(),
+      reasons = c(
+        "candidate carried through a data-dict round trip",
+        if (nzchar(txt(cdef$evidence))) txt(cdef$evidence)
+      )
+    )
+  }
+  if (n_cand > 0) {
+    notify_fn(sprintf(
+      "%d candidate link(s) read back from this file: still to review, not declared.",
+      n_cand
+    ))
+  }
   list(
     tables = tables,
     relationships = relationships,
