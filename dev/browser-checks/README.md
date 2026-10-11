@@ -5,6 +5,10 @@ YAML round trip, driven in headless Chromium with Playwright. They complement
 `tests/testthat` (which covers the logic) by exercising the real UI: DT
 tables, the review dialog, downloads and Import Schema.
 
+Nothing runs them for you: there is no CI workflow in the repository, and the
+R test suite does not start a browser. They are a by-hand check to run when
+the Data Dictionary tab, the privacy review or the data-dict mapping changes.
+
 Needs: R with the app's dependencies, Node, and Playwright
 (`npm install playwright`, or point `PLAYWRIGHT_MODULE` at an existing
 install and `CHROMIUM` at a browser executable).
@@ -12,15 +16,34 @@ install and `CHROMIUM` at a browser executable).
 Run from the repository root:
 
 ```sh
-Rscript dev/browser-checks/sample_app.R &   # sample_data/ preloaded, port 8771
-Rscript dev/browser-checks/plain_app.R &    # empty app, port 8772
-node dev/browser-checks/privacy_check.js    # writes ui_data_dict.yaml to OUT
-node dev/browser-checks/import_check.js     # imports it, re-exports ui_data_dict_2.yaml
-diff "$TMPDIR/te-browser-checks/ui_data_dict.yaml" "$TMPDIR/te-browser-checks/ui_data_dict_2.yaml"
+export OUT=_scratch/browser-checks           # so the diff below has a known path
+Rscript dev/browser-checks/sample_app.R &    # sample_data/ preloaded, port 8771
+Rscript dev/browser-checks/plain_app.R &     # empty app, port 8772
+node dev/browser-checks/privacy_check.js     # writes ui_data_dict.yaml to OUT
+node dev/browser-checks/import_check.js      # imports it, re-exports ui_data_dict_2.yaml
+diff "$OUT/ui_data_dict.yaml" "$OUT/ui_data_dict_2.yaml"
 ```
 
-`OUT` defaults to `te-browser-checks` in the system temp directory; set it to
-keep the downloads and screenshots elsewhere.
+`OUT` holds the downloads and screenshots. Both scripts default it to
+`te-browser-checks` in the system temp directory, which is why the example
+sets it: the temp path differs by platform.
+
+Environment variables, all optional:
+
+| Variable | Read by | Default |
+|---|---|---|
+| `REPO` | both R scripts | `.`; they `setwd()` to it and source `R/` directly |
+| `PORT` | each R script and its checker | 8771 for the sample app, 8772 for the empty one |
+| `MINCONF` | `sample_app.R` | `medium`, the minimum confidence the stubbed detection runs at |
+| `OUT` | both checkers | `te-browser-checks` in the system temp directory |
+| `PLAYWRIGHT_MODULE` | both checkers | `playwright` on `NODE_PATH` |
+| `CHROMIUM` | both checkers | Playwright's own browser |
+
+`sample_app.R` is not the app as a user meets it: it replaces the upload,
+database and detection modules with stubs, so `sample_data/` is loaded at
+start and one full scan runs immediately, with the null-pattern signal off.
+That is what keeps the numbers below stable. `plain_app.R` is the real app
+with nothing loaded.
 
 ## Expected output (sample data)
 
@@ -38,7 +61,10 @@ keep the downloads and screenshots elsewhere.
   applies; the review filter shows 4 rows; a Label edit saves.
 - 9: the YAML has `$version: 0.1.0`, the label, `display: restricted` and
   `units: USD` (`relationships:` is false: the sample has only detected
-  links, which go under `todo`).
+  links, which go under `todo`). The same step downloads the CSV and the
+  Markdown: it prints the CSV header row, and for the Markdown that the
+  private note reads `private (confirmed)` and that no real email address
+  survived into it.
 - 10: a restored session keeps the banner count and the pattern.
 
 `import_check.js`: "Schema imported: 7 table(s)", 32 rows, restricted
