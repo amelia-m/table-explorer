@@ -226,7 +226,7 @@ f4.arrow([(DX+DW/2, 200), (DX+DW/2, 250)], "detected", lx=DX+DW/2+8, ly=230, anc
 f4.arrow([(SR, c(100)), (436, c(100)), (436, c(250)-6), (DX, c(250)-6)])
 f4.arrow([(SR, c(220)), (DX, c(250)+6)])
 # tabs
-vw = [(40, "ERD Diagram"), (110, "Relationships"), (180, "Data Dictionary"), (250, "Export")]
+vw = [(40, "ERD"), (110, "Relationships"), (180, "Data Dictionary"), (250, "Export")]
 for y, t in vw:
     f4.box(VX, y, VW, 40, [t], cls="node")
 DR = DX + DW
@@ -241,7 +241,7 @@ f4.arrow([(720, c(250)+6), (VX, c(250)+6)])
 WB = 410
 # Plain edge, not accent: orange is reserved for a choice lapsing or data stopping
 f4.arrow([(VX+VW/2, c(250)+20), (VX+VW/2, WB), (SX+SW/2+30, WB), (SX+SW/2+30, 320)],
-         "ERD Diagram, Relationships and Data Dictionary write back",
+         "ERD, Relationships and Data Dictionary write back",
          lx=VX+VW/2-12, ly=WB-7, anchor="end")
 f4.text(IX, 437, "Tabs read visible_tables_rv / visible_rels_rv, never the shared values directly; detection and Export bypass that filter.", "t small muted")
 

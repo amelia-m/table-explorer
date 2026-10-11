@@ -72,7 +72,7 @@ check at the top of `erd_model()` in `R/utils_erd_model.R`.
 ![How inputs write shared state and how the tabs read it](diagrams/app-data-flow.svg)
 
 Inputs write the shared reactive values, and so do three of the tabs: the ERD
-Diagram tab and the Relationships tab write `confirmed_rels_rv` and
+tab and the Relationships tab write `confirmed_rels_rv` and
 `false_positives_rv` through `review_confirm()` and `review_suppress()`, and
 the Data Dictionary tab writes `dictionary_rv` on every edit. A change made in
 one tab is therefore visible in the others at once, which is the point, but it
@@ -82,8 +82,8 @@ exception: it is passed no writable review state and only reads.
 The tabs do not read the shared values directly. `visible_tables_rv` and
 `visible_rels_rv` sit in between and apply two view-only filters: "hide empty
 tables" from the sidebar, and the relationship-source filter. Both reach the
-ERD Diagram, Network overview, Table Details, Relationships and Data
-Dictionary tabs. Detection and the Export tab deliberately bypass them and
+ERD, Network overview, Table Details, Relationships and Data Dictionary tabs.
+Detection and the Export tab deliberately bypass them and
 work from every loaded table, so an export can contain tables and links the
 diagram is not showing.
 
