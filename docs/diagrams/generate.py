@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Draw the diagrams in docs/internals.md as standalone SVG files.
 
-Run from anywhere: python3 docs/diagrams/generate.py
+Run from anywhere: python docs/diagrams/generate.py
+(`python3` on macOS and Linux; on Windows `python3` is usually the Microsoft
+Store alias, which answers "Python was not found".)
 Each file carries its own styles (light, and dark under
 prefers-color-scheme) because GitHub shows SVGs as images, where page CSS
 and web fonts don't reach. Edit the coordinates below and re-run when the
@@ -183,7 +185,7 @@ f3.text(772, 286, "duplicates or NA", "t small accent-t", "middle")
 f3.text(20, 312, "A data-dict table with no key stays keyless only while it has no rows.", "t small muted")
 
 # ---------- Figure 4: app data flow ----------
-f4 = Fig(900, 400, "How inputs write the app's shared state, how state is derived, and which tabs read it.").render("f4")
+f4 = Fig(900, 445, "How inputs write the app's shared state, how state is derived, which tabs read it through the visible-only filter, and which tabs write back to it.").render("f4")
 IX, IW = 20, 150
 SX, SW = 250, 170
 DX, DW = 500, 160
@@ -194,7 +196,7 @@ c = lambda y: y + 20
 BUS = 222
 ins = [(40, "Upload files", None, "tables"), (110, "Import Schema", 1, "tables, links, keys, labels"),
        (180, "Database", 1, "tables, links, keys"), (280, "Remove / Clear all", None, "resets “not private”"),
-       (340, "Restore session", 1, "replaces all state")]
+       (340, "Restore session", 1, "replaces tables, dict, keys")]
 for y, t, lab, sub in ins:
     f4.box(IX, y, IW, 40, [t], cls="node", sub=sub)
 st = [(40, "all_tables_rv"), (100, "schema_rels_rv"), (160, "declared_pks_rv"), (220, "manual + confirmed"), (280, "dictionary_rv")]
@@ -224,7 +226,7 @@ f4.arrow([(DX+DW/2, 200), (DX+DW/2, 250)], "detected", lx=DX+DW/2+8, ly=230, anc
 f4.arrow([(SR, c(100)), (436, c(100)), (436, c(250)-6), (DX, c(250)-6)])
 f4.arrow([(SR, c(220)), (DX, c(250)+6)])
 # tabs
-vw = [(40, "ERD"), (110, "Relationships"), (180, "Data Dictionary"), (250, "Export")]
+vw = [(40, "ERD Diagram"), (110, "Relationships"), (180, "Data Dictionary"), (250, "Export")]
 for y, t in vw:
     f4.box(VX, y, VW, 40, [t], cls="node")
 DR = DX + DW
@@ -235,8 +237,17 @@ for y, _ in vw:
 # dictionary route underneath
 f4.arrow([(SX+SW/2, 320), (SX+SW/2, 372), (720, 372), (720, c(180)+6), (VX, c(180)+6)], "labels, privacy", lx=560, ly=366)
 f4.arrow([(720, c(250)+6), (VX, c(250)+6)])
+# Tabs are not read-only: three of them write the shared values back
+WB = 410
+# Plain edge, not accent: orange is reserved for a choice lapsing or data stopping
+f4.arrow([(VX+VW/2, c(250)+20), (VX+VW/2, WB), (SX+SW/2+30, WB), (SX+SW/2+30, 320)],
+         "ERD Diagram, Relationships and Data Dictionary write back",
+         lx=VX+VW/2-12, ly=WB-7, anchor="end")
+f4.text(IX, 437, "Tabs read visible_tables_rv / visible_rels_rv, never the shared values directly; detection and Export bypass that filter.", "t small muted")
 
 for name, fig in [("privacy-decision", f1), ("data-dict-round-trip", f2),
                   ("primary-keys", f3), ("app-data-flow", f4)]:
-    with open(os.path.join(OUT, name + ".svg"), "w", encoding="utf-8") as fh:
+    # newline="\n": the repository pins SVGs to LF (.gitattributes), and
+    # without this every run on Windows rewrites all four files with CRLF
+    with open(os.path.join(OUT, name + ".svg"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(fig.svg())
