@@ -43,6 +43,24 @@ test_that("user choices beat patterns, which beat automatic flags", {
   expect_false(dict_privacy(d, "t", "case_notes")$private)
 })
 
+test_that("the review queue counts each flagged column's values", {
+  tabs <- list(t = data.frame(
+    email = c("a@x.io", NA),
+    home_phone = c(NA_character_, NA_character_),
+    n = 1:2
+  ))
+  q <- privacy_review_queue(tabs, list())
+  expect_equal(q$n_values[q$column == "email"], 1L)
+  # All-NA: flagged by name, but there is nothing in it to disclose
+  expect_equal(q$n_values[q$column == "home_phone"], 0L)
+})
+
+test_that("an empty review queue still carries n_values", {
+  q <- privacy_review_queue(list(t = data.frame(n = 1:2)), list())
+  expect_equal(nrow(q), 0)
+  expect_true("n_values" %in% names(q))
+})
+
 test_that("reviews confirm or clear automatic flags until the reason changes", {
   tabs <- list(t = data.frame(email = c("a@x.io", "b@x.io"), dob = c("x", "y"), n = 1:2))
   q <- privacy_review_queue(tabs, list())
