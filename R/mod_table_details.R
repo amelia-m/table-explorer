@@ -129,7 +129,14 @@ mod_table_details_server <- function(
               )
             ),
             div(style = "margin-bottom: 12px;", pills),
-            DT::DTOutput(session$ns(paste0("dt_col_", make.names(t))))
+            # Closed by default: with 50 tables the page is unreadable when
+            # every column list is open, and the pills above already carry
+            # the shape, keys and links
+            tags$details(
+              class = "tbl-cols",
+              tags$summary(sprintf("Columns (%d)", ncol(df))),
+              DT::DTOutput(session$ns(paste0("dt_col_", make.names(t))))
+            )
           )
         })
       )
