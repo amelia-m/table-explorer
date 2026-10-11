@@ -31,7 +31,7 @@ be diffed and kept up to date.
 ## Where we were in September 2026
 
 This section is the starting point the plan was written against, kept for
-the record. Steps 1 to 5 have since changed all of it: the ERD Diagram tab
+the record. Steps 1 to 5 have since changed all of it: the ERD tab
 now draws cards with crow's-foot ends in `inst/app/www/erd.js`, the
 visNetwork view has moved to the Network overview tab, cardinality and the
 rest come from `R/utils_erd_model.R`, and `generate_mermaid_erd()` in
@@ -200,12 +200,12 @@ fixes are small:
 
 ## Phase 4: Maintenance - not started
 
-Nothing in this phase exists on `main`: a search of `R/` on 2026-10-10 found
+Nothing in this phase exists on `main`: a search of `R/` on 2026-10-11 found
 no session diff, no lints panel and no reviewer or review-timestamp field.
 The confirmed and suppressed sets are saved with the session (the `review`
-element of `save_session_json()` in `R/utils_export.R:591`), but carry no
-reviewer and no per-relationship time: the session's one `timestamp` records
-the save itself.
+element of `save_session_json()` at `R/utils_export.R:596`, passed through at
+line 634), but carry no reviewer and no per-relationship time: the session's
+one `timestamp` records the save itself.
 
 - **Session diff:** compare the current tables and relationships with a
   saved session and report added, removed and changed tables, columns and
@@ -223,14 +223,14 @@ the save itself.
 
 ## Suggested order and size
 
-| Step | Scope | Size | Status on `main`, checked 2026-10-10 |
+| Step | Scope | Size | Status on `main`, checked 2026-10-11 |
 |---|---|---|---|
-| 1 | Phase 1 model + tests | M | Done: `R/utils_erd_model.R` (`erd_model()` at line 96, roles and subject areas at 268-338), tested in `tests/testthat/test-erd_model.R` |
+| 1 | Phase 1 model + tests | M | Done: `R/utils_erd_model.R` (`erd_model()` at line 96, table roles at 268-274, subject areas at 310-338), tested in `tests/testthat/test-erd_model.R` |
 | 2 | Mermaid/DBML exports on the model (quick visible win, easy to test) | S–M | Done: `R/utils_export.R`, tested in `tests/testthat/test-export_utils.R` |
 | 3 | Diagram view: cards, ports, crow's-foot, legend, pan/zoom | L | Done: `inst/app/www/erd.js` with `elkjs` and `svg-pan-zoom` vendored in `inst/app/www/vendor/` |
-| 4 | Focus, detail levels, subject areas, orphans, line actions | M | Done: the toolbar at `R/mod_erd.R:35-96` (focus, hops 1-4, detail, subject areas, lookup links, direction, sources, low-confidence), the unconnected-tables panel at 317-327, and confirm / unconfirm / suppress at 303-310 |
-| 5 | Network-overview fixes; SVG/PNG export; data dictionary | M | Done: the legend reads "identical values" (`R/mod_network.R:45`), `erdDownload()` saves SVG and PNG (`inst/app/www/erd.js`, buttons at `R/mod_erd.R:98-115`), and the Data Dictionary tab is `R/mod_dictionary.R` with the optional dbt 1.9 constraints in `R/utils_export.R` |
-| 6 | Session diff, lints, review metadata | M | Not started: no session diff, lints panel or reviewer/timestamp field anywhere in `R/` |
+| 4 | Focus, detail levels, subject areas, orphans, line actions | M | Done: the toolbar at `R/mod_erd.R:58-120` (focus, hops 1-4, detail, subject areas, lookup links, direction, sources, low-confidence), the unconnected-tables panel at 348-352, and confirm / unconfirm / suppress at 328-334 |
+| 5 | Network-overview fixes; SVG/PNG export; data dictionary | M | Done: the legend reads "identical values" (`R/mod_network.R:45`), `erdDownload()` saves SVG and PNG (`inst/app/www/erd.js`, buttons at `R/mod_erd.R:128-137`), and the Data Dictionary tab is `R/mod_dictionary.R` with the optional dbt 1.9 constraints in `R/utils_export.R` |
+| 6 | Session diff, lints, review metadata | M | Not started: no session diff, lints panel or reviewer/timestamp field anywhere in `R/`. The relationship review flow that shipped in #32 records decisions, not who made them or when |
 
 Each step is its own PR, with tests. For the UI steps that means a
 headless-Chromium check on the sample data and a synthetic 50-table
