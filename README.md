@@ -12,7 +12,7 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 
 | Category | Detail |
 |---|---|
-| **File support** | CSV, TSV, Excel (xlsx/xlsm/xls), ODS, Parquet, JSON, NDJSON, SPSS, SAS, Stata, RDS, RData, Access (.mdb/.accdb) |
+| **File support** | 20 extensions: CSV, TSV and TXT (both tab-delimited), Excel (xlsx/xlsm/xls), ODS, Parquet, JSON, NDJSON, SPSS (sav/por), SAS (sas7bdat/xpt), Stata (dta), RDS, RData (rdata/rda), Access (mdb/accdb) |
 | **Database connectors** | PostgreSQL, MySQL, SQL Server, SQLite, Snowflake, BigQuery, Redshift, Oracle |
 | **Schema import** | JSON/YAML schema files: tables and columns, foreign keys (inline `foreign_key` or a `relationships` list) and primary keys (`primary_key: true` on a column, or a table-level `primary_key` list); and data-dict YAML files. Declared primary keys (also read from database connections) take precedence over detection and are saved with the session |
 | **7-signal FK detection** | Naming conventions, fuzzy name similarity, value overlap, cardinality, format fingerprint, distribution similarity, null-pattern correlation |
@@ -31,9 +31,16 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown / data-dict YAML), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
 
-### Architecture (golem package)
+### Architecture
 
-The app is structured as an R package using the [golem](https://thinkr-open.github.io/golem/) framework.
+The app is an ordinary R package that uses one piece of
+[golem](https://thinkr-open.github.io/golem/): `run_app()` wraps the Shiny app
+in `golem::with_golem_options()` (`R/run_app.R:11`). Nothing else in the
+package calls golem. `inst/golem-config.yml` is present but inert: there is no
+`R/app_config.R`, so neither `app_sys()` nor `get_golem_config()` exists to
+read it, and the `shiny.maxRequestSize` it names has no effect. Whether golem
+stays at all is still open (see `TODO.md` and `dev/code-review-backlog.md`
+item D1).
 
 ```
 R/
@@ -51,24 +58,32 @@ R/
   mod_dictionary.R       Data Dictionary tab (edits, privacy review)
   mod_export.R           Export panel (CSV, dbt YAML, Mermaid, DBML, ELK, dictionary, session)
   utils_inference.R      7-signal PK/FK detection engine
-  utils_file_readers.R   Multi-format file parser (18 formats)
+  utils_file_readers.R   Multi-format file parser (20 extensions)
   utils_db_connectors.R  Database connection, introspection, loading
   utils_erd_model.R      Shared ERD model: types, key badges, cardinality, roles
   utils_export.R         dbt YAML, Mermaid ERD, DBML, ELK JSON, data dictionary, data-dict YAML, session JSON
   utils_privacy.R        Personal-data flags, review state and name patterns
   utils_vis.R            ERD network builder (build_network)
   utils_helpers.R        Shared helpers (%||%)
+  tableexplorer-package.R  Package-level docs and imports
 inst/
-  app/www/               Static assets (styles.css, app.js)
-  extdata/               Sample data + schema.json
-  golem-config.yml       App configuration
+  app/www/               Static assets (styles.css, app.js, erd.js); vendored
+                         elkjs and svg-pan-zoom under www/vendor/
+  extdata/               Sample data (the 4-table subset) + schema.json
+  golem-config.yml       Inert: nothing in the package reads it
 dev/
   01_start.R             One-time project setup
   02_dev.R               Development helpers
   03_deploy.R            Deployment helpers
+  fixtures/              Synthetic 52-table Access-style schema + detection scorer
+  browser-checks/        Headless-Chromium checks of the dictionary and privacy UI
+  check_erd_geometry.js  Geometry check for an exported ELK graph
+  code-review-backlog.md Open review findings, by reviewer
 tests/testthat/          Unit tests (~1,000 expectations across 7 suites)
 docs/internals.md        Diagrams of privacy, data-dict, primary keys, data flow
 docs/diagrams/           The diagram SVGs and generate.py that draws them
+docs/erd-redesign-plan.md  The ERD redesign plan and what of it is done
+renv.lock, renv/         Pinned package versions, activated by .Rprofile
 ```
 
 Diagrams of the privacy rules, the data-dict round trip, primary-key precedence and the data flow between modules: [docs/internals.md](docs/internals.md).
@@ -92,6 +107,18 @@ app_server.R
 # Install from GitHub
 remotes::install_github("amelia-m/table-explorer")
 ```
+
+**Working in a clone.** The repository carries a renv lockfile, and
+`.Rprofile` sources `renv/activate.R`, so opening the project activates renv
+and R will report any package that is missing or out of date:
+
+```r
+renv::restore()   # install the pinned versions into the project library
+renv::status()    # what differs from renv.lock
+```
+
+To run something outside that library on purpose, set
+`RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` for that call.
 
 **Optional packages** (installed on demand for specific formats/databases):
 
@@ -126,10 +153,16 @@ run_app()
 
 ### The 7 inference signals
 
+The seven signals below are the families a detected link is reported under.
+Inside the engine they are twelve weighted variants (`weight_map` in
+`R/utils_inference.R`), collapsed to these seven names by `label_map` in the
+same file; the weight column gives each family's range. A signal the engine
+raises but does not weight counts as 0.1.
+
 | Signal | What it measures | Weight |
 |---|---|---|
 | **Naming** | FK column named for the target table's entity (see conventions below); 0.90 when role/source words precede it (`referring_provider_id`) | 0.90-1.00 |
-| **Name similarity** | Jaro-Winkler fuzzy match between column/table names | 0.60 |
+| **Name similarity** | Jaro-Winkler fuzzy match between column/table names | 0.25-0.60 |
 | **Value overlap** | Fraction of values in column A that exist in column B | 0.55-0.90 |
 | **Cardinality** | Whether column A looks like an FK (many rows, few unique values) | 0.95 |
 | **Format fingerprint** | Whether both columns share value format (UUID, ISO date, email, etc.) | 0.40 |
@@ -293,9 +326,22 @@ See `dev/03_deploy.R` for deployment helpers.
 # Recommended: uses devtools and loads the package properly
 devtools::test()
 
-# Or directly with testthat:
+# No install needed: tests/testthat/setup.R sources R/ itself
+testthat::test_local()
+
+# Or against an installed package:
 testthat::test_package("tableexplorer")
 ```
+
+Detection changes are also scored against the synthetic 52-table fixture,
+which is the repository's standing check on `R/utils_inference.R`:
+
+```sh
+Rscript dev/fixtures/score_detection.R
+```
+
+See `dev/fixtures/README.md` for the baseline to compare against, and
+`dev/browser-checks/README.md` for the headless-Chromium UI checks.
 
 ---
 
@@ -344,16 +390,29 @@ streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
 
 ## Sample data
 
-The `sample_data/` directory contains a 4-table e-commerce dataset:
+The `sample_data/` directory contains a 7-table e-commerce dataset:
 
 ```
-orders.csv          customers.csv        products.csv        order_items.csv
------------         -------------        ------------        ---------------
-order_id (PK)       customer_id (PK)     product_id (PK)     item_id (PK)
-customer_id  -->    name                 name                 order_id     -->
-product_id   -->    email                category             product_id   -->
-amount              country              price                quantity
-order_date                                                    unit_price
+customers.csv       orders.csv          order_items.csv     products.csv
+-------------       ----------          ---------------     ------------
+customer_id (PK)    order_id (PK)       item_id (PK)        product_id (PK)
+name                customer_id  -->    order_id     -->    name
+email               product_id   -->    product_id   -->    category
+country             quantity            quantity            price
+                    amount              unit_price
+                    order_date
+
+customer_addresses.csv   product_suppliers.csv   suppliers.csv
+----------------------   ---------------------   -------------
+customer_id      -->     product_id      -->     supplier_id (PK)
+address_type             supplier_id     -->     name
+street                   unit_cost               country
+city                     lead_days               contact_email
+country
 ```
 
-The app auto-detects `customer_id` in `orders` -> `customers`, `product_id` in `orders` -> `products`, etc.
+The app auto-detects `customer_id` in `orders` -> `customers`, `product_id` in `orders` -> `products`, and so on. Neither `customer_addresses` nor `product_suppliers` has a single-column primary key: the first column repeats in both, so they are the junction and child-table cases.
+
+`inst/extdata/sample_data/` holds the four-table subset (customers, orders,
+order_items, products) that ships with the installed package, alongside
+`schema.json`.
