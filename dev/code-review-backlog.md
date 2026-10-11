@@ -48,9 +48,11 @@ overview tab. Their file and line references have been corrected in place;
 I2, M2 and M3 are still real, I4 was fixed by the split.
 
 **The test suite passes.** `testthat::test_local()` on 2026-10-10: no
-failures, four skips (three for absent optional packages, one for M16's empty
-test). The "5 failures" in *Verified clean* below was true of the review
-branch and is no longer true of `main`.
+failures, four skips. Three are optional-package skips, and two of those skip
+because the package is *present* (readxl and haven, whose tests cover the
+notification shown when they are missing); mdbtools is genuinely absent. The
+fourth is M16's empty test. The "5 failures" in *Verified clean* below was
+true of the review branch and is no longer true of `main`.
 
 Resolved since the review: I4, I12, M17, P3, and D5 answered by the code.
 Facts changed but still open: I6, I7, I10, M1, M2, M5, M6, M13, D4, D6.
