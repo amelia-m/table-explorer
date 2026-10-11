@@ -13,7 +13,7 @@ Rscript dev/fixtures/score_detection.R          # medium confidence and up
 Rscript dev/fixtures/score_detection.R high
 ```
 
-Current baseline, from a run on 2026-10-10:
+Current baseline, from a run on 2026-10-11:
 
 ```
 reported: 749 (high 157, low 592)
@@ -29,10 +29,16 @@ The fixture is deterministic (`set.seed(7)` in `access52.R`), so those
 numbers are exact rather than approximate: any difference is a real change
 in detection, not sampling noise.
 
-**It reports, it does not fail.** The script prints the counts and exits 0
-whatever they are, so its exit status is not a check. Read the numbers, or
-compare them against the block above. The same goes for the lists it prints
-under `missed:` and `most common false links:` when there are any.
+**The script reports; the callers assert.** Run on its own,
+`score_detection.R` prints the counts and exits 0 whatever they are, so its
+own exit status is not a check: read the numbers, and the lists it prints
+under `missed:` and `most common false links:`. What guards detection is the
+two callers that parse the `medium+:` line and fail on it, both requiring
+`real >= want` and `false == 0`: `dev/check.R` (check 4) and the "Score
+detection against the fixture" step in `.github/workflows/r-ci.yml`. So a
+scoring change that loses a link or invents one fails CI, but only if it goes
+through one of those two. Do not add an exit code to this script without
+looking at both.
 
 To look at the schema in the app, source the file and pass
 `access52_fixture()$tables` to the app the way
