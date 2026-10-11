@@ -5,9 +5,11 @@ YAML round trip, driven in headless Chromium with Playwright. They complement
 `tests/testthat` (which covers the logic) by exercising the real UI: DT
 tables, the review dialog, downloads and Import Schema.
 
-Nothing runs them for you: there is no CI workflow in the repository, and the
-R test suite does not start a browser. They are a by-hand check to run when
-the Data Dictionary tab, the privacy review or the data-dict mapping changes.
+Nothing runs them for you. `dev/check.R` and `.github/workflows/r-ci.yml`
+run the test suite and the detection scorer, neither of which starts a
+browser, and CI installs no Node or Playwright. These are a by-hand check to
+run when the Data Dictionary tab, the privacy review or the data-dict
+mapping changes.
 
 Needs: R with the app's dependencies, Node, and Playwright
 (`npm install playwright`, or point `PLAYWRIGHT_MODULE` at an existing
@@ -46,6 +48,15 @@ That is what keeps the numbers below stable. `plain_app.R` is the real app
 with nothing loaded.
 
 ## Expected output (sample data)
+
+These values have not been re-run since the privacy review changed: the
+flag notification now stays until dismissed instead of clearing after 8
+seconds, and the review queue hides flagged columns that hold no values,
+behind a "Hide N flagged columns with no values" box that appears only when
+there is such a column. No column in `sample_data/` is empty (checked by
+reading all seven files), so the counts below should be unaffected, but
+that is reasoning, not a run. Re-run the block above and correct anything
+that has moved.
 
 `privacy_check.js`:
 

@@ -25,11 +25,14 @@ The primary implementation is **R/Shiny**. A **Python/Streamlit** version also e
 | **Data Dictionary tab** | One row per column: type, format (email, phone, ISO date, code, free text…), missing %, unique count, text lengths or value range, PK/FK/UK, what it references (and whether that link is declared, confirmed or detected), privacy and example values. Add a label, description, units, allowed values (`A = Active; I = Inactive`) and details per column, and a description per table. Edits are saved with the session. Descriptions also go into the dbt, DBML and Mermaid exports; labels, units, allowed values and details go into the CSV, Markdown and data-dict YAML. Download as CSV, Markdown or data-dict YAML (these follow "Hide empty tables") |
 | **Privacy** | Columns whose name (`email`, `dob`, `mrn`, `zip5`…) or values (emails, phone numbers, SSNs) suggest personal data are flagged and treated as private until you review them: a banner and a review dialog (which never shows values) let you confirm or reject each flag. You can also mark columns private yourself (select rows → Private), give name patterns that are always private (`*_name, dob*, patients.notes`), hide examples without calling a column private, or turn examples off (hiding examples leaves the value range of a non-private number or date column visible; mark it private to hide that too). Private columns keep their type, format, counts and text lengths but show no example values or value range, and are exported as `display: restricted`. A "not private", "not personal" or "show examples" choice holds only for the data it was made for: if a table is replaced (overwrite, reload, new upload) that column goes back to private until you decide again; removing tables drops those choices. **A saved session holds all the loaded data, private columns included** |
 | **data-dict YAML** | Export and import the [data-dict](https://data-dict.tidyverse.org/) format (spec 0.1.0, written in plain R; the data-dict tool isn't needed). Exports carry types, labels, descriptions, units, allowed values, constraints, examples, and declared/manual/confirmed relationships as joins; unconfirmed detected links, and links to a column that isn't a single-column key, go under `todo`. Import Schema reads data-dict files back: tables (with their column types), primary keys, joins (as declared links) and dictionary entries, without overwriting your own edits or privacy decisions |
-| **Relationships tab** | Grouped by detection method with confidence scores, signal chips, suppress/restore controls |
+| **Relationships tab** | One sortable row per link: Source (declared / manual / confirmed / to review), from and to table and column, Method, Confidence, Score %, Child rows, Parent rows, Overlap % (`n/a` where there is nothing to measure), Evidence (the reason text with its numbers, falling back to the signal names) and per-row Confirm and Suppress buttons. Filter by source, tick "Show low confidence" or "To review only", and confirm, unconfirm, suppress or restore the selected rows. "Export CSV" on the same toolbar saves the table |
 | **Name cleaning** | Automatic table and column name cleaning via janitor conventions, with full rename log |
 | **Manual overrides** | Add relationships auto-detection misses |
 | **Exports** | Relationships CSV (with source and review status), dbt schema.yml (with descriptions; optional dbt 1.9+ constraints for PKs and declared/confirmed FKs, which turns on an enforced contract and adds a generic `data_type` per column to adjust for your warehouse), Mermaid ERD, DBML (dbdiagram.io / dbdocs), ELK graph JSON (elkjs), data dictionary (CSV / Markdown / data-dict YAML), session save/restore (JSON, including dictionary edits) |
 | **Duplicate handling** | Detects re-uploads by file size/dimensions; offers overwrite, keep both, or skip |
+| **Collapsible sidebar** | Hide the controls to give the diagram the width. What is left behind is a labelled rail reading "DATA & DETECTION" where the sidebar was, not a bare chevron, so the way back is where the thing that vanished went |
+| **Busy indicator** | A "Working..." status appears while Shiny is busy for more than a moment (switching to Table Details on a wide schema can take seconds), so a slow redraw does not read as a hung app |
+| **Build stamp** | The footer names the build on screen: package version, short commit sha and commit date, with a trailing `+` when the checkout has uncommitted changes. The sha and date come from an `inst/BUILD` file if one is there, else from git. Nothing in the repository writes `inst/BUILD`, so today it is the git path that runs, and an installed copy built without one shows the version alone |
 
 ### Architecture (R package)
 
@@ -61,13 +64,15 @@ R/
   utils_export.R         dbt YAML, Mermaid ERD, DBML, ELK JSON, data dictionary, data-dict YAML, session JSON
   utils_privacy.R        Personal-data flags, review state and name patterns
   utils_vis.R            ERD network builder (build_network)
-  utils_helpers.R        Shared helpers (%||%)
+  utils_helpers.R        Shared helpers (%||%), build stamp
   tableexplorer-package.R  Package-level docs and imports
+  _disable_autoload.R    Stops Shiny sourcing R/ itself when app.R runs
 inst/
   app/www/               Static assets (styles.css, app.js, erd.js); vendored
                          elkjs and svg-pan-zoom under www/vendor/
   extdata/               Sample data (the 4-table subset) + schema.json
 dev/
+  check.R                One command that says PASS or FAIL, with counts
   01_start.R             One-time project setup
   02_dev.R               Development helpers
   03_deploy.R            Deployment helpers
@@ -75,10 +80,12 @@ dev/
   browser-checks/        Headless-Chromium checks of the dictionary and privacy UI
   check_erd_geometry.js  Geometry check for an exported ELK graph
   code-review-backlog.md Open review findings, by reviewer
-tests/testthat/          Unit tests (~1,000 expectations across 7 suites)
+tests/testthat/          Unit tests (10 suites; dev/check.R prints the counts)
+.github/workflows/       R CI: the test suite and the detection scorer
 docs/internals.md        Diagrams of privacy, data-dict, primary keys, data flow
 docs/diagrams/           The diagram SVGs and generate.py that draws them
 docs/erd-redesign-plan.md  The ERD redesign plan and what of it is done
+docs/research/           Why golem was dropped, and what would bring it back
 renv.lock, renv/         Pinned package versions, activated by .Rprofile
 ```
 
@@ -150,7 +157,7 @@ run_app()
 ### The 7 inference signals
 
 The seven signals below are the families a detected link is reported under.
-Inside the engine they are twelve weighted variants (`weight_map` in
+Inside the engine they are thirteen weighted variants (`weight_map` in
 `R/utils_inference.R`), collapsed to these seven names by `label_map` in the
 same file; the weight column gives each family's range. A signal the engine
 raises but does not weight counts as 0.1.
@@ -158,7 +165,7 @@ raises but does not weight counts as 0.1.
 | Signal | What it measures | Weight |
 |---|---|---|
 | **Naming** | FK column named for the target table's entity (see conventions below); 0.90 when role/source words precede it (`referring_provider_id`) | 0.90-1.00 |
-| **Name similarity** | Jaro-Winkler fuzzy match between column/table names | 0.25-0.60 |
+| **Name similarity** | Identical column names, or a Jaro-Winkler fuzzy match between column/table names. An identical name is reported as "identical column name" rather than "name similarity 1.00", which reads as a near miss, at the same weight | 0.25-0.60 |
 | **Value overlap** | Fraction of values in column A that exist in column B | 0.55-0.90 |
 | **Cardinality** | Whether column A looks like an FK (many rows, few unique values) | 0.95 |
 | **Format fingerprint** | Whether both columns share value format (UUID, ISO date, email, etc.) | 0.40 |
@@ -227,7 +234,9 @@ vendored in `inst/app/www/vendor/`.
   child's PK), dashed are not. Inferred links that nobody has confirmed are
   grey with a `?` chip; confirmed, declared and manual ones are drawn in
   full ink. Low-confidence links are hidden unless "Show low-confidence
-  links" is on. The legend under the diagram explains the ends and badges.
+  links" is on. The "Key" above the diagram explains the ends and badges;
+  it sits above the canvas because below a tall diagram it fell off the
+  bottom of the screen and the symbols went unexplained.
 - **Lookup links**: "Labels" shows a link to a reference table as a tag on
   the FK row (`→ tlk_providers`) instead of a line, which removes most of the
   clutter in hub-and-lookup schemas.
@@ -316,28 +325,50 @@ See `dev/03_deploy.R` for deployment helpers.
 
 > Free plan limits: 4 GB RAM, 1 CPU, 20 active hours/month, 5 apps max.
 
-### Running tests
+### Checks
 
-```r
-# Recommended: uses devtools and loads the package properly
-devtools::test()
-
-# No install needed: tests/testthat/setup.R sources R/ itself
-testthat::test_local()
-
-# Or against an installed package:
-testthat::test_package("tableexplorer")
-```
-
-Detection changes are also scored against the synthetic 52-table fixture,
-which is the repository's standing check on `R/utils_inference.R`:
+One command, and the one to quote when reporting that a change is sound:
 
 ```sh
-Rscript dev/fixtures/score_detection.R
+Rscript dev/check.R
 ```
 
-See `dev/fixtures/README.md` for the baseline to compare against, and
-`dev/browser-checks/README.md` for the headless-Chromium UI checks.
+It parses every R file under `R/`, `tests/` and `dev/`, runs `node --check`
+over the app's own JavaScript when node is on the PATH, runs the test suite
+and prints the passed / failed / error / skipped counts, and scores FK
+detection against the synthetic 52-table fixture. It prints a PASS or FAIL
+line for each check, ends with `ALL CHECKS PASSED` or a count of failures,
+and exits non-zero on any failure, so no output cannot be mistaken for
+nothing wrong.
+
+In a checkout whose renv library is not populated, run it with the renv
+autoloader off, or `.Rprofile` activates renv before the script starts and
+every check that needs a package fails with "there is no package called
+'testthat'":
+
+```sh
+RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript dev/check.R
+```
+
+The script sets that variable too, but from inside it only reaches the
+scorer it launches as a child process, not its own session: `.Rprofile` has
+already run by then.
+
+The pieces, to run on their own:
+
+```r
+devtools::test()          # loads the package properly
+testthat::test_local()    # no install needed: tests/testthat/setup.R sources R/
+```
+
+```sh
+Rscript dev/fixtures/score_detection.R   # detection against the fixture
+```
+
+`.github/workflows/r-ci.yml` runs the suite and the scorer on every push and
+pull request. See `dev/fixtures/README.md` for the detection baseline to
+compare against, and `dev/browser-checks/README.md` for the
+headless-Chromium UI checks, which nothing runs for you.
 
 ---
 
