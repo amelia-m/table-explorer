@@ -13,9 +13,26 @@ Rscript dev/fixtures/score_detection.R          # medium confidence and up
 Rscript dev/fixtures/score_detection.R high
 ```
 
-Current baseline: 157 of 157 real links found at medium+, 0 false (plus
-about 590 low-confidence candidates, which the app hides by default). Run it
-before and after any change to `R/utils_inference.R` and compare.
+Current baseline, from a run on 2026-10-10:
+
+```
+reported: 749 (high 157, low 592)
+medium+: 157   real: 157 of 157   false: 0
+```
+
+157 of 157 real links found at medium+, 0 false, plus 592 low-confidence
+candidates, which the app hides by default (`min_confidence` starts at
+"medium", `R/mod_detection.R:26`). Run it before and after any change to
+`R/utils_inference.R` and compare.
+
+The fixture is deterministic (`set.seed(7)` in `access52.R`), so those
+numbers are exact rather than approximate: any difference is a real change
+in detection, not sampling noise.
+
+**It reports, it does not fail.** The script prints the counts and exits 0
+whatever they are, so its exit status is not a check. Read the numbers, or
+compare them against the block above. The same goes for the lists it prints
+under `missed:` and `most common false links:` when there are any.
 
 To look at the schema in the app, source the file and pass
 `access52_fixture()$tables` to the app the way
