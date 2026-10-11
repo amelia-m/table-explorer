@@ -1,12 +1,12 @@
 # ERD redesign plan
 
 Status: **approved. Steps 1 to 5 are done on `main`**: the relationship model
-and the Mermaid/DBML exports (amelia-m/table-explorer#17), the ERD Diagram tab
-and Network overview, focus / detail levels / subject areas / orphans / line
+and the Mermaid/DBML exports (amelia-m/table-explorer#17), the ERD tab and
+Network overview, focus / detail levels / subject areas / orphans / line
 actions, the network-overview fixes and the SVG and PNG downloads, and the
 data dictionary with its optional dbt 1.9 constraints. **Step 6 (session diff,
 lints, review metadata) is not started.** Each step was checked against the
-code on 2026-10-10; the table under "Suggested order and size" names where.
+code on 2026-10-11; the table under "Suggested order and size" names where.
 
 This is a plan, not reference documentation. Where it describes behaviour,
 the code is the authority: the README and `docs/internals.md` describe what

@@ -3,16 +3,8 @@
 # Run these lines interactively in a fresh R session.
 # ============================================================
 
-# 1. Fill in DESCRIPTION metadata
-# golem::fill_desc(
-#   pkg_name       = "tableexplorer",
-#   pkg_title      = "Table Relationship Explorer",
-#   pkg_description = "Interactive Shiny app for exploring table relationships.",
-#   author_first   = "Your",
-#   author_last    = "Name",
-#   author_email   = "you@example.com",
-#   repo_url       = NULL
-# )
+# 1. DESCRIPTION metadata: edit DESCRIPTION directly, or
+# usethis::use_description(list(Title = "Table Relationship Explorer"))
 
 # 2. Set a licence
 usethis::use_mit_license()
