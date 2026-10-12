@@ -1,8 +1,17 @@
 # ERD redesign plan
 
-Status: **approved. Step 1 (relationship model + exports) done
-(amelia-m/table-explorer#17); step 2 (ERD tab, Network overview)
-done.** Next: data dictionary, dbt constraints, session diff, lints.
+Status: **approved. Steps 1 to 5 are done on `main`**: the relationship model
+and the Mermaid/DBML exports (amelia-m/table-explorer#17), the ERD tab and
+Network overview, focus / detail levels / subject areas / orphans / line
+actions, the network-overview fixes and the SVG and PNG downloads, and the
+data dictionary with its optional dbt 1.9 constraints. **Step 6 (session diff,
+lints, review metadata) is not started.** Each step was checked against the
+code on 2026-10-11; the table under "Suggested order and size" names where.
+
+This is a plan, not reference documentation. Where it describes behaviour,
+the code is the authority: the README and `docs/internals.md` describe what
+the app does today.
+
 It is based on the reference diagrams in
 `docs/erd-examples/`, a web review of ERD best practices, and a map of the
 current code (September 2026).
@@ -19,7 +28,14 @@ standard physical-database ERD. That means:
 It should also stay usable at 50+ tables, and export documentation that can
 be diffed and kept up to date.
 
-## Where we are today
+## Where we were in September 2026
+
+This section is the starting point the plan was written against, kept for
+the record. Steps 1 to 5 have since changed all of it: the ERD tab
+now draws cards with crow's-foot ends in `inst/app/www/erd.js`, the
+visNetwork view has moved to the Network overview tab, cardinality and the
+rest come from `R/utils_erd_model.R`, and `generate_mermaid_erd()` in
+`R/utils_export.R` writes real markers.
 
 - The ERD (`R/utils_vis.R::build_network`, `R/mod_erd.R`) uses visNetwork.
   - Each table is a plain-text box ("name / N rows | M cols"). Columns appear
@@ -59,7 +75,7 @@ be diffed and kept up to date.
 6. **Documentation as code:** deterministic Mermaid and DBML exports, a
    data dictionary, and diffs between sessions.
 
-## Phase 1: Relationship semantics (data layer, no UI change)
+## Phase 1: Relationship semantics (data layer, no UI change) - done
 
 Add `R/utils_erd_model.R`, which builds an `erd_model(tables, rels, pk_map,
 composite_pk_map)`. From it, every view and export draws the same facts.
@@ -93,7 +109,7 @@ composite_pk_map)`. From it, every view and export draws the same facts.
 - **Tests:** unit tests for every derivation, plus golden tests on the
   sample data and a synthetic Access-style schema.
 
-## Phase 2: A new "Diagram" view (standard ERD rendering)
+## Phase 2: A new "Diagram" view (standard ERD rendering) - done
 
 **Renderer:** vendor **elkjs** (layered layout with ports and right-angle
 line routing; EPL-2.0) and draw SVG ourselves in
@@ -154,7 +170,7 @@ fixes are small:
 - The legend's "cardinality" entry is renamed "identical values", so it
   isn't mistaken for ERD cardinality.
 
-## Phase 3: Exports as documentation
+## Phase 3: Exports as documentation - done
 
 - **Mermaid** (`generate_mermaid_erd`):
   - real cardinality markers from Phase 1;
@@ -182,7 +198,14 @@ fixes are small:
   nullable, keys, unique count, example values, and editable `description`
   and `business_name` fields, saved in the session.
 
-## Phase 4: Maintenance
+## Phase 4: Maintenance - not started
+
+Nothing in this phase exists on `main`: a search of `R/` on 2026-10-11 found
+no session diff, no lints panel and no reviewer or review-timestamp field.
+The confirmed and suppressed sets are saved with the session (the `review`
+element of `save_session_json()` at `R/utils_export.R:596`, passed through at
+line 634), but carry no reviewer and no per-relationship time: the session's
+one `timestamp` records the save itself.
 
 - **Session diff:** compare the current tables and relationships with a
   saved session and report added, removed and changed tables, columns and
@@ -200,14 +223,14 @@ fixes are small:
 
 ## Suggested order and size
 
-| Step | Scope | Size |
-|---|---|---|
-| 1 | Phase 1 model + tests | M |
-| 2 | Mermaid/DBML exports on the model (quick visible win, easy to test) | S–M |
-| 3 | Diagram view: cards, ports, crow's-foot, legend, pan/zoom | L |
-| 4 | Focus, detail levels, subject areas, orphans, line actions | M |
-| 5 | Network-overview fixes; SVG/PNG export; data dictionary | M |
-| 6 | Session diff, lints, review metadata | M |
+| Step | Scope | Size | Status on `main`, checked 2026-10-11 |
+|---|---|---|---|
+| 1 | Phase 1 model + tests | M | Done: `R/utils_erd_model.R` (`erd_model()` at line 96, table roles at 268-274, subject areas at 310-338), tested in `tests/testthat/test-erd_model.R` |
+| 2 | Mermaid/DBML exports on the model (quick visible win, easy to test) | S–M | Done: `R/utils_export.R`, tested in `tests/testthat/test-export_utils.R` |
+| 3 | Diagram view: cards, ports, crow's-foot, legend, pan/zoom | L | Done: `inst/app/www/erd.js` with `elkjs` and `svg-pan-zoom` vendored in `inst/app/www/vendor/` |
+| 4 | Focus, detail levels, subject areas, orphans, line actions | M | Done: the toolbar at `R/mod_erd.R:58-120` (focus, hops 1-4, detail, subject areas, lookup links, direction, sources, low-confidence), the unconnected-tables panel at 348-352, and confirm / unconfirm / suppress at 328-334 |
+| 5 | Network-overview fixes; SVG/PNG export; data dictionary | M | Done: the legend reads "identical values" (`R/mod_network.R:45`), `erdDownload()` saves SVG and PNG (`inst/app/www/erd.js`, buttons at `R/mod_erd.R:128-137`), and the Data Dictionary tab is `R/mod_dictionary.R` with the optional dbt 1.9 constraints in `R/utils_export.R` |
+| 6 | Session diff, lints, review metadata | M | Not started: no session diff, lints panel or reviewer/timestamp field anywhere in `R/`. The relationship review flow that shipped in #32 records decisions, not who made them or when |
 
 Each step is its own PR, with tests. For the UI steps that means a
 headless-Chromium check on the sample data and a synthetic 50-table
