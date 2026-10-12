@@ -16,6 +16,21 @@ say <- function(ok, label, detail = "") {
               if (nzchar(detail)) paste0("  (", detail, ")") else ""))
 }
 
+# 0. The base branch is still the base. Pull requests here are merged on
+# GitHub and nothing pulls afterwards, so local main drifts behind
+# origin/main and a worktree cut from it looks like a clean checkout. This
+# reads the remote without fetching and writes no git state. Without a
+# remote, a network or a local main it skips rather than failing, because a
+# check that fails offline gets turned off. Knowing that the base differs
+# but not by how much is a failure, not a skip.
+source("dev/git_base.R")
+base <- git_base_check()
+if (identical(base$state, "unknown")) {
+  cat(sprintf("SKIP  base: %s\n", base$message))
+} else {
+  say(base$state %in% c("current", "ahead"), sprintf("base: %s", base$message))
+}
+
 # 1. Every R file parses. A dropped brace takes the whole suite down, and
 # testthat reports that as an abort rather than a failure.
 r_files <- c(
