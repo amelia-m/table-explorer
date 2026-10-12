@@ -1294,5 +1294,38 @@ generate_data_dict_yaml <- function(
     )
   )
   if (length(todo)) doc$todo <- paste(todo, collapse = "\n")
+
+  # Everything the spec cannot carry, in one namespaced block. Spec
+  # readers ignore unknown x- keys, and our own importer reads these back,
+  # so a round trip keeps the review work instead of flattening it into
+  # the todo prose above. Nothing here claims to be a declared foreign
+  # key: they are candidates, with the evidence that produced them.
+  carry <- c(unreviewed, non_key)
+  if (length(carry)) {
+    doc[["x-tableexplorer"]] <- list(
+      version = 1L,
+      note = paste(
+        "Candidate links from Table Relationship Explorer. Not declared",
+        "foreign keys: unconfirmed, or pointing at a column the spec",
+        "cannot express as a join. Read back by the same app."
+      ),
+      candidate_relationships = lapply(unname(carry), function(r) {
+        out <- list(
+          from_table = r$from_table,
+          from_col = r$from_col,
+          to_table = r$to_table,
+          to_col = r$to_col,
+          source = rel_source(r),
+          confidence = r$confidence %||% "unknown"
+        )
+        if (!is.null(r$score) && !is.na(r$score)) {
+          out$score <- round(r$score, 3)
+        }
+        if (!is.null(r$detected_by)) out$detected_by <- r$detected_by
+        if (length(r$reasons)) out$evidence <- paste(r$reasons, collapse = "; ")
+        out
+      })
+    )
+  }
   yaml::as.yaml(doc, indent.mapping.sequence = TRUE, column.major = FALSE)
 }

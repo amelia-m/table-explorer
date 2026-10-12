@@ -651,8 +651,10 @@ test_that("data-dict files import as tables, declared links and dictionary entri
   back <- parse_schema_file(f, "data-dict.yaml")
   expect_equal(names(back$tables), c("customers", "orders", "staff"))
   expect_equal(names(back$tables$customers), c("customer_id", "email", "tier"))
-  expect_length(back$relationships, 2)
-  r <- back$relationships[[2]]
+  # Two declared joins, plus any candidate carried in the extension block
+  declared <- Filter(function(r) identical(rel_source(r), "declared"), back$relationships)
+  expect_length(declared, 2)
+  r <- declared[[2]]
   expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("staff", "manager_id", "staff", "staff_id"))
   expect_equal(rel_source(r), "declared")
   expect_equal(back$dictionary$customers$label, "Customers")
@@ -948,4 +950,76 @@ test_that("a declared key the loaded data contradicts is not used", {
   pks <- apply_declared_pks(list(a = "id"), list(a = "code"), t)
   m <- erd_model(t, list(), pks)
   expect_false("code" %in% m$tables$a$columns$name[m$tables$a$columns$pk])
+})
+
+# ── data-dict round trip ─────────────────────────────────────
+
+test_that("unconfirmed links survive a data-dict round trip as candidates", {
+  skip_if_not_installed("yaml")
+  tables <- list(
+    visits = data.frame(visit_id = 1:3, client_id = c(1, 2, 2)),
+    clients = data.frame(client_id = 1:3, label = letters[1:3])
+  )
+  rels <- list(
+    list(
+      from_table = "visits", from_col = "client_id",
+      to_table = "clients", to_col = "client_id",
+      detected_by = "naming", confidence = "high", score = 0.96,
+      signals = list(naming_exact = 1), reasons = "exact FK naming",
+      confirmed = TRUE
+    ),
+    list(
+      from_table = "visits", from_col = "visit_id",
+      to_table = "clients", to_col = "client_id",
+      detected_by = "value_overlap", confidence = "medium", score = 0.72,
+      signals = list(overlap_high = 0.9), reasons = "value overlap 90%"
+    )
+  )
+  pks <- list(visits = "visit_id", clients = "client_id")
+  y <- generate_data_dict_yaml(tables, rels, pks, list())
+  doc <- yaml::yaml.load(y)
+
+  # The confirmed one is a real join; the unconfirmed one is not
+  expect_length(doc$relationships, 1)
+  cands <- doc[["x-tableexplorer"]]$candidate_relationships
+  expect_length(cands, 1)
+  expect_equal(cands[[1]]$from_col, "visit_id")
+  expect_equal(cands[[1]]$source, "detected")
+  expect_match(cands[[1]]$evidence, "value overlap")
+
+  # Reading the file back returns both, and the candidate is still to review
+  f <- tempfile(fileext = ".yaml")
+  on.exit(unlink(f))
+  writeLines(y, f)
+  back <- parse_schema_file(f, "data-dict.yaml", notify_fn = function(...) invisible(NULL))
+  pairs <- vapply(
+    back$relationships,
+    function(r) paste(r$from_table, r$from_col, r$to_table, r$to_col),
+    ""
+  )
+  expect_true("visits client_id clients client_id" %in% pairs)
+  expect_true("visits visit_id clients client_id" %in% pairs)
+  cand <- back$relationships[[which(grepl("visit_id clients", pairs))]]
+  expect_false(identical(rel_source(cand), "declared"))
+  expect_true(any(grepl("round trip", cand$reasons)))
+})
+
+test_that("a data-dict file with no candidates gains no extension block", {
+  skip_if_not_installed("yaml")
+  tables <- list(
+    visits = data.frame(visit_id = 1:3, client_id = c(1, 2, 2)),
+    clients = data.frame(client_id = 1:3)
+  )
+  rels <- list(
+    list(
+      from_table = "visits", from_col = "client_id",
+      to_table = "clients", to_col = "client_id",
+      detected_by = "naming", confidence = "high", score = 0.96,
+      signals = list(naming_exact = 1), reasons = "exact FK naming",
+      confirmed = TRUE
+    )
+  )
+  y <- generate_data_dict_yaml(tables, rels, list(visits = "visit_id", clients = "client_id"), list())
+  doc <- yaml::yaml.load(y)
+  expect_null(doc[["x-tableexplorer"]])
 })
