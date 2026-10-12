@@ -1561,6 +1561,104 @@ test_that("a table keyed on three columns reads as keyless under composite", {
   expect_null(composite_key_component(three, "z"))
 })
 
+# ── The public harness (dev/fixtures/public/score_public.R) ───
+
+# score_public.R loads the package and runs its datasets when executed.
+# Sourcing it into an environment that already defines
+# .score_public_no_setup skips both, which is what makes its two
+# measurement functions testable here.
+score_public_env <- function() {
+  env <- new.env(parent = asNamespace("tableexplorer"))
+  assign(".score_public_no_setup", TRUE, envir = env)
+  sys.source(
+    testthat::test_path("..", "..", "dev", "fixtures", "public", "score_public.R"),
+    envir = env
+  )
+  env
+}
+
+test_that("the harness reports found, hit, recall and precision at each confidence level present", {
+  env <- score_public_env()
+  # visits.code fits two parents equally, so resolve_fk_parents demotes
+  # both candidates to low after detect_fks has already returned them at
+  # medium+. That is the defect these lines exist for: without them the
+  # printed precision mixes a reviewer-facing high row with rows the
+  # resolver has since thrown away.
+  tbls <- list(
+    clients = data.frame(client_id = 1:40, label = paste0("c", 1:40)),
+    staff = data.frame(staff_id = 1:40, label = paste0("s", 1:40)),
+    visits = data.frame(
+      visit_id = 1:60,
+      client_id = rep(1:20, 3),
+      code = rep(1:20, 3)
+    )
+  )
+  truth <- "visits.client_id -> clients.client_id"
+  out <- capture.output(
+    res <- env$score_one("demo", tbls, truth)
+  )
+
+  # The one real link is found, and found at high
+  expect_equal(res$hit, truth)
+  expect_equal(res$by_conf$high$hit, 1L)
+  # More than one level is present, so the overall line really is a mix
+  expect_gt(length(res$by_conf), 1)
+  # Every level present has a line, and no level that is absent does
+  for (lv in c("high", "medium", "low")) {
+    pattern <- sprintf("^ +%s +found", lv)
+    expect_equal(
+      length(grep(pattern, out)),
+      if (is.null(res$by_conf[[lv]])) 0L else 1L
+    )
+  }
+  # The per-level counts account for the overall ones exactly
+  expect_equal(
+    sum(vapply(res$by_conf, function(x) x$found, numeric(1))),
+    length(res$found)
+  )
+  expect_equal(
+    sum(vapply(res$by_conf, function(x) x$hit, numeric(1))),
+    length(res$hit)
+  )
+
+  # The overall line still renders through the format it always used, so
+  # figures measured before the per-level lines existed stay comparable.
+  # This test holds its own copy of that format: if score_one's changes,
+  # the two diverge and this fails.
+  overall <- grep("^demo ", out, value = TRUE)
+  expect_length(overall, 1)
+  expect_equal(
+    sub("[0-9.]+s$", "", overall),
+    sub("[0-9.]+s$", "", sprintf(
+      "%-8s tables %3d  truth %3d  found %3d  hit %3d  recall %5.1f%%  precision %5.1f%%  %4.1fs",
+      "demo", length(tbls), length(truth), length(res$found), length(res$hit),
+      100 * res$recall, 100 * res$precision, res$secs
+    ))
+  )
+})
+
+test_that("the harness refuses ground truth that names a table or column the data does not have", {
+  env <- score_public_env()
+  tbls <- list(
+    parks = data.frame(park.key = paste0("P", 1:20), city = paste0("c", 1:20)),
+    homegames = data.frame(hg_id = 1:40, park.key = rep(paste0("P", 1:20), 2))
+  )
+  # The real typo this exists for: the Lahman file said parkkey where the
+  # column is park.key, and the pair was reported as a missed link for a
+  # day instead of as a broken truth file.
+  expect_equal(
+    env$validate_truth(tbls, "homegames.park.key -> parks.park.key"),
+    character(0)
+  )
+  bad <- env$validate_truth(tbls, c(
+    "homegames.parkkey -> parks.park.key",
+    "homegames.park.key -> parkz.park.key"
+  ))
+  expect_length(bad, 2)
+  expect_match(bad[[1]], "no column parkkey in homegames", fixed = TRUE)
+  expect_match(bad[[2]], "no table parkz", fixed = TRUE)
+})
+
 test_that("a composite key carrying a few duplicate rows is admitted, and the reason says near", {
   # Measured on FAERS 2024Q1: drug24q1 has 1,909,327 rows,
   # (primaryid, drug_seq) takes 1,909,235 distinct values, and an
