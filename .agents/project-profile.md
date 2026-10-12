@@ -10,6 +10,39 @@ research notes and synthetic test fixtures, review code, and commit the
 results. The Python version (`app.py`) is secondary and changes only when
 asked.
 
+## Read identifiers from the data, not from documentation
+
+Amelia asked why a particular mistake happened, 2026-10-11. A hand-written
+ground-truth file for the CRAN `Lahman` package named the column
+`homegames.parkkey`. The package calls it `park.key`, with a dot, because
+the upstream CSV header does, while most of its other tables use camel case.
+The name was written from the package documentation without opening the data.
+Detection found the link correctly and the harness reported it as a miss for
+a day, because a wrong line in a measuring instrument looks exactly like a
+weakness in the thing being measured.
+
+- **Any identifier that goes into a durable artifact is read from the thing
+  itself.** A column name from `names(df)`, a branch tip from
+  `git ls-remote`, a path from `ls`. Not from documentation, not from release
+  notes, not from recall. The command that read it goes in the file header,
+  the commit message or the report.
+- **A measuring instrument validates itself.** A ground-truth file's loader
+  asserts that every table and column it names exists in the loaded data and
+  exits non-zero when one does not, so a typo fails loudly instead of
+  scoring as a miss. The same holds for any file of expected values.
+- **One anomaly means suspect the instrument first.** When a measurement
+  shows exactly one miss, one outlier or one unexplained row, check the
+  measuring file before concluding anything about the subject.
+
+The same failure shape bit a task contract the same day: it told two agents
+`main` was at c11748b, read from the local branch, while `origin/main` was
+fifteen merged pull requests ahead. Both agents spent a full run documenting
+a tree that no longer existed, and reported the brief's premises as false.
+Before cutting a worktree or quoting a commit in a brief, compare
+`git rev-parse main` with `git ls-remote origin refs/heads/main`. Pull
+requests here are merged on GitHub and nothing pulls afterwards, so the local
+`main` is routinely tens of commits stale.
+
 ## Review, push and merge
 
 Amelia, 2026-10-09, for this repository only. Her GitHub Copilot and Codex

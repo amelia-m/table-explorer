@@ -25,6 +25,37 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
 
 ---
 
+## Re-checked against `main`, 2026-10-11
+
+Every item still open was re-read against `main` at `8c586a7`. Individual items
+carry the result. Three things change how the list should be read.
+
+**There is CI now, and a one-command check.** `.github/workflows/r-ci.yml` runs
+`testthat::test_local()` and then asserts on the detection scorer's `medium+:` line
+(`real >= want`, `false == 0`). `dev/check.R` does the same four checks locally and
+prints PASS/FAIL per check. This closes M15 and takes most of the sting out of C1:
+neither CI nor `dev/check.R` goes through `R CMD check`, so `test_package()`'s
+early return no longer hides the suite. C1 is still a real defect for anyone who
+does run `R CMD check`.
+
+**The visNetwork ERD moved.** The ERD tab is an elkjs/SVG renderer
+(`inst/app/www/erd.js`, loaded at `R/app_ui.R:19-21`); `R/mod_erd.R` contains no
+visNetwork at all. The pinning, layout and hint findings raised against
+`R/mod_erd.R` now live in `R/mod_network.R`, behind the Network overview tab. Their
+references are corrected in place: I2, M2 and M3 are still real, I4 was fixed by
+the split.
+
+**golem is gone, and the items that depended on it are already ticked** (C3, I5,
+I13, M9, M10, M11, D1). D3 is the leftover: it proposed reverting `app.R` to
+golem's template, and there is no longer a template to revert to, but C4's
+`sys.frame(1L)` defect is untouched, so the question survives in a different form.
+
+Newly resolved: I4, I12, M6, M15, M17, P3, and D5 answered by the code. Moot or
+overtaken: M1, D3 as written, D6. Partly resolved: C1, I6, I7, M2, M5, P1.
+Not re-checked: M18, which is about `README.md`.
+
+---
+
 ## Critical
 
 - [ ] **C1. `tests/testthat.R:5` runs zero tests under `R CMD check`.**
@@ -34,6 +65,11 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   an informational line and passes green having executed nothing. Invisible locally
   because `devtools::test()` bypasses `testthat.R` entirely.
   **Fix:** `test_check("tableexplorer")`.
+  Re-checked 2026-10-11: unchanged in the file - `tests/testthat.R:5` still reads
+  `test_package("tableexplorer")` - but much less dangerous than when it was written.
+  CI and `dev/check.R` both call `testthat::test_local()` directly and neither runs
+  `R CMD check`, and `dev/check.R` additionally fails if the suite ran no tests at
+  all. Still worth fixing for anyone who does run `R CMD check`.
 
 - [x] **C2. `R/utils_inference.R:468` makes composite-PK detection inert on exactly the tables it exists for.**
   The guard calls `detect_pks(df, table_name, method = "both")`. The naming branch
@@ -79,6 +115,9 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
 
   **Fix:** see D3. The `tableexplorer::` prefix is correct and should stay -
   `NAMESPACE` exports `run_app`, so it resolves after `load_all(export_all = FALSE)`.
+  Re-checked 2026-10-11: unchanged. `app.R:13` still guards on `sys.frame(1L)$ofile`. The
+  golem framing is gone from `app.R:1`, which now says "a plain R package, no app
+  framework", so the fix can no longer be "revert to golem's template" (see D3).
 
 ---
 
@@ -98,7 +137,7 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Done 2026-09-16: `else` deleted from both `doubleClick` handlers, which no longer need
   `sprintf`.
 
-- [ ] **I2. `R/mod_erd.R:199-226` - pinned node positions do not survive any re-render.**
+- [ ] **I2. `R/mod_network.R:212-232` - pinned node positions do not survive any re-render.**
   `dragEnd` writes `fixed: {x: true, y: true}` into the client-side vis DataSet only.
   `renderVisNetwork` depends on `all_tables_rv()`, `all_rels_rv()`, `pk_map_rv()`,
   `composite_pk_map_rv()`, `input$erd_layout` and `input$spring_length`. Suppressing a
@@ -108,6 +147,12 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   **Fix:** round-trip positions to the server (a `reactiveVal` keyed by node id, written
   from `dragEnd`, read back into `net$nodes$x/y/fixed` in `build_network`), or move the
   mutable parts to `visNetworkProxy` so the network is never rebuilt. See D2.
+  Re-checked 2026-10-11: still true, and the reference above is corrected from `R/mod_erd.R`
+  to `R/mod_network.R`. `renderVisNetwork` at `R/mod_network.R:163` still depends on
+  `all_tables_rv()`, `all_rels_rv()`, `pk_map_rv()`, `composite_pk_map_rv()`,
+  `input$erd_layout` and `input$spring_length`, and `dragEnd` at `:212-232` still
+  writes `fixed` into the client DataSet only. It affects the Network overview tab
+  now, not the ERD tab.
 
 - [x] **I3. `R/mod_erd.R:211-226` - double-click also fires `click`, so unpinning opens the detail panel.**
   vis-network emits `click` for each click of a double-click, and the `click` handler at
@@ -117,13 +162,17 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Done 2026-09-16: `click` now defers the panel by 250 ms, and `doubleClick` cancels the pending
   timer. Single clicks open the panel 250 ms later than before.
 
-- [ ] **I4. `R/mod_erd.R:186-226` vs `:255-299` - visNetwork chain and both JS blobs duplicated for the circular branch.**
+- [x] **I4. `R/mod_erd.R:186-226` vs `:255-299` - visNetwork chain and both JS blobs duplicated for the circular branch.**
   The circular layout rebuilds `vis` from scratch, so the two ~25-line JS strings exist
   twice, byte-identical apart from indentation. Direct cause of I1 appearing twice.
   **Fix:** hoist the JS into two local character variables, build the base chain once, and
   apply `visPhysics(enabled = FALSE)` plus the precomputed `x`/`y` as a modifier. The
   circular branch already computes `net$nodes$x/y` before the rebuild, so nothing forces
   the duplication.
+  Done, found fixed 2026-10-11 in `R/mod_network.R`, where this code now lives.
+  The chain is built once and the circular branch adds `visPhysics(enabled = FALSE)` as
+  a modifier at `:244`, which is the fix proposed above. There is one `dragEnd` JS
+  blob, at `:212`, not two.
 
 ### Packaging and golem conformance (reviewer C)
 
@@ -155,6 +204,11 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   ^(inference|file_readers|export_utils|db_connectors)\.R$
   ^README\.md$
   ```
+  Re-checked 2026-10-11: partly resolved, so the heading above now overstates it. A
+  `.Rbuildignore` exists, but holds only `^renv$`, `^renv\.lock$` and
+  `^requirements\.txt$`. Everything else in the list above - `app.R`, `app.py`,
+  `dev/`, `tmp/`, `.claude/`, `sample_data/`, `schema.json` and the four legacy root
+  `.R` files - is still bundled by `R CMD build`. `.github/` is now another candidate.
 
 - [ ] **I7. No `man/` directory - `R CMD check` WARNING.**
   `run_app` is exported with roxygen docs but no `.Rd` was generated or committed, and
@@ -162,6 +216,10 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   `WARNING: Undocumented code objects: 'run_app'`. `DESCRIPTION` has no `RoxygenNote`
   field, corroborating that `NAMESPACE` was hand-written.
   **Fix:** `devtools::document()`, commit `man/`.
+  Re-checked 2026-10-11: `man/` is still absent, so the WARNING stands. The supporting
+  detail no longer holds: `DESCRIPTION:47` carries `Config/roxygen2/version: 8.1.0`,
+  which is where roxygen2 8.x records what `RoxygenNote` used to, so that field's
+  absence is no longer evidence of a hand-written `NAMESPACE`.
 
 - [x] **I8. `stats`, `utils` and `tools` are used but undeclared.**
   13 `tools::` calls and 1 `utils::` in `R/utils_file_readers.R` with neither in `Imports`
@@ -192,6 +250,21 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Same story for `sample_data/*.csv` and `schema.json`, byte-identical to `inst/extdata/`
   modulo line endings. Keep `app.py` and `requirements.txt` - the README documents the
   Python version as a live secondary implementation. See D4.
+  Re-checked 2026-10-11: still open, but the "dead duplicates" premise no longer holds and
+  deleting them blind would now lose data.
+
+  - The four root `.R` files have diverged, not drifted: `inference.R` is 611 lines
+    against `R/utils_inference.R`'s 1476, `file_readers.R` 492 against 904,
+    `export_utils.R` 166 against 1298, `db_connectors.R` 284 against 450. They are
+    stale copies, not formatting variants, so no diff of them is worth reading.
+  - `sample_data/` at the root holds seven CSVs; `inst/extdata/sample_data/` holds
+    four. The four in common are identical CR-normalised, but
+    `customer_addresses.csv`, `product_suppliers.csv` and `suppliers.csv` exist only
+    at the root, and `dev/browser-checks/sample_app.R` loads the root copy.
+  - Root `schema.json` and `inst/extdata/schema.json` now differ.
+
+  So D4 is no longer "delete the duplicates": the extra fixtures have to be moved or
+  dropped deliberately first.
 
 - [ ] **I11. `dev/` scripts have uncommented side-effecting lines.**
   `dev/01_start.R:18` has `usethis::use_mit_license()` uncommented while everything around
@@ -200,10 +273,13 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   `dev/02_dev.R:7,17,20` have `pkgload::load_all()`, `devtools::document()` and
   `devtools::test()` uncommented, so sourcing regenerates `NAMESPACE` and runs the suite.
   **Fix:** comment these out, matching the "run interactively" instruction in the headers.
+  Re-checked 2026-10-11: unchanged in substance, line numbers moved. `dev/01_start.R:10`
+  still has an uncommented `usethis::use_mit_license()`, and `dev/02_dev.R:7,18,21`
+  are still uncommented.
 
 ### Utils (reviewer B)
 
-- [ ] **I12. Both renamed cache keys are in unreachable code, so the rename is a no-op.**
+- [x] **I12. Both renamed cache keys are in unreachable code, so the rename is a no-op.**
   No orphaned UCanAccess JARs, but the reason is itself a finding:
 
   - `R/utils_file_readers.R:385` `access_jar_dir()` has no callers anywhere. Its
@@ -218,6 +294,12 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   pair. `access_jar_dir()` at `:386` also contains the same `sys.frame(1)$ofile` idiom as C4;
   inside a function it does not throw, but `$ofile` is always `NULL` so it always yields
   `dirname(".")`. See D5.
+  Done, found fixed 2026-10-11. `access_jar_dir()` is now at
+  `R/utils_file_readers.R:587` and returns
+  `file.path(tools::R_user_dir("tableexplorer", "cache"), "access_jars")` - one key,
+  not two - and it has callers: `read_access_db()` at `:781` and
+  `access_relationship_rows_jackcess()` at `:729`. The `sys.frame(1)` idiom is gone,
+  and so is the unreachable `tryCatch` rename. This also closes P3 and answers D5.
 
 - [x] **I13. `app.R` is missing `options("golem.app.prod" = TRUE)`.** Moot 2026-10-02: golem dropped.
   The rest of the file matches golem's generated deployment template. Inert today since
@@ -232,43 +314,68 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   Session download prefix `table_explorer_session_` to `table-explorer-session-`. Nothing
   consumes it (`restore_session_json` accepts any `.json`, no test asserts the name), so
   it is safe, but it should not be buried in a formatting commit.
+  Re-checked 2026-10-11: overtaken. The rename shipped - `R/mod_export.R:202` builds
+  `table-explorer-session-` - and nothing consumes it, as the finding said. The
+  process complaint cannot be acted on retrospectively.
 
-- [ ] **M2. `R/mod_erd.R:109-111` - hint text now under-describes the widget.**
+- [ ] **M2. `R/mod_network.R:109-111` - hint text under-describes the widget.**
   Dropped "hover for details" and "click to highlight connections" though
   `visInteraction(tooltipDelay = 80, hover = TRUE)` and `visOptions(highlightNearest = ...)`
   are still enabled in every branch. Those capabilities are now undiscoverable.
+  Re-checked 2026-10-11: partly addressed, reference corrected to `R/mod_network.R`. The hint
+  at `:109-111` now reads "drag to pin nodes - double-click to unpin - scroll to zoom
+  - click for details", so click-for-details is back. Still undescribed: the hover
+  tooltips (`visInteraction(tooltipDelay = 80, hover = TRUE)` at `:194-195`) and
+  highlight-on-hover (`highlightNearest(..., hover = TRUE)` at `:187`).
 
-- [ ] **M3. `R/mod_erd.R:109` - pin hint shown unconditionally but meaningless in two of three layouts.**
+- [ ] **M3. `R/mod_network.R:104-111` - pin hint shown unconditionally but meaningless in two of three layouts.**
   Hierarchical (`:228-233`) and circular (`:280`) both set `visPhysics(enabled = FALSE)`,
   so nodes already stay where dropped and `fixed` changes nothing. The hint sits outside
   the layout selector.
+  Re-checked 2026-10-11: unchanged, reference corrected to `R/mod_network.R`. Hierarchical at
+  `:242` and circular at `:244` both set `visPhysics(enabled = FALSE)`, and the hint at
+  `:104-111` still sits outside the layout selector at `:84`.
 
 - [ ] **M4. No formatter config committed.**
   No `air.toml`, `.air.toml` or styler config in the repo root. A reformat this size that
   is not pinned by a config will churn again the moment someone with different settings
   saves a file.
+  Re-checked 2026-10-11: unchanged. No `air.toml`, `.air.toml` or `.lintr` at the root, which
+  also leaves the repository short of the machine-wide rule that an R repository
+  carries an `air.toml` and is Air-formatted.
 
 - [ ] **M5. `LICENSE` has a stray CR and no terminating newline.**
   `YEAR: 2026` then `COPYRIGHT HOLDER: Amelia Miramonti` with no final newline.
   `readLines()` warns `incomplete final line found`. `read.dcf` still parses correctly.
   `core.autocrlf = true` and no `.gitattributes`, so the CR normalises away on commit;
   the missing newline does not. `YEAR: 2026` was verified correct against the real date.
+  Re-checked 2026-10-11: the newline is still missing (`cat -A LICENSE` ends without a `$`),
+  but two premises have changed: there is now a committed `.gitattributes` pinning
+  `* text=auto eol=lf`, and the working-tree CR is gone.
 
-- [ ] **M6. `DESCRIPTION` identity is half-renamed.**
+- [x] **M6. `DESCRIPTION` identity is half-renamed.**
   `Authors@R` is still `person("Table Explorer", ...)` with no family name, while the email
   became `amelia.miramonti@gmail.com` and `LICENSE` now says `COPYRIGHT HOLDER: Amelia Miramonti`.
   Also missing `URL:` and `BugReports:` despite a known GitHub remote, and `RoxygenNote` (see I7).
+  Done, found fixed 2026-10-11, all three parts. `DESCRIPTION:6` is
+  `person("Amelia", "Miramonti", role = c("aut", "cre"), ...)`; `URL:` and
+  `BugReports:` are at `:12-13`; and `Config/roxygen2/version: 8.1.0` at `:47` is
+  roxygen2 8.x's replacement for `RoxygenNote`.
 
-- [ ] **M7. `inst/app/www/app.js:38` and `:44` call `Shiny.setInputValue` without a module namespace.**
+- [ ] **M7. `inst/app/www/app.js:74` and `:101` call `Shiny.setInputValue` without a module namespace.**
   `remove_table_name` and `vis_close_panel` are sent unnamespaced while the consuming modules
   use `session$ns()`. Both have working server-generated inline `onclick` fallbacks, so the app
   functions and these handlers are simply dead. Delete rather than leave as a trap.
+  Re-checked 2026-10-11: unchanged; the line numbers above are corrected from `:38` and `:44`
+  to `:74` and `:101`.
 
 - [ ] **M8. `R/utils_db_connectors.R:122` - sqlite branch has no `requireNamespace()` guard.**
   Calls `DBI::dbConnect(RSQLite::SQLite(), ...)` unguarded, unlike the postgres/mysql/odbc/
   bigquery branches beside it (lines 39, 52, 65, 84, 99). `DBI` itself is unguarded throughout.
   Both are Suggests, so `R CMD check --as-cran` flags unconditional Suggests use, and the user
   gets a raw "no package called 'RSQLite'" instead of the friendly notification.
+  Re-checked 2026-10-11: unchanged. `R/utils_db_connectors.R:122` still calls
+  `DBI::dbConnect(RSQLite::SQLite(), ...)` with no guard.
 
 - [x] **M9. `NAMESPACE` imports `golem::get_golem_options`, never called.** Resolved 2026-10-02: golem imports removed.
   Drop from `R/tableexplorer-package.R:13`.
@@ -286,29 +393,53 @@ with zero semantic change**. Roughly 73 lines are substantive: ~50 in `R/mod_erd
   `inst/app/www/styles.css:117` styles `#theme-toggle .toggle-icon`, but the
   `span(class = "toggle-icon", ...)` moon-icon element from `main`'s header was dropped in
   `R/app_ui.R:29-33`. Decide whether to restore the element or drop the rule.
+  Re-checked 2026-10-11: unchanged; the rule has moved to `inst/app/www/styles.css:155` and
+  `R/app_ui.R` still builds no `.toggle-icon` element.
 
 - [ ] **M13. `.gitignore` is 3 lines and misses R artefacts.**
   Add `.Rhistory`, `.RData`, `.Rproj.user`, `*.Rcheck/`, `*.tar.gz`.
+  Re-checked 2026-10-11: still open, four lines now rather than three (`tmp/`, `/venv`,
+  `.claude/settings.local.json`, `_scratch/`). None of the five R artefacts above has
+  been added.
 
 - [ ] **M14. `inst/app/www/styles.css` and `app.js` carry 4-6 spaces of leading indent.**
   Artefact of being lifted out of an R string literal. Cosmetic, but they read oddly as
   standalone assets.
+  Re-checked 2026-10-11: unchanged. `inst/app/www/styles.css` still carries the leading indent.
 
-- [ ] **M15. No `.github/workflows/`.**
+- [x] **M15. No `.github/workflows/`.**
   Nothing runs `R CMD check`, which is precisely why C1 and I6/I7/I8 went unnoticed.
   `usethis::use_github_action("check-standard")`.
+  Done, found fixed 2026-10-11, differently: `.github/workflows/r-ci.yml` runs
+  `testthat::test_local()` and then asserts on the detection scorer rather than
+  running `R CMD check`. So it does not catch I6, I7 or C1, which are `R CMD check`
+  findings - it catches the regressions that actually happen here. `.github/dependabot.yml`
+  landed with it.
 
 - [ ] **M16. `tests/testthat/test-inference.R:468` is a vacuous test.**
   Named "detect_composite_pks skips columns with NAs in the combo", but its only expectation
   is inside `if (length(result) > 0)`, which is never entered - testthat reports it as
   "empty test". It covers exactly the C2 gap that is already failing four assertions.
   Fill it in once C2 is fixed.
+  Re-checked 2026-10-11: still vacuous, and unblocked. The test has moved to
+  `tests/testthat/test-inference.R:563`; `testthat::test_local()` reports
+  `detect_composite_pks skips columns with NAs in the combo
+  ('test-inference.R:563:1') - Reason: empty test`. C2 is done, so the condition this
+  item was waiting on is satisfied. It is the only self-inflicted skip in the suite.
 
-- [ ] **M17. `tests/testthat/test-db_connectors.R:148` - `db_close` on an already-closed connection emits an unexpected warning.**
+- [x] **M17. `tests/testthat/test-db_connectors.R:148` - `db_close` on an already-closed connection emits an unexpected warning.**
   Fifth of the five current failures.
+  Done, found fixed 2026-10-11 by commit bf1823e, "Fix db_close on closed connections
+  and a stale lookup-table cache". `dev/check.R` reports
+  `test_local: 1139 passed, 0 failed, 0 errors, 4 skipped`.
 
 - [ ] **M18. README "Sample data" section points at the repo root.**
   Update to `inst/extdata/sample_data/` when I10 is actioned.
+  Not re-checked on 2026-10-11: `README.md` was outside this pass's file list
+  (a parallel agent owned it), so whether the section still points at the repo root is
+  unverified. Reading the "Sample data" section of `README.md` would settle it. Note
+  that I10's re-check changes what the right target is: the root `sample_data/` has
+  three CSVs that `inst/extdata/sample_data/` does not.
 
 ---
 
@@ -323,6 +454,11 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   Exposure is limited - the schema comes from a text input supplied by the connecting user,
   who already holds the credentials - so this is closer to a robustness bug than privilege
   escalation. A schema named `O'Brien` breaks it.
+  Re-checked 2026-10-11: half resolved by P2's fix. `db_load_table` now builds identifiers
+  with `DBI::Id()` and `DBI::dbQuoteIdentifier()` (`R/utils_db_connectors.R:397-404`),
+  so the `O'Brien` table-name case is gone. The `information_schema` metadata queries
+  still interpolate `schema` as a quoted string literal at `:163-239`, which is the
+  remaining half of this finding.
 
 - [x] **P2. `db_load_table` SQL is not portable to SQL Server and fails silently.**
   `LIMIT` is not valid T-SQL, so both the primary query and the backtick fallback fail, and
@@ -337,16 +473,21 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   Leniency belongs where the human types, as with the port in `R/mod_db_connect.R`; no UI
   control sets `limit` today, so there is nothing to sanitise yet.
 
-- [ ] **P3. `read_access_db` re-downloads roughly 10 MB of UCanAccess JARs every session.**
+- [x] **P3. `read_access_db` re-downloads roughly 10 MB of UCanAccess JARs every session.**
   `R/utils_file_readers.R:446` targets `dirname(<uploaded .mdb>)/access_jars`, which under
   Shiny is a per-upload temp directory, with no cleanup. Presumably what the now-dead
   `access_jar_dir()` (I12) was meant to prevent.
+  Done, found fixed 2026-10-11. The jars now go to the persistent per-user
+  cache `tools::R_user_dir("tableexplorer", "cache")/access_jars`, not beside the
+  upload: `R/utils_file_readers.R:585-589` says so in a comment and `read_access_db()`
+  uses it at `:781`. Same change as I12.
 
 - [ ] **P4. `readxl::read_excel()` is called on the raw path with no binary-copy workaround.**
   `R/utils_file_readers.R:121`. In the Shiny upload flow paths are tempfiles so this is
   usually safe, but it bites if `TEMP` contains a space or if `read_table_file` is called
   directly on a project path. The `jdbc:ucanaccess://` URL construction at `:459` has the same
   exposure. Known machine-level trap on this Windows setup.
+  Re-checked 2026-10-11: unchanged; the call has moved to `R/utils_file_readers.R:128`.
 
 ---
 
@@ -361,8 +502,10 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
 - [ ] **D2. ERD node pinning: what should the feature actually be?**
   Server round-trip of positions, `visNetworkProxy` so the network is never rebuilt, or drop
   the pin/unpin gesture. Determines I2 and I3.
+  Re-checked 2026-10-11: still to decide. Now a question about the Network overview tab only:
+  the ERD tab no longer uses visNetwork and has no pinning.
 
-- [ ] **D3. `app.R`: revert to golem's template?**
+- [x] **D3. `app.R`: revert to golem's template?**
   Recommended by both reviewers B and C:
 
   ```r
@@ -374,26 +517,48 @@ Confirmed present before the restructure. Logged so they are not rediscovered.
   Resolves C4 and I13 together. The alternative is keeping the block and fixing the guard with
   `tryCatch(sys.frame(1L)$ofile, error = function(e) NULL)`, but the block buys nothing shiny's
   own `setwd(appDir)` does not already provide.
+  Moot as written, 2026-10-11: golem is gone, so there is no template to revert
+  to, and the `options("golem.app.prod")` half is closed with I13. **What it was
+  really asking is still open and now belongs to C4:** delete `app.R`'s
+  `sys.frame(1L)$ofile` block and rely on shiny's own `setwd(appDir)`, or keep it and
+  fix the guard with `tryCatch(sys.frame(1L)$ofile, error = function(e) NULL)`. Both
+  reviewers preferred deleting it. Decided under C4, not here.
 
 - [ ] **D4. Delete the legacy root files?**
   `inference.R`, `file_readers.R`, `export_utils.R`, `db_connectors.R`, `sample_data/`,
   `schema.json`. Confirmed dead duplicates. Keep `app.py` and `requirements.txt`. Best done in
   the same change as the uncommitted work so the duplicate edit to `file_readers.R` never lands.
   Blocks I10 and M18.
+  Re-checked 2026-10-11: the decision has changed shape. They are no longer "confirmed dead
+  duplicates" (see I10): the root `sample_data/` holds three CSVs that
+  `inst/extdata/sample_data/` does not, `dev/browser-checks/sample_app.R` reads the
+  root copy, and the two `schema.json` files differ. The four root `.R` files are
+  simply stale and can go. This needs Amelia: move the extra fixtures into
+  `inst/extdata/` first, or keep `sample_data/` as the browser-check input.
 
-- [ ] **D5. `access_jar_dir()`: wire it into `read_access_db` or delete it?**
+- [x] **D5. `access_jar_dir()`: wire it into `read_access_db` or delete it?**
   Wiring it would also fix P3. Leaving it is what attracted the pointless edit in I12.
+  Answered 2026-10-11 by the code, not by a decision here: it was wired in.
+  `read_access_db()` calls it at `R/utils_file_readers.R:781` and
+  `access_relationship_rows_jackcess()` at `:729`, and it now points at the persistent
+  per-user cache. See I12 and P3.
 
-- [ ] **D6. Split the uncommitted work into two commits?**
+- [x] **D6. Split the uncommitted work into two commits?**
   Both AST-verifying reviewers recommend it: one mechanical reflow commit (a verified no-op,
   and a good `.git-blame-ignore-revs` candidate) and one commit for the ~73 semantic lines.
   As it stands the real defects are hidden in ~1730 lines of noise and `git blame` on
   `R/mod_erd.R` will point at "reformat" indefinitely. Pair with M4 so the style is reproducible.
+  Overtaken 2026-10-11: that branch's work is long since in history, so the split
+  can no longer be made. M4 (no formatter config) is the part still open.
 
 - [ ] **D7. Mirror this backlog to GitHub issues?**
-  Remote is `https://github.com/amelia-m/table-explorer.git`. The GitHub MCP server failed to
-  connect this session (`AUTH_HEADER_REJECTED`, HTTP 401), so this would need `gh` or a fixed
+  The remote is the repository's `origin` on GitHub; the URL is deliberately not
+  repeated here, because this is a notes file. `DESCRIPTION:12-13` carries it as
+  package metadata, which is where it belongs. The GitHub MCP server failed to connect
+  this session (`AUTH_HEADER_REJECTED`, HTTP 401), so this would need `gh` or a fixed
   token, and it is an outward-facing action requiring explicit approval.
+  Re-checked 2026-10-11: still to decide. The GitHub MCP server is still failing to
+  connect (HTTP 400, badly formatted Authorization header).
 
 ---
 
@@ -465,3 +630,9 @@ packages are absent from the review machine.
 
 **Test-suite status is unchanged by the uncommitted diff** - 5 failures and 6 skips at both HEAD
 and working tree. `main` itself passes clean; the failures arrive with this branch (C2, M16, M17).
+Re-checked 2026-10-11: no longer the state of `main`. `Rscript dev/check.R` reports
+`test_local: 1139 passed, 0 failed, 0 errors, 4 skipped` and `ALL CHECKS PASSED`.
+Three skips are optional-package skips, and two of those skip because the package is
+*present* (readxl and haven, whose tests cover the notification shown when they are
+missing); mdbtools is genuinely absent. The fourth is M16's empty test. C2, M17 and
+the rest are fixed; M16 is still empty.
