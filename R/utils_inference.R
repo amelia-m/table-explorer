@@ -63,6 +63,50 @@ containment_near <- 0.99
 # score_candidate() both take containment_min_distinct.
 containment_min_distinct_default <- 3L
 
+# ── How strict the parent-key requirement is ─────────────────
+# Containment needs a parent that identifies a row, and "identifies a row"
+# has more than one defensible reading. The three settings exist so the
+# precision cost of each reading can be measured rather than assumed, and
+# the default reproduces the behaviour this file had before they existed.
+#
+#   "key"       parent must be a key or a near key (parent_key_kind's two
+#               original tiers). The default. No number moves.
+#   "composite" a parent may also be one column of a pair that is unique
+#               over the parent table, found by composite_key_component().
+#               FAERS drug24q1 is the case: 1.9M rows, no unique or
+#               near-unique column at all, real key (primaryid, drug_seq),
+#               and two documented links into drug_seq that "key" cannot
+#               reach because the table offers no parent columns.
+#   "any"       no parent-key requirement at all. A measurement setting,
+#               not a recommendation: it is the lower bound on precision
+#               and the upper bound on recall, so the middle setting can
+#               be read against both ends.
+parent_key_requirements <- c("key", "composite", "any")
+parent_key_requirement_default <- "key"
+
+# ── The cheap composite-key probe ────────────────────────────
+# Rows sampled before a candidate pair is confirmed over the whole table.
+# A duplicate in the sample is a duplicate overall, so a pair that is not
+# unique is usually refused for the cost of a sample-sized pass instead of
+# a 1.9M-row one; only a pair that survives the sample is confirmed in
+# full. That makes this an ordering of the work, not an approximation: the
+# verdict is the same either way. 100,000 is large enough that a pair with
+# any real duplication almost certainly shows one (a table with k
+# duplicate pairs over n rows hides them from a sample of this size with
+# probability under (1 - 100000/n)^k), and small enough that a refusal
+# costs tens of milliseconds rather than seconds.
+composite_probe_sample_rows <- 100000L
+# Whole-table confirmations allowed per column before the probe gives up.
+# Each confirmation is the expensive pass, and a column that has failed
+# eight sample-surviving pairs is not one unique pair away from being a
+# key. Eight rather than one because the sample can pass a pair that the
+# whole table then rejects, and a single allowance would let one such pair
+# hide the real key behind it.
+composite_probe_max_pairs <- 8L
+# Fixed so a scan is reproducible: the same table gives the same verdict
+# on every run. The same constant the profiles sample with.
+composite_probe_seed <- 42L
+
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
 weight_map <- c(
@@ -598,13 +642,30 @@ overlap_expected_by_chance <- function(p_child, p_parent) {
 # both of those: a flag, a date and a block of free text are not keys
 # whatever their values do.
 #
-# Returns "key", "near key" (for the reason text) or NULL.
-parent_key_kind <- function(v, p, n) {
-  if (n == 0 || is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
-    return(NULL)
-  }
-  # isTRUE: an all-NA text column has no median and would error
-  if (is.character(v) && isTRUE(median(nchar(head(na.omit(v), 20))) > 60)) {
+# requirement selects how many tiers are open (parent_key_requirements).
+# The two original tiers are tested first and in the same order whatever
+# the requirement, so a column that is both strictly unique and half of a
+# unique pair reads "key": the relaxed tiers only ever add parents the
+# strict ones refused, and nothing is counted twice.
+#
+# composite_ok is the composite probe's answer for this column, passed in
+# rather than computed here: the caller runs the probe only for a parent a
+# child is already wholly contained in, and caches it per column. It is
+# FALSE, TRUE, or the tier string the probe earned (composite_tier), and a
+# function of no arguments returning one of those is called only if the
+# two strict tiers have already refused - so a column that is a key
+# outright is never probed and never counted as a composite admission.
+#
+# Returns "key", "near key", "composite key component", "non-key column"
+# (all four go into the reason text) or NULL.
+parent_key_kind <- function(
+  v,
+  p,
+  n,
+  requirement = parent_key_requirement_default,
+  composite_ok = FALSE
+) {
+  if (n == 0 || !can_be_parent_key(v)) {
     return(NULL)
   }
   present <- p$n_present
@@ -617,6 +678,22 @@ parent_key_kind <- function(v, p, n) {
       distinct >= present * parent_key_min_frac
   ) {
     return("near key")
+  }
+  if (requirement == "composite") {
+    ok <- if (is.function(composite_ok)) composite_ok() else composite_ok
+    if (is.character(ok) && nzchar(ok)) {
+      return(ok)
+    }
+    if (isTRUE(ok)) {
+      return("composite key component")
+    }
+  }
+  if (requirement == "any") {
+    # "any" does not run the probe, so a composite component reads as the
+    # plain column it is under this setting. The dtype rejects above still
+    # apply: they are type guards, not a key requirement, and a date
+    # column is not a parent under any reading of the word.
+    return("non-key column")
   }
   NULL
 }
@@ -745,6 +822,168 @@ near_unique_cols <- function(df) {
   names(df)[keep]
 }
 
+# ── Can this column be a parent key at all? ──────────────────
+# The dtype rejects every parent-key test in this file applies: a flag, a
+# date and a block of free text are not keys whatever their values do.
+# Stated once here for the composite probe and parent_key_kind; pk_map and
+# near_unique_cols carry their own copies and are left alone.
+can_be_parent_key <- function(v) {
+  if (is.logical(v) || inherits(v, c("Date", "POSIXt"))) {
+    return(FALSE)
+  }
+  # isTRUE: an all-NA text column has no median and would error
+  if (
+    is.character(v) &&
+      isTRUE(median(nchar(head(na.omit(v), 20))) > 60)
+  ) {
+    return(FALSE)
+  }
+  TRUE
+}
+
+# ── Composite-key probe: the distinct-product prefilter ───────
+# Which partner columns could possibly make `col` unique, and in what
+# order to try them.
+#
+# A pair (a, b) can be unique over n rows only if d_a * d_b >= n: every row
+# needs its own (value, value) slot and there are only d_a * d_b slots. So
+# this is exact rather than a heuristic - no pair it drops could have been
+# unique - and it is free, because the distinct counts are already
+# computed. drug24q1 is the case it was written for: pairing drug_seq
+# (1,777 distinct) with primaryid (406,184) gives 7.2e8 slots for 1.9e6
+# rows, so the real key survives while the table's narrow pairings are
+# refused without reading a row.
+#
+# Roomiest pair first, because the pair with the most slots per row is the
+# likeliest to be unique, so the search usually stops on its first
+# confirmation rather than its eighth.
+composite_pair_candidates <- function(col, distinct_counts, n_rows) {
+  others <- setdiff(names(distinct_counts), col)
+  if (length(others) == 0) {
+    return(character(0))
+  }
+  # as.numeric throughout: two columns of 50,000 distinct values overflow
+  # an R integer, and the NA that produces would drop a pair that should
+  # have survived
+  product <- as.numeric(distinct_counts[[col]]) *
+    as.numeric(distinct_counts[others])
+  keep <- !is.na(product) & product >= n_rows
+  others[keep][order(-product[keep])]
+}
+
+# ── Composite-key probe: is this column half of a key pair? ───
+# Returns list(partner, exact) for the first pair that identifies the
+# table's rows, or NULL. Width is two: a three-column key is out of scope
+# here, so a table keyed on three columns reads as keyless and the
+# "composite" setting finds nothing in it.
+#
+# "Identifies the rows" is read with the same tolerance parent_key_min_frac
+# gives a dirty single-column key, and for the same reason. Measured on
+# FAERS 2024Q1 on 2026-10-11: drug24q1 has 1,909,327 rows and
+# (primaryid, drug_seq) takes 1,909,235 distinct values, so 92 rows share a
+# key with another, across 86 keys, at a maximum multiplicity of 6. An
+# exhaustive width-2 search over all 190 pairs of that table found no
+# strictly unique pair at all, and no third column makes
+# (primaryid, drug_seq) unique either. Requiring exact uniqueness would
+# therefore refuse the one real composite key FAERS has, which is the case
+# this whole setting exists for. exact says which it was, so the reason
+# text can tell a reviewer the difference.
+#
+# detect_composite_pks() answers a related question by enumerating every
+# combination up to width three over every candidate column and testing
+# each against the whole table (190 pairs plus 1,140 triples on a
+# 20-column table, times 1.9M rows), which did not finish in about 25
+# minutes on FAERS. This is the cheap version: the prefilter above cuts
+# the pairs, the sample cuts the rows, and the caller only asks about a
+# column a child is already wholly contained in.
+#
+# Missing values: a pair can be "unique" only because both of its columns
+# are mostly empty, which is not a key. So both columns have to be present
+# on all but parent_key_min_frac of the rows - the same tolerance the near
+# key tier allows a dirty single-column key - and uniqueness is then
+# required exactly over the rows where both are present. A pair that
+# clears the completeness bar but has one duplicate is refused: the
+# tolerance is for missingness, not for duplication.
+composite_key_component <- function(
+  df,
+  col,
+  distinct_counts = NULL,
+  sample_rows = composite_probe_sample_rows,
+  max_pairs = composite_probe_max_pairs
+) {
+  n <- nrow(df)
+  if (n < 2L || !col %in% names(df)) {
+    return(NULL)
+  }
+  if (is.null(distinct_counts)) {
+    distinct_counts <- vapply(
+      df,
+      function(v) length(unique(v[!is.na(v)])),
+      integer(1)
+    )
+  }
+  partners <- composite_pair_candidates(col, distinct_counts, n)
+  if (length(partners) == 0) {
+    return(NULL)
+  }
+  a <- df[[col]]
+  confirmed <- 0L
+  for (b_name in partners) {
+    b <- df[[b_name]]
+    idx <- which(!is.na(a) & !is.na(b))
+    if (length(idx) < n * parent_key_min_frac) {
+      next
+    }
+    # Duplicate rows the pair is allowed to carry and still be read as the
+    # dirty version of a key, the same share parent_key_min_frac allows a
+    # single column
+    allowed <- length(idx) * (1 - parent_key_min_frac)
+    if (length(idx) > sample_rows) {
+      # A row that shares its key with another row inside the sample
+      # shares it inside the whole table too, so the sample's duplicate
+      # count can only understate the table's. Seeing more duplication
+      # than the table is allowed therefore refuses the pair outright, for
+      # the cost of a sample-sized pass rather than a 1.9M-row one. The
+      # sample can only ever refuse: a pair it does not refuse is still
+      # confirmed in full below, so this reorders the work and does not
+      # approximate the answer.
+      s <- with_local_seed(
+        composite_probe_seed,
+        sample(idx, sample_rows)
+      )
+      keys <- paste(a[s], b[s], sep = "\x01")
+      if (length(keys) - length(unique(keys)) > allowed) {
+        next
+      }
+    }
+    confirmed <- confirmed + 1L
+    keys <- paste(a[idx], b[idx], sep = "\x01")
+    dup <- length(keys) - length(unique(keys))
+    if (dup == 0L) {
+      return(list(partner = b_name, exact = TRUE))
+    }
+    if (dup <= allowed) {
+      return(list(partner = b_name, exact = FALSE))
+    }
+    if (confirmed >= max_pairs) {
+      return(NULL)
+    }
+  }
+  NULL
+}
+
+# The reason-text tier a probe result earns, or FALSE for no result.
+composite_tier <- function(probe_result) {
+  if (is.null(probe_result)) {
+    return(FALSE)
+  }
+  if (isTRUE(probe_result$exact)) {
+    "composite key component"
+  } else {
+    "near composite key component"
+  }
+}
+
 # ── Naming signal (memoised) ─────────────────────────────────
 # Depends only on the three names, which repeat across tables (client_id,
 # k9id, ...), so large scans hit the cache for most pairs.
@@ -824,7 +1063,9 @@ score_candidate <- function(
   p1 = NULL,
   p2 = NULL,
   t2_is_lookup = NULL,
-  containment_min_distinct = containment_min_distinct_default
+  containment_min_distinct = containment_min_distinct_default,
+  parent_key_requirement = parent_key_requirement_default,
+  composite_probe = NULL
 ) {
   signals <- list()
   reasons <- character(0)
@@ -921,6 +1162,17 @@ score_candidate <- function(
   # resolve_fk_parents' ambiguity rule is what answers it: the raw overlap
   # it reads is at or above overlap_high whenever containment fires here.
   #
+  # That exemption extends to a composite key component, and deliberately:
+  # the discount is a statement about the parent's density, not about which
+  # tier admitted the parent, and a component of a real composite key is as
+  # much a row identifier as half of one can be. The density still governs
+  # the overlap signals in step 3 for these pairs exactly as it does for a
+  # pk_map parent, so a count column sitting inside a dense composite
+  # component still earns no overlap_high and no overlap_medium, and the
+  # pair rests on containment alone. drug24q1.drug_seq is a dense integer
+  # run (1,777 values, 1..1777), so this is the case it decides: the two
+  # child columns reach it on containment and on nothing else.
+  #
   # Reuses ov, which is already mean(child distinct in parent distinct),
   # so containment costs no second pass and no larger sample.
   if (
@@ -930,7 +1182,34 @@ score_candidate <- function(
       !is.na(ov) &&
       length(p1$uniq) >= containment_min_distinct
   ) {
-    parent_kind <- parent_key_kind(df2[[col2]], p2, n2)
+    # Demand-driven: the composite probe runs only for a parent column
+    # this child is wholly inside, and only when the setting can use the
+    # answer. A scan therefore asks about a handful of columns rather than
+    # enumerating pairs over every column of every table, and the answer
+    # is cached per (table, column) by the closure detect_fks passes in.
+    # At partial containment the question is not asked: a child that is
+    # only 99% inside a column is not the case this relaxation exists for.
+    composite_ok <- if (
+      parent_key_requirement == "composite" && ov >= containment_full
+    ) {
+      function() {
+        if (is.null(composite_probe)) {
+          # Standalone call: no cache to share, so probe this table here
+          composite_tier(composite_key_component(df2, col2))
+        } else {
+          composite_probe(t2, col2)
+        }
+      }
+    } else {
+      FALSE
+    }
+    parent_kind <- parent_key_kind(
+      df2[[col2]],
+      p2,
+      n2,
+      parent_key_requirement,
+      composite_ok
+    )
     if (!is.null(parent_kind)) {
       # The distinct values actually tested. Above column_profile's
       # sampling cap that is a sample of the child's distinct values, so
@@ -1287,6 +1566,16 @@ detect_composite_pks <- function(
 # setting rather than a constant, because how much of a coincidence three
 # shared values are depends on the schema: pass a higher number for a
 # schema full of small code domains. Reaches score_candidate() from here.
+#
+# parent_key_requirement: how strict the containment signal's parent-key
+# requirement is (parent_key_requirements). "key", the default, is the
+# behaviour this function had before the setting existed. The other two
+# widen the set of columns a table offers as parents, which is where the
+# measurement of what they cost comes from; the UI does not set this yet.
+#
+# Two attributes come back for that measurement, alongside "truncated":
+#   composite_probe_secs  seconds spent in the composite probe
+#   composite_parents     admitted composite components, "table.column"
 
 detect_fks <- function(
   tables,
@@ -1297,8 +1586,13 @@ detect_fks <- function(
   max_pairs = 50000L,
   focus_tables = NULL,
   existing = list(),
-  containment_min_distinct = containment_min_distinct_default
+  containment_min_distinct = containment_min_distinct_default,
+  parent_key_requirement = parent_key_requirement_default
 ) {
+  parent_key_requirement <- match.arg(
+    parent_key_requirement,
+    parent_key_requirements
+  )
   if (method == "manual" || length(tables) < 2) {
     return(list())
   }
@@ -1362,6 +1656,106 @@ detect_fks <- function(
     near_unique_cols(tables[[t]])
   })
   names(near_pk_map) <- tnames
+
+  # ── Relaxed parent-key settings ──────────────────────────────
+  # Both relaxed settings widen the columns a table offers as parents,
+  # because target_cols below is what decides whether containment is ever
+  # measured for a column at all: a column no child is compared against
+  # cannot be asked whether it is half of a key. Under "key" none of this
+  # runs and the default costs nothing.
+  #
+  # "composite" offers the columns that could be half of a unique pair -
+  # the distinct-product prefilter, which is exact - and the probe then
+  # decides, on demand, whether a column a child is wholly inside really
+  # is one. "any" offers every column that passes the dtype rejects.
+  relaxed <- parent_key_requirement != "key"
+
+  distinct_cache <- new.env(parent = emptyenv())
+  get_distinct <- function(t) {
+    hit <- distinct_cache[[t]]
+    if (is.null(hit)) {
+      hit <- vapply(
+        tables[[t]],
+        function(v) length(unique(v[!is.na(v)])),
+        integer(1)
+      )
+      assign(t, hit, envir = distinct_cache)
+    }
+    hit
+  }
+
+  relaxed_parent_map <- lapply(tnames, function(t) {
+    if (!relaxed) {
+      return(character(0))
+    }
+    df <- tables[[t]]
+    if (nrow(df) < 2L) {
+      return(character(0))
+    }
+    ok <- names(df)[vapply(df, can_be_parent_key, logical(1))]
+    if (parent_key_requirement == "any") {
+      return(ok)
+    }
+    # Keep only the columns some partner could make unique. Cheap, exact,
+    # and on a narrow table it drops nothing, which is why the probe is
+    # still needed afterwards.
+    d <- get_distinct(t)[ok]
+    n <- nrow(df)
+    ok[vapply(
+      ok,
+      function(cn) {
+        length(composite_pair_candidates(cn, d, n)) > 0L
+      },
+      logical(1)
+    )]
+  })
+  names(relaxed_parent_map) <- tnames
+
+  # The composite probe, cached per (table, column) so a parent asked
+  # about by two children is tested once, and timed so the report can say
+  # what the test itself added as against what the wider candidate pool
+  # added. score_candidate calls this only at full containment.
+  composite_probe_cache <- new.env(parent = emptyenv())
+  composite_probe_secs <- 0
+  composite_parents <- character(0)
+  composite_probe <- function(t, col) {
+    key <- paste(t, col, sep = "|")
+    hit <- composite_probe_cache[[key]]
+    if (is.null(hit)) {
+      t0 <- Sys.time()
+      probe <- composite_key_component(
+        tables[[t]],
+        col,
+        distinct_counts = get_distinct(t)
+      )
+      composite_probe_secs <<- composite_probe_secs +
+        as.numeric(difftime(Sys.time(), t0, units = "secs"))
+      hit <- composite_tier(probe)
+      partner <- probe$partner
+      assign(key, hit, envir = composite_probe_cache)
+      if (!isFALSE(hit)) {
+        # The partner is the other half of the same unique pair, so it
+        # answers the same way without being probed again. Seeding its
+        # cache entry is what makes "both columns of the pair become
+        # eligible parents" true of the cache and not only of the column
+        # that happened to be asked about first.
+        assign(
+          paste(t, partner, sep = "|"),
+          hit,
+          envir = composite_probe_cache
+        )
+      }
+    }
+    if (!isFALSE(hit)) {
+      # Counted where the question was asked and answered yes, so this is
+      # the set of columns the composite tier actually admitted as
+      # parents: columns a child was wholly inside, that the key and near
+      # key tiers had already refused. A column that is a key outright is
+      # never probed, so it never appears here.
+      composite_parents <<- union(composite_parents, paste(t, col, sep = "."))
+    }
+    hit
+  }
 
   # Pre-compute FK-candidate columns per table (skip non-FK-like columns).
   # Empty tables have no values to screen, so their key-named columns are
@@ -1549,7 +1943,7 @@ detect_fks <- function(
         }
 
         df2 <- tables[[t2]]
-        target_cols <- if (length(pk_map[[t2]]) > 0) {
+        strict_cols <- if (length(pk_map[[t2]]) > 0) {
           pk_map[[t2]]
         } else if (nrow(df2) == 0) {
           # Empty tables: their key-named and id/code columns
@@ -1563,11 +1957,30 @@ detect_fks <- function(
           # targets at all for a table where nothing identifies a row
           near_pk_map[[t2]]
         }
+        # A relaxed setting adds its wider pool on top, never in place of
+        # the strict choice above, so every parent "key" would have found
+        # is still offered and still read by its own tier first.
+        #
+        # A column that only the relaxed pool offered is on probation: it
+        # is here so that containment can be measured against it, and a
+        # pair that does not end up carrying a containment signal is
+        # discarded below. Without that, widening the pool would also hand
+        # every other signal a parent it was never allowed to propose -
+        # Lahman went from 22 found rows to 1,292 that way, almost none of
+        # them through the rule being measured - and the setting would no
+        # longer be measuring the parent-key requirement alone.
+        relaxed_add <- if (relaxed) {
+          setdiff(relaxed_parent_map[[t2]], strict_cols)
+        } else {
+          character(0)
+        }
+        target_cols <- union(strict_cols, relaxed_add)
         if (src_unique) {
           # A unique key only links to the same key, unique in the parent
           target_cols <- pk_map[[t2]][
             clean_name(pk_map[[t2]]) == clean_name(col1)
           ]
+          relaxed_add <- character(0)
         }
         if (length(target_cols) == 0) {
           next
@@ -1596,11 +2009,24 @@ detect_fks <- function(
               get_profile(t1, col1),
               get_profile(t2, col2),
               lookup_flags[[t2]],
-              containment_min_distinct
+              containment_min_distinct,
+              parent_key_requirement,
+              composite_probe
             ),
             error = function(e) NULL
           )
           if (is.null(result)) {
+            next
+          }
+          # On probation: a parent only the relaxed pool offered has to
+          # earn its place through the signal the setting relaxes. Either
+          # containment tier counts; under "composite" only the full one
+          # can arise, because the probe is asked only at full
+          # containment.
+          if (
+            col2 %in% relaxed_add &&
+              !any(c("containment", "containment_near") %in% names(result$signals))
+          ) {
             next
           }
           if (
@@ -1679,6 +2105,11 @@ detect_fks <- function(
 
   # Let callers warn that tables late in the scan order were not compared
   attr(results, "truncated") <- pair_count > max_pairs
+  attr(results, "pairs_scored") <- pair_count
+  # Measurement of the relaxed settings: what the probe itself cost, and
+  # which columns it admitted that the strict tiers would have refused
+  attr(results, "composite_probe_secs") <- composite_probe_secs
+  attr(results, "composite_parents") <- sort(composite_parents)
   results
 }
 
