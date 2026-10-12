@@ -1403,3 +1403,198 @@ test_that("a name starting with id is a possible key, unless it is a word", {
   expect_false(is_possible_key_name("identified_gender"))
   expect_false(is_possible_key_name("idle"))
 })
+
+# ── The parent-key requirement setting ───────────────────────
+
+# A table whose only key is the pair (order_id, line_no). Neither column is
+# unique, neither is near-unique, so under the default the table offers no
+# parent columns at all and nothing can reference it. This is the FAERS
+# drug24q1 shape in miniature: primaryid repeats, drug_seq repeats, and the
+# pair is unique over the table.
+composite_parent_fixture <- function(orders = 50L, lines = 4L) {
+  data.frame(
+    order_id = rep(seq_len(orders), each = lines),
+    line_no = rep(seq_len(lines), times = orders),
+    qty = rep(c(1L, 2L), orders * lines / 2L)
+  )
+}
+
+test_that("a parent that is only half of a composite key is refused by default and admitted under composite", {
+  # ther24q1.dsg_drug_seq -> drug24q1.drug_seq is the real link this
+  # decides: the child sits wholly inside a column that identifies no row
+  # on its own, and is half of the parent's real key.
+  items <- composite_parent_fixture()
+  expect_equal(detect_pks(items, "items", "uniqueness"), character(0))
+  expect_equal(near_unique_cols(items), character(0))
+  child <- data.frame(seq_ref = rep(1:4, 30))
+
+  strict <- score_candidate(
+    "ther", "seq_ref", child,
+    "items", "line_no", items, containment_flags(naming = FALSE)
+  )
+  expect_false("containment" %in% names(strict$signals %||% list()))
+
+  # Survival check: the same pair under the relaxed setting
+  relaxed <- score_candidate(
+    "ther", "seq_ref", child,
+    "items", "line_no", items, containment_flags(naming = FALSE),
+    parent_key_requirement = "composite"
+  )
+  expect_true("containment" %in% names(relaxed$signals))
+  expect_match(
+    paste(relaxed$reasons, collapse = " | "),
+    "all 4 values present in a composite key component \\(contained\\)"
+  )
+
+  # And through detect_fks, which is how a scan sets it: the link is
+  # absent at the default and present under "composite"
+  tbls <- list(items = items, ther = data.frame(
+    ther_id = 1:120, seq_ref = rep(1:4, 30)
+  ))
+  link <- function(req) {
+    Filter(
+      function(r) r$from_col == "seq_ref" && r$to_col == "line_no",
+      detect_fks(tbls, "both", "medium", parent_key_requirement = req)
+    )
+  }
+  expect_length(link("key"), 0)
+  expect_length(link("composite"), 1)
+})
+
+test_that("a column that is both a key and half of a unique pair reads as a key", {
+  # No double counting: the strict tiers answer first, so the reason text
+  # names the tier that actually admitted the parent.
+  n <- 60L
+  both <- data.frame(
+    row_id = seq_len(n),
+    grp = rep(1:6, each = 10),
+    pos = rep(1:10, times = 6)
+  )
+  # row_id is strictly unique and is also half of several unique pairs
+  expect_false(is.null(composite_key_component(both, "row_id")))
+  child <- data.frame(ref = c(1L, 5L, 9L, 20L))
+  res <- score_candidate(
+    "child_t", "ref", child, "both_t", "row_id", both,
+    containment_flags(naming = FALSE),
+    parent_key_requirement = "composite"
+  )
+  expect_match(
+    paste(res$reasons, collapse = " | "),
+    "all 4 values present in a key \\(contained\\)"
+  )
+})
+
+test_that("the composite probe refuses a pair that is unique only because both columns are mostly missing", {
+  # 200 rows, and (sparse_a, sparse_b) is unique over the 6 rows where both
+  # are present. A key that identifies six rows out of two hundred is not
+  # a key, so the pair has to clear a completeness bar before its
+  # uniqueness is read at all.
+  n <- 200L
+  mostly_na <- data.frame(
+    sparse_a = c(1:6, rep(NA_integer_, n - 6L)),
+    sparse_b = c(101:106, rep(NA_integer_, n - 6L)),
+    filler = rep(1:4, length.out = n)
+  )
+  expect_null(composite_key_component(mostly_na, "sparse_a"))
+
+  # Survival check: the same pair fully populated is found, so the refusal
+  # is about the missingness and not about the pair
+  full <- data.frame(
+    sparse_a = rep(1:50, each = 4),
+    sparse_b = rep(1:4, times = 50),
+    filler = rep(1:4, length.out = n)
+  )
+  expect_equal(composite_key_component(full, "sparse_a")$partner, "sparse_b")
+})
+
+test_that("the distinct-product prefilter keeps only the pairs that could be unique", {
+  # d_a * d_b >= n is necessary for a pair to be unique over n rows, so a
+  # partner that cannot supply enough slots is dropped without reading a
+  # row. 1,000 rows: 40 x 4 = 160 slots cannot cover them, 40 x 30 = 1,200
+  # can.
+  d <- c(a = 40L, narrow = 4L, wide = 30L)
+  expect_equal(composite_pair_candidates("a", d, 1000L), "wide")
+  # Survival check the other way: over 120 rows the narrow partner has
+  # room too, and the roomier one is still offered first
+  expect_equal(composite_pair_candidates("a", d, 120L), c("wide", "narrow"))
+})
+
+test_that("sampling before confirmation reaches the whole-table verdict when the duplicate is late", {
+  # The sample is an ordering of the work, not an approximation: a pair
+  # that passes on the rows sampled is still confirmed over the whole
+  # table. Here the only duplicate pair sits in the last fifty rows, so a
+  # prefix sample would have passed it.
+  late_dup <- data.frame(
+    a = c(rep(1:50, each = 5), rep(1:10, each = 5)),
+    b = c(rep(1:5, times = 50), rep(1:5, times = 10))
+  )
+  expect_equal(nrow(late_dup), 300L)
+  # The last fifty rows repeat the first fifty, so fifty rows share a key
+  # where the tolerance allows three
+  expect_equal(300L - length(unique(paste(late_dup$a, late_dup$b))), 50L)
+  # A prefix sample sees none of it
+  first <- utils::head(late_dup, 100L)
+  expect_equal(anyDuplicated(paste(first$a, first$b)), 0L)
+  expect_null(composite_key_component(late_dup, "a", sample_rows = 100L))
+
+  # Survival check: the same shape with the late rows made distinct is
+  # found, so the refusal came from the confirmation and not from the
+  # fixture being unreadable
+  clean <- late_dup
+  clean$a[251:300] <- rep(51:60, each = 5)
+  expect_equal(
+    composite_key_component(clean, "a", sample_rows = 100L)$partner,
+    "b"
+  )
+})
+
+test_that("a table keyed on three columns reads as keyless under composite", {
+  # Width stays at two. A full 4 x 5 x 6 grid is keyed on all three of its
+  # columns and no pair of them is unique, so the relaxed setting finds
+  # nothing in it and behaves as the default does rather than widening the
+  # probe to triples. Here the prefilter sees that for free: no pair has
+  # enough slots to cover 120 rows.
+  three <- expand.grid(x = 1:4, y = 1:5, z = 1:6)
+  expect_equal(nrow(three), 120L)
+  expect_null(composite_key_component(three, "x"))
+  expect_null(composite_key_component(three, "y"))
+  expect_null(composite_key_component(three, "z"))
+})
+
+test_that("a composite key carrying a few duplicate rows is admitted, and the reason says near", {
+  # Measured on FAERS 2024Q1: drug24q1 has 1,909,327 rows,
+  # (primaryid, drug_seq) takes 1,909,235 distinct values, and an
+  # exhaustive width-2 search found no strictly unique pair in the table at
+  # all. Requiring exact uniqueness would refuse the one composite key
+  # FAERS has, so the pair gets the same tolerance parent_key_min_frac
+  # already gives a dirty single-column key.
+  n <- 1000L
+  dirty <- data.frame(
+    grp = rep(1:200, each = 5),
+    pos = rep(1:5, times = 200)
+  )
+  dirty$pos[996:1000] <- 1L
+  expect_equal(n - length(unique(paste(dirty$grp, dirty$pos))), 4L)
+  probe <- composite_key_component(dirty, "pos")
+  expect_equal(probe$partner, "grp")
+  expect_false(probe$exact)
+
+  child <- data.frame(ref = 1:5)
+  res <- score_candidate(
+    "child_t", "ref", child, "dirty_t", "pos", dirty,
+    containment_flags(naming = FALSE),
+    parent_key_requirement = "composite"
+  )
+  expect_equal(names(res$signals), "containment")
+  expect_match(
+    paste(res$reasons, collapse = " | "),
+    "all 5 values present in a near composite key component \\(contained\\)"
+  )
+
+  # Survival check the other way: a pair where a sixth of the rows share a
+  # key is not a key by any tolerance, and is refused
+  heavy <- dirty
+  heavy$pos[1:200] <- 1L
+  expect_gt(n - length(unique(paste(heavy$grp, heavy$pos))), n * 0.01)
+  expect_null(composite_key_component(heavy, "pos"))
+})
