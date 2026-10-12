@@ -33,6 +33,12 @@ app_server <- function(input, output, session) {
   fk_cache$scanned_sig <- character(0)
   fk_cache$handled_id <- NULL
 
+  # Shared-column detection cache, same shape and same purpose as the FK
+  # one: hold the last scan's result and the request id that produced it
+  shared_cache <- new.env(parent = emptyenv())
+  shared_cache$result <- list()
+  shared_cache$handled_id <- NULL
+
   # ── Upload module (includes manual override section) ─────────
   upload_out <- mod_upload_server(
     "upload",
@@ -266,6 +272,20 @@ app_server <- function(input, output, session) {
     fk_cache$result
   })
 
+  # ── Shared columns (joinable, not foreign keys) ───────────────
+  # Computed here, beside FK detection, and driven by the same scan
+  # request, so the two sections of the Relationships tab always describe
+  # the same scan. The cache is keyed on the request id, so an unrelated
+  # reactive change (a dictionary edit, a view filter, a confirm) returns
+  # the cached result instead of rescanning every table pair.
+  shared_cols_rv <- reactive({
+    tbls <- all_tables_rv()
+    request <- detection$scan_request_rv()
+    settings <- detection$detection_settings_rv()
+    req(length(tbls) > 0)
+    shared_columns_for_scan(tbls, request, settings, shared_cache)
+  })
+
   # ── Combined relationships ────────────────────────────────────
   all_rels_rv <- reactive({
     raw <- combine_relationships(
@@ -318,6 +338,22 @@ app_server <- function(input, output, session) {
     filter_rel_sources(rels, detection$rel_sources())
   })
 
+  # Same view-only filter for shared columns. Empty tables yield none in
+  # any case, so this matters only if the visible set narrows further later.
+  visible_shared_cols_rv <- reactive({
+    keep <- names(visible_tables_rv())
+    found <- shared_cols_rv()
+    structure(
+      Filter(
+        function(s) s$from_table %in% keep && s$to_table %in% keep,
+        found
+      ),
+      # Carried through: an empty result means something different when the
+      # settings asked for no value comparison at all
+      skipped = attr(found, "skipped")
+    )
+  })
+
   # ── has_tables output (used by conditionalPanel in ERD tab) ──
   output$has_tables <- reactive({
     if (length(all_tables_rv()) > 0) "true" else "false"
@@ -357,7 +393,8 @@ app_server <- function(input, output, session) {
     visible_rels_rv,
     false_positives_rv,
     conf_overrides_rv,
-    confirmed_rels_rv
+    confirmed_rels_rv,
+    shared_cols_rv = visible_shared_cols_rv
   )
 
   mod_dictionary_server(
@@ -389,4 +426,107 @@ app_server <- function(input, output, session) {
     dictionary_rv = dictionary_rv,
     declared_pks_rv = declared_pks_rv
   )
+}
+
+# ── Shared-column scan for one detection request ──────────────
+#' Shared columns for the current scan request
+#'
+#' Wraps detect_shared_columns() with everything the app has to decide
+#' around it: which settings mean "do not look", how large tables are
+#' sampled, and when a cached result is reused. Kept out of the reactive
+#' so it can be tested without a session.
+#'
+#' A shared column is not a foreign key: it carries the same name in both
+#' tables, the values overlap, and it is a key in neither side, which is
+#' exactly why detect_fks() never sees it (FK targets are drawn from
+#' unique columns only).
+#'
+#' @param tables Named list of data frames currently loaded
+#' @param request Scan request from mod_detection: list(id, scope, strategy),
+#'   or NULL before any scan has been asked for
+#' @param settings Detection settings snapshot from mod_detection, or NULL
+#' @param cache Environment holding `result` (last scan) and `handled_id`
+#'   (the request id that produced it)
+#' @return List of shared-column records, filtered to the loaded tables. A
+#'   result of length zero carries a `skipped` attribute, holding the reason
+#'   in words, when the current settings ask for no value comparison.
+#' @noRd
+shared_columns_for_scan <- function(tables, request, settings, cache) {
+  loaded <- names(tables)
+  cached_for_loaded <- function() {
+    Filter(
+      function(s) s$from_table %in% loaded && s$to_table %in% loaded,
+      cache$result
+    )
+  }
+
+  # No request yet, or this request already handled: nothing to recompute.
+  # Removing a table only filters the cached result, as with FKs.
+  if (
+    is.null(request) ||
+      is.null(settings) ||
+      identical(request$id, cache$handled_id)
+  ) {
+    return(cached_for_loaded())
+  }
+  cache$handled_id <- request$id
+
+  # Value comparison is the whole definition of this class, so settings that
+  # switch it off leave nothing to report. Said in words rather than shown as
+  # an empty table, because "none found" and "never looked" are different.
+  reason <- if (identical(request$strategy, "naming_only")) {
+    "the last scan was naming only"
+  } else if (identical(settings$method, "naming")) {
+    "the detection method is naming conventions only"
+  } else if (identical(settings$method, "manual")) {
+    "the detection method is manual only"
+  } else if (!isTRUE(settings$value_overlap)) {
+    "the value overlap signal is switched off"
+  }
+  if (!is.null(reason)) {
+    cache$result <- list()
+    return(structure(list(), skipped = reason))
+  }
+
+  # Minimum confidence moves the reporting threshold. A shared column has no
+  # score of its own, so the overlap fraction is the only evidence there is.
+  min_overlap <- switch(
+    settings$min_conf %||% "medium",
+    low = 0.3,
+    high = 0.8,
+    0.5
+  )
+
+  # The same 10,000-row sample the FK scan takes, with the same seed, so both
+  # sections of the tab describe the same rows. Measured on a synthetic
+  # 52-table, 1.7M-row schema: 12.6 s unsampled against 1.6 s sampled.
+  # Wide tables are not column-trimmed the way the FK scan trims them: the
+  # per-pair cost here is already bounded by detect_shared_columns()'s own
+  # pair cap, and trimming would hide columns for an unrelated reason.
+  sampled <- lapply(tables, function(df) {
+    if (nrow(df) > 10000) {
+      df[with_local_seed(42, sample(nrow(df), 10000)), , drop = FALSE]
+    } else {
+      df
+    }
+  })
+  names(sampled) <- names(tables)
+
+  found <- tryCatch(
+    detect_shared_columns(sampled, min_overlap = min_overlap),
+    error = function(e) {
+      warning(
+        "Shared column detection failed: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+      NULL
+    }
+  )
+  # On error keep whatever the previous scan found rather than blanking it
+  if (is.null(found)) {
+    return(cached_for_loaded())
+  }
+  cache$result <- found
+  cached_for_loaded()
 }
