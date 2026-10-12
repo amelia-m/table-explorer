@@ -107,6 +107,74 @@ composite_probe_max_pairs <- 8L
 # on every run. The same constant the profiles sample with.
 composite_probe_seed <- 42L
 
+# ── Prose parents: unique by accident, not by design ──────────
+# Containment cannot tell a column that is unique by design from one that
+# is unique by accident. Chinook's `customer.address` has 59 distinct
+# values over 59 rows, so it passes the key test, and
+# `invoice.billingaddress` is wholly inside it because the billing address
+# was copied from the customer. The pair scores 1.000 and is the only
+# high-confidence false positive Chinook produces at the default setting.
+# It is a real functional dependency and not a foreign key: an address is
+# not an identifier.
+#
+# The separation has to work without declared keys, because the files this
+# app is pointed at routinely ship no schema: the CRAN Lahman tables
+# declare nothing, so "prefer the table's primary key" has no key to
+# prefer there. So the test is on the values, not on names or
+# declarations. An identifier is written to be typed and matched: no
+# internal spaces, short. Prose is not.
+#
+# This does not subsume can_be_parent_key's 60-character guard, which
+# refuses free-text blocks. An address is about 25 characters and passes
+# that; what gives it away is the space.
+#
+# Three levels, because measurement showed "refuse" does nothing on its
+# own: the Chinook pair carries cardinality_match (identical value sets,
+# 0.95) and overlap_high (0.90) as well as containment, and the noisy-OR
+# of those two alone is 0.995, so it still reads as high with containment
+# removed. Refusing a prose column as a parent at all is the only level
+# that reaches it.
+#   allow          today's behaviour
+#   refuse         containment does not fire on a prose parent
+#   refuse_target  a prose column is not offered as a parent at all
+prose_parent_guards <- c("allow", "refuse", "refuse_target")
+prose_parent_guard_default <- "allow"
+# Half the sampled values carrying an internal space is the test. A
+# genuine code column has none: `aardsda01`, `BOS07`, `abilchrist`, `1234`
+# all pass. "Theodor-Heuss-Strasse 34" and "Jane Smith" do not. Half
+# rather than all, because a code column with one stray spaced value is
+# still a code column, and an address column with a few single-word
+# values is still addresses.
+prose_parent_space_frac <- 0.5
+# A second test, for long opaque strings rather than for identifiers: no
+# key in the three measured schemas is over 12 characters, and a token
+# long enough to need 25 is being stored, not referenced.
+prose_parent_median_nchar <- 25L
+
+# Does this column read as prose rather than as an identifier? Sampled,
+# and computed once per column in column_profile() rather than per pair.
+is_prose_column <- function(v, sample_size = 200L) {
+  if (!is.character(v) && !is.factor(v)) {
+    return(FALSE)
+  }
+  vals <- as.character(v)
+  vals <- vals[!is.na(vals) & nzchar(vals)]
+  if (length(vals) == 0L) {
+    return(FALSE)
+  }
+  if (length(vals) > sample_size) {
+    vals <- with_local_seed(composite_probe_seed, sample(vals, sample_size))
+  }
+  # Trimmed first, so a value padded by a careless export does not read as
+  # prose for the sake of its padding.
+  trimmed <- trimws(vals)
+  if (mean(grepl("[[:space:]]", trimmed)) >= prose_parent_space_frac) {
+    return(TRUE)
+  }
+  isTRUE(median(nchar(trimmed)) > prose_parent_median_nchar)
+}
+
+
 # ── Signal weight map for noisy-OR aggregation ───────────────
 
 weight_map <- c(
@@ -581,7 +649,10 @@ column_profile <- function(v, sample_cap = 5000) {
     uniq_sample = uniq_sample,
     counts = setNames(as.numeric(counts), names(counts)),
     fingerprint = format_fingerprint(v),
-    int_domain = integer_domain(v)
+    int_domain = integer_domain(v),
+    # Prose rather than an identifier: see is_prose_column(). Computed
+    # here so the containment guard costs nothing per pair.
+    is_prose = is_prose_column(vals)
   )
 }
 
@@ -1065,7 +1136,8 @@ score_candidate <- function(
   t2_is_lookup = NULL,
   containment_min_distinct = containment_min_distinct_default,
   parent_key_requirement = parent_key_requirement_default,
-  composite_probe = NULL
+  composite_probe = NULL,
+  prose_parent_guard = prose_parent_guard_default
 ) {
   signals <- list()
   reasons <- character(0)
@@ -1180,7 +1252,13 @@ score_candidate <- function(
       n1 > 0 &&
       n2 > 0 &&
       !is.na(ov) &&
-      length(p1$uniq) >= containment_min_distinct
+      length(p1$uniq) >= containment_min_distinct &&
+      # A prose parent is unique by accident, not by design. Under either
+      # refusal containment does not fire on one; the overlap and
+      # distribution signals still do, so a copied address can still be
+      # reported, just not on the strength of being inside a key.
+      !(prose_parent_guard %in% c("refuse", "refuse_target") &&
+        isTRUE(p2$is_prose))
   ) {
     # Demand-driven: the composite probe runs only for a parent column
     # this child is wholly inside, and only when the setting can use the
@@ -1587,8 +1665,10 @@ detect_fks <- function(
   focus_tables = NULL,
   existing = list(),
   containment_min_distinct = containment_min_distinct_default,
-  parent_key_requirement = parent_key_requirement_default
+  parent_key_requirement = parent_key_requirement_default,
+  prose_parent_guard = prose_parent_guard_default
 ) {
+  prose_parent_guard <- match.arg(prose_parent_guard, prose_parent_guards)
   parent_key_requirement <- match.arg(
     parent_key_requirement,
     parent_key_requirements
@@ -1975,6 +2055,17 @@ detect_fks <- function(
           character(0)
         }
         target_cols <- union(strict_cols, relaxed_add)
+        # A prose column is unique by accident: an address, a person's
+        # name, a title. Under "refuse_target" it is not offered as a
+        # parent at all, so no signal can propose it, which is what it
+        # takes to keep invoice.billingaddress -> customer.address out.
+        if (prose_parent_guard == "refuse_target" && length(target_cols)) {
+          target_cols <- target_cols[!vapply(
+            target_cols,
+            function(cc) isTRUE(get_profile(t2, cc)$is_prose),
+            logical(1L)
+          )]
+        }
         if (src_unique) {
           # A unique key only links to the same key, unique in the parent
           target_cols <- pk_map[[t2]][
@@ -2011,7 +2102,8 @@ detect_fks <- function(
               lookup_flags[[t2]],
               containment_min_distinct,
               parent_key_requirement,
-              composite_probe
+              composite_probe,
+              prose_parent_guard
             ),
             error = function(e) NULL
           )

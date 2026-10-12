@@ -194,7 +194,12 @@ score_one <- function(
     method = "both",
     min_confidence = min_conf,
     max_pairs = max_pairs,
-    parent_key_requirement = parent_key
+    parent_key_requirement = parent_key,
+    # TE_PROSE_GUARD rather than a command-line argument: this is a
+    # measurement switch, not a setting the harness is asked for, and
+    # threading a fourth argument through every run_* function to measure
+    # it once would be the larger change.
+    prose_parent_guard = Sys.getenv("TE_PROSE_GUARD", prose_parent_guard_default)
   )
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   as_pair <- function(r) {
@@ -235,8 +240,9 @@ score_one <- function(
     ))
   }
   cat(sprintf(
-    "         parent_key %-9s pairs scored %6d of %6d%s  composite probe %6.2fs  columns admitted %3d\n",
+    "         parent_key %-9s prose %-6s pairs scored %6d of %6d%s  composite probe %6.2fs  columns admitted %3d\n",
     parent_key,
+    Sys.getenv("TE_PROSE_GUARD", prose_parent_guard_default),
     attr(rels, "pairs_scored") %||% NA_integer_,
     max_pairs,
     if (isTRUE(attr(rels, "truncated"))) "  CAPPED" else "        ",
