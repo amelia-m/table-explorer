@@ -415,8 +415,21 @@ settings_in_words <- function(row) {
 sweep <- function(datasets = c("chinook", "lahman", "faers"),
                   out_dir = "dev/fixtures/public") {
   today <- Sys.Date()
+  # The commit, and whether the tree it ran from matched it. A row that
+  # names a commit whose code did not produce it is worse than a row with
+  # no commit at all: the first sweep recorded a commit made a minute
+  # after the run started, from a tree that still held the fixes being
+  # tested, and nothing in the file said so.
   commit <- tryCatch(
-    trimws(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE)),
+    {
+      sha <- trimws(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE))
+      dirty <- length(system2(
+        "git",
+        c("status", "--porcelain", "--untracked-files=no"),
+        stdout = TRUE
+      )) > 0L
+      if (dirty) paste0(sha, "+dirty") else sha
+    },
     error = function(e) NA_character_
   )
   loaded <- lapply(datasets, function(d) {
