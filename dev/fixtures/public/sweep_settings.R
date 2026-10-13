@@ -24,9 +24,12 @@
 # .sweep_no_setup gives its functions without running anything, which is
 # how tests/testthat/test-inference.R exercises the loading step.
 
-.no_setup <- exists(".sweep_no_setup", inherits = TRUE)
+# Named for this file, not .no_setup: score_public.R defines a variable of
+# that name when it is sourced below, and sourcing it into the same
+# environment overwrote the flag and silently skipped the whole driver.
+.sweep_run <- !exists(".sweep_no_setup", inherits = TRUE)
 
-if (!.no_setup) {
+if (.sweep_run) {
   Sys.setenv(RENV_CONFIG_AUTOLOADER_ENABLED = "FALSE")
   suppressMessages(pkgload::load_all(".", quiet = TRUE))
 }
@@ -335,6 +338,53 @@ frontier_rows <- function(df, recall_col = "high_recall", prec_col = "high_preci
   keep[!dominated, , drop = FALSE]
 }
 
+# How many switches this row moved from the default. Used to choose the
+# plainest of several combinations that score identically.
+flips_from_default <- function(row) {
+  d <- settings_default()
+  sum(vapply(
+    setting_names,
+    function(n) {
+      !identical(as.character(row[[n]]), as.character(d[[n]])) &&
+        !(is.na(row[[n]]) && n == "overlap_chance_max_distinct")
+    },
+    logical(1)
+  ))
+}
+
+# The frontier collapsed to its distinct recall-precision points, with one
+# representative combination each: the fewest switches moved, then the
+# fastest. Measurement showed why this is needed rather than tidier: on
+# Chinook every one of the 24 non-dominated rows scores 81.8 / 100.0,
+# because they all carry prose refuse_target and differ only in switches
+# that change nothing there. Reading 24 tied rows as 24 findings, and
+# worse, running all 24 on the dataset that costs 50 seconds a run, is
+# what this avoids. n_tied says how many combinations share the point.
+frontier_points <- function(df,
+                            recall_col = "high_recall",
+                            prec_col = "high_precision") {
+  fr <- frontier_rows(df, recall_col, prec_col)
+  if (nrow(fr) == 0) {
+    return(fr)
+  }
+  fr$n_tied <- NA_integer_
+  keys <- paste(fr[[recall_col]], fr[[prec_col]])
+  out <- lapply(unique(keys), function(k) {
+    tied <- fr[keys == k, , drop = FALSE]
+    nflip <- vapply(
+      seq_len(nrow(tied)),
+      function(i) flips_from_default(tied[i, , drop = FALSE]),
+      integer(1)
+    )
+    pick <- order(nflip, tied$secs)[1]
+    row <- tied[pick, , drop = FALSE]
+    row$n_tied <- nrow(tied)
+    row
+  })
+  out <- do.call(rbind, out)
+  out[order(-out[[recall_col]], -out[[prec_col]]), , drop = FALSE]
+}
+
 settings_in_words <- function(row) {
   d <- settings_default()
   bits <- character(0)
@@ -392,7 +442,7 @@ sweep <- function(datasets = c("chinook", "lahman", "faers"),
       # Chinook or Lahman frontier, not on a pooled one.
       fr <- do.call(rbind, lapply(
         unique(done$dataset),
-        function(d) frontier_rows(done[done$dataset == d, , drop = FALSE])
+        function(d) frontier_points(done[done$dataset == d, , drop = FALSE])
       ))
       frontier <- lapply(seq_len(nrow(fr)), function(i) {
         s <- settings_default()
@@ -446,14 +496,21 @@ summarise <- function(out) {
       } else {
         c("recall", "precision")
       }
-      fr <- frontier_rows(df, cols[1], cols[2])
-      fr <- fr[order(-fr[[cols[1]]], -fr[[cols[2]]]), , drop = FALSE]
-      cat(sprintf("frontier at %s confidence (%d):\n", lab, nrow(fr)))
+      fr <- frontier_points(df, cols[1], cols[2])
+      cat(sprintf(
+        "frontier at %s confidence (%d point(s), %d combination(s)):\n",
+        lab, nrow(fr), sum(fr$n_tied)
+      ))
       for (i in seq_len(nrow(fr))) {
         cat(sprintf(
-          "  recall %5.1f  precision %5.1f  found %4d  hit %3d  %6.1fs  %s%s\n",
+          "  recall %5.1f  precision %5.1f  found %4d  hit %3d  %6.1fs  %s%s%s\n",
           fr[[cols[1]]][i], fr[[cols[2]]][i], fr$found[i], fr$hit[i], fr$secs[i],
           settings_in_words(fr[i, , drop = FALSE]),
+          if (fr$n_tied[i] > 1) {
+            sprintf("  (+%d tied)", fr$n_tied[i] - 1L)
+          } else {
+            ""
+          },
           if (isTRUE(fr$capped[i])) "  CAPPED" else ""
         ))
       }
@@ -473,7 +530,7 @@ summarise <- function(out) {
   }
 }
 
-if (!.no_setup) {
+if (.sweep_run) {
   args <- commandArgs(trailingOnly = TRUE)
   want <- if (length(args)) args else c("chinook", "lahman", "faers")
   ok <- tryCatch({
