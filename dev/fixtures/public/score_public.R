@@ -294,16 +294,17 @@ run_pagila <- function() {
   invisible(list(name = "pagila", truth = truth))
 }
 
-run_lahman <- function(parent_key = parent_key_requirement_default,
-                       max_pairs = 50000L) {
-  # The CRAN package rather than a download: the canonical
-  # chadwickbureau/baseballdatabank repository returns 404, and the package
-  # ships the same tables as data frames. Licence: the package is GPL, the
-  # data is Lahman's, CC BY-SA 3.0 for the Baseball Databank derivative.
+# The CRAN package rather than a download: the canonical
+# chadwickbureau/baseballdatabank repository returns 404, and the package
+# ships the same tables as data frames. Licence: the package is GPL, the
+# data is Lahman's, CC BY-SA 3.0 for the Baseball Databank derivative.
+#
+# Returns NULL when the package is not installed. Separate from run_lahman
+# so sweep_settings.R loads the same tables this file scores, once, and
+# then varies the settings over them.
+tables_from_lahman <- function() {
   if (!requireNamespace("Lahman", quietly = TRUE)) {
-    cat("lahman   SKIP  install.packages(\"Lahman\")
-")
-    return(invisible(NULL))
+    return(NULL)
   }
   items <- utils::data(package = "Lahman")$results[, "Item"]
   # Only the data frames: the package also ships label vectors
@@ -321,18 +322,28 @@ run_lahman <- function(parent_key = parent_key_requirement_default,
       tables[[tolower(nm)]] <- obj
     }
   }
+  tables
+}
+
+run_lahman <- function(parent_key = parent_key_requirement_default,
+                       max_pairs = 50000L) {
+  tables <- tables_from_lahman()
+  if (is.null(tables)) {
+    cat("lahman   SKIP  install.packages(\"Lahman\")\n")
+    return(invisible(NULL))
+  }
   score_one(
     "lahman", tables, read_truth_file("lahman.txt"),
     parent_key = parent_key, max_pairs = max_pairs
   )
 }
 
-run_faers <- function(parent_key = parent_key_requirement_default,
-                      max_pairs = 50000L) {
+# Returns NULL when the quarterly archive has not been fetched. Separate
+# from run_faers for the reason given above tables_from_lahman().
+tables_from_faers <- function() {
   z <- file.path(public_cache(), "faers_ascii_2024q1.zip")
   if (!file.exists(z)) {
-    cat("faers    SKIP  not fetched\n")
-    return(invisible(NULL))
+    return(NULL)
   }
   dir <- file.path(public_cache(), "faers")
   if (!dir.exists(dir)) {
@@ -345,6 +356,16 @@ run_faers <- function(parent_key = parent_key_requirement_default,
     utils::read.delim(f, sep = "$", stringsAsFactors = FALSE, quote = "", comment.char = "")
   })
   names(tables) <- tolower(tools::file_path_sans_ext(basename(txts)))
+  tables
+}
+
+run_faers <- function(parent_key = parent_key_requirement_default,
+                      max_pairs = 50000L) {
+  tables <- tables_from_faers()
+  if (is.null(tables)) {
+    cat("faers    SKIP  not fetched\n")
+    return(invisible(NULL))
+  }
   score_one(
     "faers", tables, read_truth_file("faers.txt"),
     parent_key = parent_key, max_pairs = max_pairs
