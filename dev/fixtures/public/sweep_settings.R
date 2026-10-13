@@ -23,6 +23,16 @@
 # Sourcing this file into an environment that already defines
 # .sweep_no_setup gives its functions without running anything, which is
 # how tests/testthat/test-inference.R exercises the loading step.
+#
+# Two things about the results file that its columns do not say. The `set`
+# column records where a combination was first reached, not what it is:
+# the sets are deduped in the order default, single flips, grid, variants,
+# stack, so the all-flipped combination reads "grid" on chinook, whose
+# grid contains it, and "stack" on the datasets whose grid does not.
+# Filter on the settings columns, never on `set`, to compare one
+# combination across datasets. And `secs` is the detection time for that
+# run only, after a discarded warm-up run per dataset; it is not a
+# forecast for a cold process.
 
 # Named for this file, not .no_setup: score_public.R defines a variable of
 # that name when it is sourced below, and sourcing it into the same
@@ -257,12 +267,17 @@ load_dataset <- function(name) {
   stop(sprintf("unknown dataset: %s", name))
 }
 
+# Precision is NA with no candidates, not 0: a combination that reports
+# nothing has no precision, and reading that as 0 would put it at the
+# wrong end of a frontier. A file-level function rather than a closure so
+# a test can reach it, because no dataset in the harness produces a row
+# with nothing found and the rule would otherwise be checked by reading.
+rate <- function(num, den) if (den > 0) 100 * num / den else NA_real_
+
 # ── One run ──────────────────────────────────────────────────
 # The same arithmetic score_one() prints, over the same pair strings, with
-# every setting passed rather than three of them. Precision is NA with no
-# candidates, not 0: a combination that reports nothing has no precision,
-# and reading that as 0 would put it at the wrong end of a frontier.
-run_combo <- function(ds, combo, commit, today) {
+# every setting passed rather than three of them.
+run_combo <- function(ds, combo, commit, today, run_index = NA_integer_) {
   s <- combo$settings
   t0 <- Sys.time()
   rels <- detect_fks(
@@ -285,7 +300,6 @@ run_combo <- function(ds, combo, commit, today) {
   high <- Filter(function(r) identical(r$confidence %||% "low", "high"), rels)
   hfound <- if (length(high)) unique(vapply(high, as_pair, "")) else character(0)
   hhit <- intersect(hfound, ds$truth)
-  rate <- function(num, den) if (den > 0) 100 * num / den else NA_real_
   sc <- canonical_settings(s)
   data.frame(
     dataset = ds$name,
@@ -312,6 +326,15 @@ run_combo <- function(ds, combo, commit, today) {
     max_pairs = sweep_max_pairs,
     capped = isTRUE(attr(rels, "truncated")),
     secs = round(secs, 2),
+    # Where in this dataset's order the run sat. The caches in
+    # utils_inference.R (clean_name, lookup, naming_signal) persist across
+    # detect_fks() calls in one process, so the first scored run of a
+    # dataset pays a warm-up the rest do not: the first sweep recorded
+    # 2.64s for Chinook's default against 0.54 to 0.91s for 21 other rows
+    # that scored the identical 776 pairs. A discarded warm-up run per
+    # dataset now absorbs it, and this column is here so a reader can
+    # still see the order rather than take that on trust.
+    run_index = as.integer(run_index),
     commit = commit,
     date = format(today),
     stringsAsFactors = FALSE
@@ -413,8 +436,16 @@ settings_in_words <- function(row) {
 # A failure anywhere leaves no file: a half-written sweep read as a whole
 # one under-reports, which is worse than no file at all.
 sweep <- function(datasets = c("chinook", "lahman", "faers"),
-                  out_dir = "dev/fixtures/public") {
+                  out_dir = "dev/fixtures/public",
+                  run_fn = run_combo) {
   today <- Sys.Date()
+  # Checked before the datasets are read rather than at the write: twenty
+  # minutes of scoring thrown away because a directory does not exist is
+  # the same loss as a failed run, for a reason that costs one line to
+  # rule out.
+  if (!dir.exists(out_dir)) {
+    stop(sprintf("out_dir does not exist: %s", out_dir))
+  }
   # The commit, and whether the tree it ran from matched it. A row that
   # names a commit whose code did not produce it is worse than a row with
   # no commit at all: the first sweep recorded a commit made a minute
@@ -423,12 +454,20 @@ sweep <- function(datasets = c("chinook", "lahman", "faers"),
   commit <- tryCatch(
     {
       sha <- trimws(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE))
-      dirty <- length(system2(
-        "git",
-        c("status", "--porcelain", "--untracked-files=no"),
-        stdout = TRUE
-      )) > 0L
-      if (dirty) paste0(sha, "+dirty") else sha
+      # system2 returns character(0) with a warning when git fails rather
+      # than raising, and a zero-length commit would make the data.frame
+      # below error on differing row counts instead of recording "no
+      # commit".
+      if (length(sha) != 1L || !nzchar(sha)) {
+        NA_character_
+      } else {
+        dirty <- length(system2(
+          "git",
+          c("status", "--porcelain", "--untracked-files=no"),
+          stdout = TRUE
+        )) > 0L
+        if (dirty) paste0(sha, "+dirty") else sha
+      }
     },
     error = function(e) NA_character_
   )
@@ -472,8 +511,32 @@ sweep <- function(datasets = c("chinook", "lahman", "faers"),
     }
     combos <- combos_for(ds$name, frontier)
     cat(sprintf("%s: %d combinations\n", ds$name, length(combos)))
+    # Warm-up, discarded. The caches in utils_inference.R live for the
+    # whole process, so without this the first combination of each dataset
+    # carries the cost of filling them and its seconds are not comparable
+    # with any other row's. It is always the default combination, which is
+    # the row every reader compares against.
+    cat("  warming the caches\n")
+    invisible(run_fn(ds, one_off("warmup"), commit, today, run_index = 0L))
     for (i in seq_along(combos)) {
-      row <- run_combo(ds, combos[[i]], commit, today)
+      # The progress line is printed after the run, so a failure would
+      # otherwise leave the reader to infer which combination errored from
+      # the last line that printed. The whole sweep still fails and still
+      # writes nothing; it just says what it was doing.
+      row <- tryCatch(
+        run_fn(ds, combos[[i]], commit, today, run_index = i),
+        error = function(e) {
+          stop(sprintf(
+            "%s combination %d of %d (%s) failed: %s",
+            ds$name, i, length(combos),
+            settings_in_words(as.data.frame(
+              canonical_settings(combos[[i]]$settings),
+              stringsAsFactors = FALSE
+            )),
+            conditionMessage(e)
+          ), call. = FALSE)
+        }
+      )
       cat(sprintf(
         "  %-8s %3d/%3d  %-9s  found %4d hit %3d  recall %5.1f  prec %5.1f  high %5.1f/%5.1f  %6.1fs  %s\n",
         ds$name, i, length(combos), combos[[i]]$set,

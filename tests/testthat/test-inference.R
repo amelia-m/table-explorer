@@ -1901,3 +1901,109 @@ test_that("a combination whose chance threshold is inert is recorded once", {
     2L
   )
 })
+
+test_that("a wrong-typed setting stops the scan instead of switching the rule off", {
+  # isTRUE("yes") is FALSE and length(u) >= "twelve" is never TRUE, so
+  # before this a string switched the rule off and the scan ran with a
+  # rule the caller believed was on. The two guard levels are refused by
+  # name already; these four are the ones read by isTRUE and by >=.
+  tbls <- list(
+    tlk_site = data.frame(siteid = 1:2, label = c("north", "south")),
+    visit = data.frame(visit_id = 1:60, siteid = rep(1:2, 30))
+  )
+  expect_error(
+    detect_fks(tbls, "both", "medium", possible_key_names = "yes"),
+    "possible_key_names must be TRUE or FALSE"
+  )
+  expect_error(
+    detect_fks(tbls, "both", "medium", overlap_chance_discount = 1),
+    "overlap_chance_discount must be TRUE or FALSE"
+  )
+  expect_error(
+    detect_fks(tbls, "both", "medium", cardinality_min_distinct = "twelve"),
+    "cardinality_min_distinct must be one number"
+  )
+  expect_error(
+    detect_fks(tbls, "both", "medium", overlap_chance_max_distinct = NA),
+    "overlap_chance_max_distinct must be one number"
+  )
+  expect_error(
+    detect_fks(tbls, "both", "medium", containment_min_distinct = c(3L, 4L)),
+    "containment_min_distinct must be one number"
+  )
+  # Survival check: the right types still run, and still find the link
+  expect_length(
+    detect_fks(
+      tbls, "both", "medium",
+      possible_key_names = TRUE, overlap_chance_discount = TRUE,
+      cardinality_min_distinct = 12L, overlap_chance_max_distinct = 25L,
+      containment_min_distinct = 3L
+    ),
+    1L
+  )
+})
+
+test_that("a combination that reports nothing has no precision", {
+  # No dataset in the harness produces a row with nothing found, so
+  # without this the rule would be satisfied by reading the code.
+  env <- sweep_env()
+  expect_true(is.na(env$rate(0, 0)))
+  expect_equal(env$rate(3, 4), 75)
+})
+
+test_that("the frontier collapses tied combinations to one point", {
+  # Pins the defect in 238c069: the frontier printed every non-dominated
+  # row, and on Chinook all 24 of them score the same 81.8 / 100.0, which
+  # read as 24 findings and drove 24 runs on the slowest dataset.
+  env <- sweep_env()
+  d <- env$settings_default()
+  mk <- function(r, p, flips = list(), secs = 1) {
+    s <- utils::modifyList(d, flips)
+    data.frame(
+      c(s[env$setting_names], list(
+        high_recall = r, high_precision = p, found = 10L, hit = 5L,
+        secs = secs, capped = FALSE
+      )),
+      stringsAsFactors = FALSE
+    )
+  }
+  df <- rbind(
+    mk(80, 100, list(prose_parent_guard = "refuse_target"), secs = 2),
+    mk(80, 100, list(prose_parent_guard = "refuse_target", cardinality_min_distinct = 1L)),
+    mk(80, 100, list(prose_parent_guard = "refuse_target", possible_key_names = FALSE)),
+    mk(90, 50),
+    mk(70, 40, list(parent_key_requirement = "any"))
+  )
+  # Four rows are non-dominated, two points, and the dominated one is gone
+  expect_equal(nrow(env$frontier_rows(df)), 4L)
+  pts <- env$frontier_points(df)
+  expect_equal(nrow(pts), 2L)
+  expect_equal(pts$n_tied, c(1L, 3L))
+  # The representative of the tied point is the plainest, not the first:
+  # one switch moved, and the slower two-switch rows do not win it
+  expect_equal(env$settings_in_words(pts[2, , drop = FALSE]), "prose refuse_target")
+})
+
+test_that("a failure part way through the runs writes no results file", {
+  # The loading step has its own test; this is the other half, which holds
+  # by construction and would be the thing a later "write as you go"
+  # change quietly broke.
+  env <- sweep_env()
+  # The cheapest dataset, and the only one small enough to score inside a
+  # test suite. Nothing is fetched here, so a checkout without the cache
+  # skips rather than fails.
+  skip_if_not(
+    file.exists(file.path(env$public_cache(), "chinook.sqlite")),
+    "chinook is not in the public-fixture cache"
+  )
+  out <- withr::local_tempdir()
+  boom <- function(ds, combo, commit, today, run_index = NA_integer_) {
+    if (identical(run_index, 3L)) stop("scoring blew up")
+    env$run_combo(ds, combo, commit, today, run_index)
+  }
+  expect_error(
+    capture.output(env$sweep("chinook", out_dir = out, run_fn = boom)),
+    "chinook combination 3 of"
+  )
+  expect_equal(list.files(out), character(0))
+})

@@ -1734,6 +1734,28 @@ detect_fks <- function(
     parent_key_requirement,
     parent_key_requirements
   )
+  # The two guard levels above are refused by name when they are wrong.
+  # The four below are read by isTRUE() and by a >= comparison, both of
+  # which fail silently in the dangerous direction: isTRUE("yes") is
+  # FALSE, so a string switches the rule off, and
+  # length(u) >= "twelve" is a lexicographic comparison that is never
+  # TRUE, so a string floor disables the signal. A scan that quietly ran
+  # with a rule off while its caller believed it on is the worst outcome
+  # for a setting whose whole purpose is to be measured, so a wrong type
+  # stops the call instead.
+  a_flag <- function(x) is.logical(x) && length(x) == 1L && !is.na(x)
+  a_count <- function(x) is.numeric(x) && length(x) == 1L && !is.na(x)
+  stopifnot(
+    "overlap_chance_discount must be TRUE or FALSE" =
+      a_flag(overlap_chance_discount),
+    "possible_key_names must be TRUE or FALSE" = a_flag(possible_key_names),
+    "overlap_chance_max_distinct must be one number" =
+      a_count(overlap_chance_max_distinct),
+    "cardinality_min_distinct must be one number" =
+      a_count(cardinality_min_distinct),
+    "containment_min_distinct must be one number" =
+      a_count(containment_min_distinct)
+  )
   if (method == "manual" || length(tables) < 2) {
     return(list())
   }
@@ -2155,6 +2177,10 @@ detect_fks <- function(
           # One unscorable pair (odd column type or values) must not abort
           # the whole scan, which would hide every relationship
           result <- tryCatch(
+            # The settings are named rather than positional: there are
+            # three similar-looking numeric thresholds among them now, and
+            # inserting a parameter anywhere but the end would misalign a
+            # positional call with no error at all.
             score_candidate(
               t1,
               col1,
@@ -2163,16 +2189,16 @@ detect_fks <- function(
               col2,
               df2,
               enable_flags,
-              get_profile(t1, col1),
-              get_profile(t2, col2),
-              lookup_flags[[t2]],
-              containment_min_distinct,
-              parent_key_requirement,
-              composite_probe,
-              prose_parent_guard,
-              overlap_chance_discount,
-              overlap_chance_max_distinct,
-              cardinality_min_distinct
+              p1 = get_profile(t1, col1),
+              p2 = get_profile(t2, col2),
+              t2_is_lookup = lookup_flags[[t2]],
+              containment_min_distinct = containment_min_distinct,
+              parent_key_requirement = parent_key_requirement,
+              composite_probe = composite_probe,
+              prose_parent_guard = prose_parent_guard,
+              overlap_chance_discount = overlap_chance_discount,
+              overlap_chance_max_distinct = overlap_chance_max_distinct,
+              cardinality_min_distinct = cardinality_min_distinct
             ),
             error = function(e) NULL
           )
