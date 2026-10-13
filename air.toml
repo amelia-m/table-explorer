@@ -1,0 +1,19 @@
+# Air formatter settings. https://posit-dev.github.io/air/
+#
+# Committed so every clone formats the same way whatever the machine's
+# configuration says, the same reason .gitattributes is committed here.
+#
+# The values match what the code already does: two-space indent, 80 columns,
+# LF endings. A formatter run is its own commit, never mixed with a content
+# change, because a diff that mixes the two cannot be reviewed.
+
+[format]
+line-width = 80
+indent-width = 2
+indent-style = "space"
+line-ending = "lf"
+
+# renv/activate.R is vendored by renv and is rewritten whenever renv updates
+# it, so formatting it would be undone and would obscure the next upgrade's
+# diff.
+exclude = ["renv/", "_scratch/"]
