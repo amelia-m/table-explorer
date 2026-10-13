@@ -29,14 +29,35 @@ parent_key_min_frac <- 0.99
 # realistic row count two columns drawn from such a domain both end up
 # holding the whole domain, so the match is the expected outcome rather
 # than a finding. Past a dozen distinct values it stops being free.
-cardinality_min_distinct <- 12L
+# A caller that wants a different floor passes cardinality_min_distinct to
+# detect_fks() or score_candidate(); 1 admits every identical pair of value
+# sets, which is the floor switched off.
+cardinality_min_distinct_default <- 12L
 
 # Overlap inside a dense integer run is only a coincidence when the child
 # has few distinct values to place. A column holding 500 distinct values,
 # every one of them present in the parent key, is a reference whatever the
 # parent's density: a count or a code column cannot reach that many
 # distinct values by accident. Above this the discount is not applied.
-overlap_chance_max_distinct <- 25L
+overlap_chance_max_distinct_default <- 25L
+# Whether the discount is applied at all. It is the rule that kept
+# episode.number_of_items out of member.width_cm, and it is also
+# the rule that can take a real reference down with it when a small child
+# domain sits inside a dense parent key, so it is a setting rather than a
+# fact. FALSE makes overlap_expected_by_chance() return 0 for every pair,
+# which leaves the raw overlap as the evidence, and makes
+# overlap_chance_max_distinct inert: the threshold only decides which pairs
+# a discount that is being applied reaches.
+overlap_chance_discount_default <- TRUE
+
+# Whether the weaker key-name tier runs at all. is_possible_key_name()
+# admits a name that merely starts or ends with "id" and is not a common
+# word (primaryid, caseid, supportrepid), which buys a column a hearing it
+# would not otherwise get: it survives the low-cardinality reject in
+# is_fk_candidate() and may take the one-to-one path in detect_fks(). FALSE
+# leaves only is_key_name()'s strict test, which wants a separator
+# (customer_id, order_key).
+possible_key_names_default <- TRUE
 
 # ── Containment thresholds ───────────────────────────────────
 # Containment is the structural definition of a foreign key: every value
@@ -470,7 +491,16 @@ not_key_words <- c(
 # suicidal_ideation, and identified_gender is just as plausible.
 not_key_prefixes <- "^(idea|ident|ideol|idio|idl|idol|idyl)"
 
-is_possible_key_name <- function(col_clean) {
+is_possible_key_name <- function(
+  col_clean,
+  possible_key_names = possible_key_names_default
+) {
+  # The tier switched off: no name qualifies, so only is_key_name()'s
+  # strict test speaks. Shaped like the answer it replaces, one logical
+  # per name, because both call sites pass vectors.
+  if (!isTRUE(possible_key_names)) {
+    return(rep(FALSE, length(col_clean)))
+  }
   # Leading id counts too (idnum, id2, idcode), but not a word that
   # merely starts with those letters
   head_id <- grepl("^id", col_clean) & !grepl(not_key_prefixes, col_clean)
@@ -686,7 +716,17 @@ value_overlap <- function(v1, v2, sample_cap = 5000) {
 # Returns 0 when the parent has no integer domain (a string column, a
 # measurement, a single repeated value), which leaves those pairs scoring
 # exactly as they did before.
-overlap_expected_by_chance <- function(p_child, p_parent) {
+overlap_expected_by_chance <- function(
+  p_child,
+  p_parent,
+  overlap_chance_discount = overlap_chance_discount_default,
+  overlap_chance_max_distinct = overlap_chance_max_distinct_default
+) {
+  # The discount switched off: nothing is given away for free, so the raw
+  # overlap stands as the evidence for every pair.
+  if (!isTRUE(overlap_chance_discount)) {
+    return(0.0)
+  }
   dom <- p_parent$int_domain
   if (is.null(dom) || length(p_child$uniq_sample) == 0) {
     return(0.0)
@@ -1137,7 +1177,10 @@ score_candidate <- function(
   containment_min_distinct = containment_min_distinct_default,
   parent_key_requirement = parent_key_requirement_default,
   composite_probe = NULL,
-  prose_parent_guard = prose_parent_guard_default
+  prose_parent_guard = prose_parent_guard_default,
+  overlap_chance_discount = overlap_chance_discount_default,
+  overlap_chance_max_distinct = overlap_chance_max_distinct_default,
+  cardinality_min_distinct = cardinality_min_distinct_default
 ) {
   signals <- list()
   reasons <- character(0)
@@ -1195,7 +1238,12 @@ score_candidate <- function(
   ov <- NA_real_
   if (isTRUE(enable_flags[["value_overlap"]]) && n1 > 0 && n2 > 0) {
     ov <- overlap_from_profiles(p1, p2)
-    ov_chance <- overlap_expected_by_chance(p1, p2)
+    ov_chance <- overlap_expected_by_chance(
+      p1,
+      p2,
+      overlap_chance_discount,
+      overlap_chance_max_distinct
+    )
     ov_evidence <- max(0, ov - ov_chance)
     chance_note <- if (ov_chance >= 0.01) {
       sprintf(", %.0f%% of it expected by chance", ov_chance * 100)
@@ -1499,7 +1547,11 @@ estimate_scan_complexity <- function(tables) {
 # Skip columns that are very unlikely to be FK/PK candidates
 # to avoid the expensive score_candidate call entirely.
 
-is_fk_candidate <- function(col, col_name) {
+is_fk_candidate <- function(
+  col,
+  col_name,
+  possible_key_names = possible_key_names_default
+) {
   # Fast heuristic checks - reject columns that almost never form relationships
   n <- length(col)
   if (n == 0) {
@@ -1510,7 +1562,12 @@ is_fk_candidate <- function(col, col_name) {
   # (provider_id holding one or two providers is still a foreign key)
   n_unique <- length(unique(na.omit(col)))
   cn <- clean_name(col_name)
-  if (n_unique <= 2 && n > 10 && !is_key_name(cn) && !is_possible_key_name(cn)) {
+  if (
+    n_unique <= 2 &&
+      n > 10 &&
+      !is_key_name(cn) &&
+      !is_possible_key_name(cn, possible_key_names)
+  ) {
     return(FALSE)
   }
 
@@ -1666,7 +1723,11 @@ detect_fks <- function(
   existing = list(),
   containment_min_distinct = containment_min_distinct_default,
   parent_key_requirement = parent_key_requirement_default,
-  prose_parent_guard = prose_parent_guard_default
+  prose_parent_guard = prose_parent_guard_default,
+  overlap_chance_discount = overlap_chance_discount_default,
+  overlap_chance_max_distinct = overlap_chance_max_distinct_default,
+  cardinality_min_distinct = cardinality_min_distinct_default,
+  possible_key_names = possible_key_names_default
 ) {
   prose_parent_guard <- match.arg(prose_parent_guard, prose_parent_guards)
   parent_key_requirement <- match.arg(
@@ -1846,7 +1907,11 @@ detect_fks <- function(
       return(names(df)[is_key_name(clean_name(names(df)))])
     }
     cols <- setdiff(names(df), pk_map[[t]])
-    cols[vapply(cols, function(c) is_fk_candidate(df[[c]], c), logical(1))]
+    cols[vapply(
+      cols,
+      function(c) is_fk_candidate(df[[c]], c, possible_key_names),
+      logical(1)
+    )]
   })
   names(fk_candidates) <- tnames
 
@@ -1862,7 +1927,8 @@ detect_fks <- function(
     # on primaryid or caseid is the same shape as one keyed on client_id,
     # and the strict test does not recognise a glued name
     pks[
-      (is_key_name(pks_clean) | is_possible_key_name(pks_clean)) &
+      (is_key_name(pks_clean) |
+        is_possible_key_name(pks_clean, possible_key_names)) &
         !vapply(pks_clean, owns_key, logical(1), tname_clean = tclean)
     ]
   })
@@ -2103,7 +2169,10 @@ detect_fks <- function(
               containment_min_distinct,
               parent_key_requirement,
               composite_probe,
-              prose_parent_guard
+              prose_parent_guard,
+              overlap_chance_discount,
+              overlap_chance_max_distinct,
+              cardinality_min_distinct
             ),
             error = function(e) NULL
           )

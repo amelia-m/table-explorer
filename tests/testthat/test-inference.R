@@ -1172,6 +1172,120 @@ test_that("a wide child column keeps its overlap evidence on a dense parent", {
   )
 })
 
+# ── The chance discount as a setting ─────────────────────────
+# Both tests below use the coincidence the discount exists for: a count
+# column of 13 distinct values inside a contiguous 1..1000 key, which the
+# test above shows is rejected at the defaults. One switches the discount
+# off, the other moves the threshold that decides which pairs it reaches,
+# so each can fail on its own.
+
+chance_fixture <- function() {
+  list(
+    flags = list(
+      naming = FALSE, value_overlap = TRUE, cardinality = TRUE,
+      format = FALSE, distribution = FALSE, null_pattern = FALSE
+    ),
+    parent = data.frame(pid = 1:1000),
+    # A count column: 13 distinct values, 12 of them inside a contiguous
+    # 1..1000 key, so the raw overlap is 0.92 and a parent of density 1.0
+    # hands out every bit of it for free. Deliberately short of the 0.99
+    # containment tier, so the overlap signals are the only evidence in
+    # play and the discount is the only thing deciding the pair.
+    counts = data.frame(n = with_local_seed(2, sample(0:12, 400, replace = TRUE)))
+  )
+}
+
+test_that("switching the chance discount off restores the coincidence", {
+  fx <- chance_fixture()
+  # Default: the discount is applied and the pair is not evidence
+  expect_null(score_candidate(
+    "child_t", "n", fx$counts, "parent_t", "pid", fx$parent, fx$flags
+  ))
+  off <- score_candidate(
+    "child_t", "n", fx$counts, "parent_t", "pid", fx$parent, fx$flags,
+    overlap_chance_discount = FALSE
+  )
+  expect_true("overlap_medium" %in% names(off$signals))
+
+  # And through detect_fks, which is how a scan sets it. The child column
+  # is named nothing like the parent, so the overlap is all it has.
+  tbls <- list(parent_t = fx$parent, child_t = fx$counts)
+  link <- function(...) {
+    Filter(
+      function(r) r$from_col == "n",
+      detect_fks(tbls, "both", "medium", ...)
+    )
+  }
+  expect_length(link(), 0)
+  expect_length(link(overlap_chance_discount = FALSE), 1)
+})
+
+test_that("the chance discount reaches only children below its threshold", {
+  fx <- chance_fixture()
+  # 13 distinct values on the child side, so a threshold at 12 puts this
+  # pair above the ceiling and the discount is never computed for it
+  wide <- score_candidate(
+    "child_t", "n", fx$counts, "parent_t", "pid", fx$parent, fx$flags,
+    overlap_chance_max_distinct = 12L
+  )
+  expect_true("overlap_medium" %in% names(wide$signals))
+  # Survival check at the default ceiling of 25: the same pair is still
+  # discounted away, so it is the threshold and not the fixture talking
+  expect_null(score_candidate(
+    "child_t", "n", fx$counts, "parent_t", "pid", fx$parent, fx$flags
+  ))
+
+  tbls <- list(parent_t = fx$parent, child_t = fx$counts)
+  link <- function(...) {
+    Filter(
+      function(r) r$from_col == "n",
+      detect_fks(tbls, "both", "medium", ...)
+    )
+  }
+  expect_length(link(), 0)
+  expect_length(link(overlap_chance_max_distinct = 12L), 1)
+})
+
+test_that("the cardinality floor is honoured when a caller lowers it", {
+  # Six shared codes is below the default floor of twelve, so two columns
+  # holding the same half-dozen values is the expected outcome rather than
+  # a finding. A caller who knows the schema's domains are small lowers
+  # the floor and gets the signal back.
+  codes <- c("AA", "BB", "CC", "DD", "EE", "FF")
+  flags <- list(
+    naming = FALSE, value_overlap = TRUE, cardinality = TRUE,
+    format = FALSE, distribution = FALSE, null_pattern = FALSE
+  )
+  parent <- data.frame(code = codes, stringsAsFactors = FALSE)
+  child <- data.frame(
+    kind = rep(codes, 10),
+    stringsAsFactors = FALSE
+  )
+  at_default <- score_candidate(
+    "visit", "kind", child, "tlk_code", "code", parent, flags
+  )
+  expect_false("cardinality_match" %in% names(at_default$signals))
+  lowered <- score_candidate(
+    "visit", "kind", child, "tlk_code", "code", parent, flags,
+    cardinality_min_distinct = 2L
+  )
+  expect_true("cardinality_match" %in% names(lowered$signals))
+
+  # And through detect_fks: the same pair, the floor set for the scan
+  tbls <- list(tlk_code = parent, visit = data.frame(
+    visit_id = seq_len(60), kind = rep(codes, 10), stringsAsFactors = FALSE
+  ))
+  sigs <- function(...) {
+    hit <- Filter(
+      function(r) r$from_col == "kind",
+      detect_fks(tbls, "both", "medium", ...)
+    )
+    if (length(hit) == 0) character(0) else names(hit[[1]]$signals)
+  }
+  expect_false("cardinality_match" %in% sigs())
+  expect_true("cardinality_match" %in% sigs(cardinality_min_distinct = 2L))
+})
+
 test_that("a name ending in id is a possible key, unless it is a word", {
   # The strict test wants a separator, so glued names never qualified
   expect_false(is_key_name("primaryid"))
@@ -1195,6 +1309,36 @@ test_that("a low-cardinality column named like a key is still a candidate", {
   expect_false(is_fk_candidate(col, "status_label"))
   expect_true(is_fk_candidate(col, "siteid"))
   expect_true(is_fk_candidate(col, "site_id"))
+})
+
+test_that("switching the possible-key-name tier off leaves only the strict test", {
+  # The tier admits a glued name the strict test cannot see, and all it
+  # buys the column is a hearing: it survives the low-cardinality reject
+  # and so reaches a scan at all.
+  expect_true(is_possible_key_name("primaryid"))
+  expect_false(is_possible_key_name("primaryid", possible_key_names = FALSE))
+  col <- rep(c(1, 2), 60)
+  expect_true(is_fk_candidate(col, "siteid"))
+  expect_false(is_fk_candidate(col, "siteid", possible_key_names = FALSE))
+  # The strict test is untouched by the switch: a separated name still
+  # qualifies, so this is the tier going quiet and not the whole screen
+  expect_true(is_fk_candidate(col, "site_id", possible_key_names = FALSE))
+
+  # And through detect_fks, which is how a scan sets it: a two-site column
+  # named without a separator is a link at the default and is not even
+  # offered as a source with the tier off
+  tbls <- list(
+    tlk_site = data.frame(siteid = 1:2, label = c("north", "south")),
+    visit = data.frame(visit_id = 1:60, siteid = rep(1:2, 30))
+  )
+  link <- function(...) {
+    Filter(
+      function(r) r$from_col == "siteid",
+      detect_fks(tbls, "both", "medium", ...)
+    )
+  }
+  expect_length(link(), 1)
+  expect_length(link(possible_key_names = FALSE), 0)
 })
 
 test_that("a bare id is not a possible key name", {
@@ -1695,4 +1839,65 @@ test_that("a composite key carrying a few duplicate rows is admitted, and the re
   heavy$pos[1:200] <- 1L
   expect_gt(n - length(unique(paste(heavy$grp, heavy$pos))), n * 0.01)
   expect_null(composite_key_component(heavy, "pos"))
+})
+
+# ── The settings sweep (dev/fixtures/public/sweep_settings.R) ──
+
+# sweep_settings.R runs its grid when executed. Sourcing it into an
+# environment that already defines .sweep_no_setup gives its functions
+# without running anything. Its own source() calls are relative to the
+# package root, which is why the working directory moves first.
+sweep_env <- function() {
+  withr::local_dir(testthat::test_path("..", ".."), .local_envir = parent.frame())
+  env <- new.env(parent = asNamespace("tableexplorer"))
+  assign(".sweep_no_setup", TRUE, envir = env)
+  sys.source("dev/fixtures/public/sweep_settings.R", envir = env)
+  env
+}
+
+test_that("the sweep writes nothing when a dataset is unavailable", {
+  # A sweep that skips a dataset and writes anyway under-reports, and the
+  # file reads as a whole run. So every dataset is loaded before any
+  # scoring, and a name that does not resolve stops the run.
+  env <- sweep_env()
+  out <- withr::local_tempdir()
+  # capture.output so the sweep's own progress line does not land in the
+  # middle of the suite's output
+  expect_error(
+    capture.output(env$sweep("nosuchdataset", out_dir = out)),
+    "unknown dataset: nosuchdataset"
+  )
+  expect_equal(list.files(out), character(0))
+})
+
+test_that("a combination whose chance threshold is inert is recorded once", {
+  # With the discount off the threshold decides nothing, so the two rows
+  # that differ only in it are the same run. Without the collapse the
+  # results file would carry a duplicate and the frontier would count it
+  # twice.
+  env <- sweep_env()
+  off <- utils::modifyList(
+    env$settings_default(),
+    list(overlap_chance_discount = FALSE)
+  )
+  off_wide <- utils::modifyList(off, list(overlap_chance_max_distinct = 100L))
+  expect_equal(env$settings_key(off), env$settings_key(off_wide))
+  expect_true(is.na(env$canonical_settings(off)$overlap_chance_max_distinct))
+  # And the threshold still separates two combinations while the discount
+  # is on, so the collapse is specific to the inert case
+  on_wide <- utils::modifyList(
+    env$settings_default(),
+    list(overlap_chance_max_distinct = 100L)
+  )
+  expect_false(
+    env$settings_key(env$settings_default()) == env$settings_key(on_wide)
+  )
+  expect_length(
+    env$dedup_combos(list(
+      list(settings = off, set = "a"),
+      list(settings = off_wide, set = "b"),
+      list(settings = on_wide, set = "c")
+    )),
+    2L
+  )
 })
