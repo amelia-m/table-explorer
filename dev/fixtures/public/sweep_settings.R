@@ -31,8 +31,13 @@
 # grid contains it, and "stack" on the datasets whose grid does not.
 # Filter on the settings columns, never on `set`, to compare one
 # combination across datasets. And `secs` is the detection time for that
-# run only, after a discarded warm-up run per dataset; it is not a
-# forecast for a cold process.
+# run only, after two discarded warm-up runs per dataset; it is not a
+# forecast for a cold process. The warm-up runs at the defaults, so a
+# wider scan path can still pay a partial warm-up the first time it
+# appears: Chinook's first composite row measured 2.74s against 1.66 to
+# 2.15s over seven later rows doing identical work. Run-to-run spread on
+# a shared desktop is of the same order, which is why the column ranks
+# cost coarsely rather than benchmarking it.
 
 # Named for this file, not .no_setup: score_public.R defines a variable of
 # that name when it is sourced below, and sourcing it into the same
@@ -331,8 +336,8 @@ run_combo <- function(ds, combo, commit, today, run_index = NA_integer_) {
     # detect_fks() calls in one process, so the first scored run of a
     # dataset pays a warm-up the rest do not: the first sweep recorded
     # 2.64s for Chinook's default against 0.54 to 0.91s for 21 other rows
-    # that scored the identical 776 pairs. A discarded warm-up run per
-    # dataset now absorbs it, and this column is here so a reader can
+    # that scored the identical 776 pairs. Two discarded warm-up passes
+    # per dataset now absorb it, and this column is here so a reader can
     # still see the order rather than take that on trust.
     run_index = as.integer(run_index),
     commit = commit,

@@ -1163,6 +1163,14 @@ naming_signal <- function(col1, t2, col2, t2_is_lookup = FALSE) {
 
 # p1/p2: optional column_profile() results for col1/col2. detect_fks passes
 # cached profiles; standalone callers can omit them.
+# The settings below are taken on trust here: detect_fks() checks their
+# types for a scan, and every pair in a scan arrives through it, so
+# checking again per pair would cost a comparison a million times over on
+# FAERS to catch a mistake the entry point has already caught. A caller
+# reaching this function directly, as the tests do, is trusted the same
+# way the enable_flags list is: isTRUE() reads a wrong-typed flag as
+# "off", and a string floor never passes the >= comparison, so a wrong
+# type here switches the rule off instead of refusing it.
 score_candidate <- function(
   t1,
   col1,
