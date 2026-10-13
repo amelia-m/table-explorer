@@ -511,13 +511,19 @@ sweep <- function(datasets = c("chinook", "lahman", "faers"),
     }
     combos <- combos_for(ds$name, frontier)
     cat(sprintf("%s: %d combinations\n", ds$name, length(combos)))
-    # Warm-up, discarded. The caches in utils_inference.R live for the
-    # whole process, so without this the first combination of each dataset
-    # carries the cost of filling them and its seconds are not comparable
-    # with any other row's. It is always the default combination, which is
-    # the row every reader compares against.
-    cat("  warming the caches\n")
-    invisible(run_fn(ds, one_off("warmup"), commit, today, run_index = 0L))
+    # Warm-up, discarded, twice. The caches in utils_inference.R live for
+    # the whole process, so without this the first combination of each
+    # dataset carries the cost of filling them and its seconds are not
+    # comparable with any other row's: measured at 2.64s against 0.54 to
+    # 0.91s for 21 Chinook rows that scored the identical 776 pairs to
+    # identical results. It is always the default combination, which is
+    # the row every reader compares against. Twice because R compiles a
+    # function on its second or third call, so one pass left a residual
+    # (1.6s against 0.4 to 0.9s on the same rows).
+    for (w in 1:2) {
+      cat(sprintf("  warming the caches (%d of 2)\n", w))
+      invisible(run_fn(ds, one_off("warmup"), commit, today, run_index = 0L))
+    }
     for (i in seq_along(combos)) {
       # The progress line is printed after the run, so a failure would
       # otherwise leave the reader to infer which combination errored from
