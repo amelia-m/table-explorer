@@ -182,6 +182,63 @@ real extract before the preset UI is built.
   it dropped from the grid and why, every threshold it chose, and every claim
   it did not verify directly, each with the check that would settle it.
 
+## Amendment (2026-10-13): base, grid and run budget
+
+Written when the contract was dispatched. It supersedes the Context and
+Acceptance lines it contradicts.
+
+**The base is `feat/prose-parent-guard` at b318c5e**, not
+`feat/containment-signal`. The chain has moved: that branch carries PR #54's
+three rules, the possible-key-name tier, the containment signal, the
+composite-parent measurement, the prose-parent guard, and the harness fixes
+that make a sweep readable (per-confidence reporting, ground-truth
+validation, a `max_pairs=` argument, and the corrected Lahman truth file with
+23 links). Nothing below has landed on `main`, so the sweep runs on the
+branch and reports; it does not merge.
+
+**Three of the six switches are already parameters** on that base, with
+these defaults, and need no new plumbing:
+
+- `parent_key_requirement` = `"key"`, with `"composite"` and `"any"`. `"any"`
+  is how the parent-must-be-a-key rule is switched off.
+- `prose_parent_guard` = `"allow"`, with `"refuse"` and `"refuse_target"`.
+- `containment_min_distinct` = `3L`. A very large value is how the
+  containment signal is switched off.
+
+**Three still need parameterising**, and that is the code half of this task:
+
+- The chance-overlap discount (`overlap_expected_by_chance`,
+  `overlap_chance_max_distinct <- 25L`): on or off, plus the threshold.
+- The cardinality floor (`cardinality_min_distinct <- 12L`): a value.
+- The possible-key-name tier (`is_possible_key_name()`): on or off.
+
+**The run budget, because the full grid does not fit.** Six switches at two
+values each is 64 combinations. Chinook takes about 1 second and Lahman about
+20, so 64 runs of each is about 22 minutes: run the **full grid** on those
+two. FAERS takes 55 to 150 seconds, so 64 runs is over an hour and the
+contract's stop line forbids it. On FAERS run a **reduced set**: every
+single-switch flip from the default, the default itself, the full stack, and
+every combination on the Chinook or Lahman frontier. Name in the report
+exactly which FAERS combinations were not run.
+
+**Single-switch rows are the point, not a by-product.** The reason this task
+exists is that PR #54's three rules have never been measured apart: every
+figure quoted anywhere is all three applied at once. So the report must give,
+for each of the six switches, the one-flip row against the default, on all
+three datasets where the budget allows, and say which single rule earns its
+place and which does not.
+
+**Report precision and recall at high confidence as well as overall.** The
+overall figure mixes high rows with ambiguity-demoted low rows, so a
+precision number for the whole set is not the number a reviewer experiences.
+Chinook on this base is 16.9 percent overall and 100.0 percent at high.
+
+**Measured baselines on the base branch, to reproduce at the defaults**,
+all at high confidence: Chinook recall 81.8, precision 100.0; Lahman recall
+95.7, precision 100.0; FAERS recall 75.0, precision 50.0. Synthetic scorer
+`real: 157 of 157`, `false: 0`. If any of these moves at the default
+settings, stop and report: the parameterisation has changed a rule's meaning.
+
 ## Settled (Amelia, 2026-10-10)
 
 - The hard-coded rules become settings. "Yes to the hard-coated rules becoming
