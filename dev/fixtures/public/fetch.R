@@ -89,11 +89,19 @@ format_size <- function(n) {
   if (n > 1024^2) sprintf("%.1f MB", n / 1024^2) else sprintf("%.0f KB", n / 1024)
 }
 
-args <- commandArgs(trailingOnly = TRUE)
-keys <- if (length(args)) args else names(public_sources)
-results <- vapply(keys, fetch_one, logical(1))
-cat("\ncache:", public_cache(), "\n")
-cat("ready:", paste(keys[results], collapse = ", "), "\n")
-if (any(!results)) {
-  cat("missing:", paste(keys[!results], collapse = ", "), "\n")
+# Sourcing this file into an environment that already defines
+# .fetch_no_setup gives its helpers (public_cache above all) without
+# running the driver below, the same convention score_public.R uses. It is
+# what lets sweep_settings.R find the cache without a fetch: a sweep that
+# downloads a dataset it was told was missing is a sweep whose first run
+# is timed against a network transfer.
+if (!exists(".fetch_no_setup", inherits = TRUE)) {
+  args <- commandArgs(trailingOnly = TRUE)
+  keys <- if (length(args)) args else names(public_sources)
+  results <- vapply(keys, fetch_one, logical(1))
+  cat("\ncache:", public_cache(), "\n")
+  cat("ready:", paste(keys[results], collapse = ", "), "\n")
+  if (any(!results)) {
+    cat("missing:", paste(keys[!results], collapse = ", "), "\n")
+  }
 }
