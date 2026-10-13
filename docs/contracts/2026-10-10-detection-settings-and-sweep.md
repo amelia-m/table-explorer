@@ -231,11 +231,15 @@ place and which does not.
 **Report precision and recall at high confidence as well as overall.** The
 overall figure mixes high rows with ambiguity-demoted low rows, so a
 precision number for the whole set is not the number a reviewer experiences.
-Chinook on this base is 16.9 percent overall and 100.0 percent at high.
+Chinook on this base at the defaults is 16.9 percent overall and 90.0
+percent at high.
 
 **Measured baselines on the base branch, to reproduce at the defaults**,
-all at high confidence: Chinook recall 81.8, precision 100.0; Lahman recall
-95.7, precision 100.0; FAERS recall 75.0, precision 50.0. Synthetic scorer
+all at high confidence, with `prose_parent_guard` at its default of
+`"allow"`: Chinook recall 81.8, precision 90.0; Lahman recall 95.7, precision
+100.0; FAERS recall 75.0, precision 50.0. Chinook reaches 100.0 precision at
+high only with `prose_parent_guard = "refuse_target"`, which is not the
+default and is one of the switches being swept. Synthetic scorer
 `real: 157 of 157`, `false: 0`. If any of these moves at the default
 settings, stop and report: the parameterisation has changed a rule's meaning.
 
