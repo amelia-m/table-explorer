@@ -186,13 +186,17 @@ mod_erd_server <- function(
     user_detail <- reactiveVal(NULL)
     # Value the server last pushed to the radio; its echo isn't a user choice
     auto_detail <- reactiveVal(NULL)
-    observeEvent(input$detail, {
-      if (identical(input$detail, auto_detail())) {
-        auto_detail(NULL)
-      } else {
-        user_detail(input$detail)
-      }
-    }, ignoreInit = TRUE)
+    observeEvent(
+      input$detail,
+      {
+        if (identical(input$detail, auto_detail())) {
+          auto_detail(NULL)
+        } else {
+          user_detail(input$detail)
+        }
+      },
+      ignoreInit = TRUE
+    )
     detail_rv <- reactive({
       user_detail() %||% erd_auto_detail(model_rv()$tables)
     })
@@ -200,13 +204,17 @@ mod_erd_server <- function(
     # the server's own radio updates as the detail level
     user_ref <- reactiveVal(NULL)
     auto_ref <- reactiveVal(NULL)
-    observeEvent(input$ref_links, {
-      if (identical(input$ref_links, auto_ref())) {
-        auto_ref(NULL)
-      } else {
-        user_ref(input$ref_links)
-      }
-    }, ignoreInit = TRUE)
+    observeEvent(
+      input$ref_links,
+      {
+        if (identical(input$ref_links, auto_ref())) {
+          auto_ref(NULL)
+        } else {
+          user_ref(input$ref_links)
+        }
+      },
+      ignoreInit = TRUE
+    )
     ref_links_rv <- reactive({
       user_ref() %||%
         if (length(model_rv()$tables) > erd_large_schema) "labels" else "lines"
@@ -241,11 +249,16 @@ mod_erd_server <- function(
         choices = areas,
         selected = intersect(isolate(input$areas), areas)
       )
-      if (is.null(user_detail()) && !identical(detail_rv(), isolate(input$detail))) {
+      if (
+        is.null(user_detail()) && !identical(detail_rv(), isolate(input$detail))
+      ) {
         auto_detail(detail_rv())
         updateRadioButtons(session, "detail", selected = detail_rv())
       }
-      if (is.null(user_ref()) && !identical(ref_links_rv(), isolate(input$ref_links))) {
+      if (
+        is.null(user_ref()) &&
+          !identical(ref_links_rv(), isolate(input$ref_links))
+      ) {
         auto_ref(ref_links_rv())
         updateRadioButtons(session, "ref_links", selected = ref_links_rv())
       }
@@ -336,8 +349,16 @@ mod_erd_server <- function(
       selected_rel(NULL)
     })
 
-    words_child <- c(one = "at most one", many = "zero or more", unknown = "unknown (no rows)")
-    words_parent <- c(one = "exactly one", zero = "zero or one", unknown = "unknown (no rows)")
+    words_child <- c(
+      one = "at most one",
+      many = "zero or more",
+      unknown = "unknown (no rows)"
+    )
+    words_parent <- c(
+      one = "exactly one",
+      zero = "zero or one",
+      unknown = "unknown (no rows)"
+    )
 
     output$side <- renderUI({
       m <- model_rv()
@@ -383,7 +404,11 @@ mod_erd_server <- function(
               same <- identical(r$from_col, to_col)
               col_cell <- function(value) {
                 tags$td(
-                  class = if (same) "erd-rel-col erd-rel-col-same" else "erd-rel-col",
+                  class = if (same) {
+                    "erd-rel-col erd-rel-col-same"
+                  } else {
+                    "erd-rel-col"
+                  },
                   value
                 )
               }
@@ -407,7 +432,13 @@ mod_erd_server <- function(
               tags$dt("Each parent has"),
               tags$dd(paste(words_child[[r$child_max]], "children")),
               tags$dt("Identifying"),
-              tags$dd(if (isTRUE(r$identifying)) "yes (FK is part of the PK)" else "no"),
+              tags$dd(
+                if (isTRUE(r$identifying)) {
+                  "yes (FK is part of the PK)"
+                } else {
+                  "no"
+                }
+              ),
               tags$dt("Source"),
               tags$dd(
                 r$provenance,
@@ -415,7 +446,10 @@ mod_erd_server <- function(
                   sprintf(" · %s %d%%", r$confidence, round(100 * r$score))
                 },
                 if (!is.null(r$also_detected) && !is.na(r$also_detected)) {
-                  sprintf(" · also detected (%d%%)", round(100 * r$also_detected))
+                  sprintf(
+                    " · also detected (%d%%)",
+                    round(100 * r$also_detected)
+                  )
                 }
               ),
               if (length(r$reasons)) tags$dt("Evidence"),
@@ -426,10 +460,18 @@ mod_erd_server <- function(
               if (confirmed) {
                 actionButton(ns("unconfirm"), "Undo confirm", class = "btn-rel")
               } else if (identical(r$provenance, "inferred")) {
-                actionButton(ns("confirm"), "✓ Confirm", class = "btn-rel btn-rel-confirm")
+                actionButton(
+                  ns("confirm"),
+                  "✓ Confirm",
+                  class = "btn-rel btn-rel-confirm"
+                )
               },
               if (r$provenance %in% c("inferred", "confirmed")) {
-                actionButton(ns("suppress"), "✕ Suppress", class = "btn-rel btn-rel-suppress")
+                actionButton(
+                  ns("suppress"),
+                  "✕ Suppress",
+                  class = "btn-rel btn-rel-suppress"
+                )
               }
             )
           )
@@ -454,17 +496,29 @@ mod_erd_server <- function(
             class = "erd-panel-cols",
             lapply(seq_len(nrow(cols)), function(i) {
               tags$tr(
-                tags$td(paste(c(
-                  if (cols$pk[i]) "PK",
-                  if (!is.na(cols$fk_index[i])) paste0("FK", cols$fk_index[i]),
-                  if (cols$uk[i]) "UK"
-                ), collapse = ",")),
+                tags$td(paste(
+                  c(
+                    if (cols$pk[i]) "PK",
+                    if (!is.na(cols$fk_index[i])) {
+                      paste0("FK", cols$fk_index[i])
+                    },
+                    if (cols$uk[i]) "UK"
+                  ),
+                  collapse = ","
+                )),
                 tags$td(cols$name[i]),
-                tags$td(paste0(cols$type[i], if (isTRUE(cols$nullable[i])) " ∅"))
+                tags$td(paste0(
+                  cols$type[i],
+                  if (isTRUE(cols$nullable[i])) " ∅"
+                ))
               )
             })
           ),
-          actionButton(ns("focus_selected"), "Focus this table", class = "btn-rel")
+          actionButton(
+            ns("focus_selected"),
+            "Focus this table",
+            class = "btn-rel"
+          )
         )
       } else {
         div(

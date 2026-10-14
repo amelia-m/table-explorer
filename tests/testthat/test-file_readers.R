@@ -85,7 +85,9 @@ test_that("read_table_file reads TSV files", {
   tmp <- tempfile(fileext = ".tsv")
   write.table(
     data.frame(id = 1:3, name = c("alice", "bob", "carol")),
-    tmp, sep = "\t", row.names = FALSE
+    tmp,
+    sep = "\t",
+    row.names = FALSE
   )
   on.exit(unlink(tmp))
 
@@ -113,7 +115,9 @@ test_that("read_rds_file notifies for non-data-frame", {
   on.exit(unlink(tmp))
 
   errors <- character(0)
-  result <- read_rds_file(tmp, "test.rds", function(msg) errors <<- c(errors, msg))
+  result <- read_rds_file(tmp, "test.rds", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("does not contain", errors)))
 })
@@ -141,7 +145,9 @@ test_that("read_rdata_file notifies when no data frames found", {
   on.exit(unlink(tmp))
 
   errors <- character(0)
-  result <- read_rdata_file(tmp, "test.rdata", function(msg) errors <<- c(errors, msg))
+  result <- read_rdata_file(tmp, "test.rdata", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("No data frames", errors)))
 })
@@ -171,7 +177,9 @@ test_that("read_json_file notifies for non-tabular JSON", {
   on.exit(unlink(tmp))
 
   errors <- character(0)
-  result <- read_json_file(tmp, "bad.json", function(msg) errors <<- c(errors, msg))
+  result <- read_json_file(tmp, "bad.json", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
 })
 
@@ -210,9 +218,13 @@ test_that("parse_schema_file extracts FK from inline definitions", {
   result <- parse_schema_file(schema_json_path, "schema.json")
 
   # orders.customer_id -> customers.customer_id should exist
-  fk_descs <- vapply(result$relationships, function(r) {
-    paste(r$from_table, r$from_col, r$to_table, r$to_col, sep = ".")
-  }, character(1))
+  fk_descs <- vapply(
+    result$relationships,
+    function(r) {
+      paste(r$from_table, r$from_col, r$to_table, r$to_col, sep = ".")
+    },
+    character(1)
+  )
 
   expect_true(any(grepl("orders.*customer_id.*customers", fk_descs)))
   expect_true(any(grepl("orders.*product_id.*products", fk_descs)))
@@ -222,18 +234,21 @@ test_that("parse_schema_file handles YAML format", {
   skip_if_not_installed("yaml")
 
   tmp <- tempfile(fileext = ".yaml")
-  writeLines(c(
-    "tables:",
-    "  - name: users",
-    "    columns:",
-    "      - name: user_id",
-    "      - name: email",
-    "relationships:",
-    "  - from_table: orders",
-    "    from_column: user_id",
-    "    to_table: users",
-    "    to_column: user_id"
-  ), tmp)
+  writeLines(
+    c(
+      "tables:",
+      "  - name: users",
+      "    columns:",
+      "      - name: user_id",
+      "      - name: email",
+      "relationships:",
+      "  - from_table: orders",
+      "    from_column: user_id",
+      "    to_table: users",
+      "    to_column: user_id"
+    ),
+    tmp
+  )
   on.exit(unlink(tmp))
 
   result <- parse_schema_file(tmp, "schema.yaml")
@@ -249,7 +264,9 @@ test_that("parse_schema_file notifies for unsupported format", {
   writeLines("not a schema", tmp)
   on.exit(unlink(tmp))
 
-  result <- parse_schema_file(tmp, "schema.txt", function(msg) errors <<- c(errors, msg))
+  result <- parse_schema_file(tmp, "schema.txt", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("Unsupported", errors)))
 })
@@ -260,8 +277,9 @@ test_that("read_excel_file notifies when readxl missing", {
   # Only test if readxl is NOT installed
   skip_if(requireNamespace("readxl", quietly = TRUE), "readxl is installed")
   errors <- character(0)
-  result <- read_excel_file("/fake/path.xlsx", "test.xlsx",
-                            function(msg) errors <<- c(errors, msg))
+  result <- read_excel_file("/fake/path.xlsx", "test.xlsx", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("readxl", errors)))
 })
@@ -269,8 +287,11 @@ test_that("read_excel_file notifies when readxl missing", {
 test_that("read_parquet_file notifies when arrow missing", {
   skip_if(requireNamespace("arrow", quietly = TRUE), "arrow is installed")
   errors <- character(0)
-  result <- read_parquet_file("/fake/path.parquet", "test.parquet",
-                              function(msg) errors <<- c(errors, msg))
+  result <- read_parquet_file(
+    "/fake/path.parquet",
+    "test.parquet",
+    function(msg) errors <<- c(errors, msg)
+  )
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("arrow", errors)))
 })
@@ -278,8 +299,9 @@ test_that("read_parquet_file notifies when arrow missing", {
 test_that("read_haven_file notifies when haven missing", {
   skip_if(requireNamespace("haven", quietly = TRUE), "haven is installed")
   errors <- character(0)
-  result <- read_haven_file("/fake/path.sav", "test.sav", "sav",
-                            function(msg) errors <<- c(errors, msg))
+  result <- read_haven_file("/fake/path.sav", "test.sav", "sav", function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_equal(length(result$tables), 0)
   expect_true(any(grepl("haven", errors)))
 })
@@ -288,14 +310,25 @@ test_that("read_haven_file notifies when haven missing", {
 
 test_that("detect_app_export recognises this app's CSV exports", {
   rels <- data.frame(
-    from_table = "orders", from_col = "customer_id",
-    to_table = "customers", to_col = "customer_id",
-    detected_by = "naming", confidence = "high", score = 1,
-    signals = "naming_exact", reasons = "exact FK naming"
+    from_table = "orders",
+    from_col = "customer_id",
+    to_table = "customers",
+    to_col = "customer_id",
+    detected_by = "naming",
+    confidence = "high",
+    score = 1,
+    signals = "naming_exact",
+    reasons = "exact FK naming"
   )
   details <- data.frame(
-    table = "orders", table_rows = 5, table_cols = 3, column = "order_id",
-    type = "integer", non_null = 5, unique_vals = 5, is_pk = TRUE,
+    table = "orders",
+    table_rows = 5,
+    table_cols = 3,
+    column = "order_id",
+    type = "integer",
+    non_null = 5,
+    unique_vals = 5,
+    is_pk = TRUE,
     is_fk = FALSE
   )
   expect_equal(detect_app_export(rels), "relationships list")
@@ -307,7 +340,10 @@ test_that("detect_app_export recognises this app's CSV exports", {
   expect_null(detect_app_export(data.frame(customer_id = 1:3, name = "a")))
   # A real mapping table sharing some export column names is still data
   mapping <- data.frame(
-    from_table = "a", from_col = "x", to_table = "b", to_col = "y",
+    from_table = "a",
+    from_col = "x",
+    to_table = "b",
+    to_col = "y",
     owner = "team"
   )
   expect_null(detect_app_export(mapping))
@@ -323,7 +359,11 @@ msys_rows <- function() {
     icolumn = 0L,
     szObject = c("tbl Visits", "tbl Visits", "MSysNavPaneGroups"),
     szColumn = c("ServiceID", "SiteID", "GroupID"),
-    szReferencedObject = c("tlk_services", "tlk_sites", "MSysNavPaneGroupCategories"),
+    szReferencedObject = c(
+      "tlk_services",
+      "tlk_sites",
+      "MSysNavPaneGroupCategories"
+    ),
     szReferencedColumn = c("ID", "ID", "Id"),
     stringsAsFactors = FALSE
   )
@@ -334,7 +374,10 @@ test_that("MSysRelationships rows become declared links with cleaned names", {
   expect_length(rels, 2)
   expect_equal(
     vapply(rels, rel_key, ""),
-    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+    c(
+      "tbl_visits|service_id|tlk_services|id",
+      "tbl_visits|site_id|tlk_sites|id"
+    )
   )
   expect_true(all(vapply(rels, `[[`, "", "detected_by") == "schema"))
   expect_match(rels[[1]]$reasons, "integrity enforced")
@@ -348,12 +391,20 @@ test_that("relationships are read from a real .accdb with mdbtools", {
   rels <- access_relationships(path, notify_fn = function(...) NULL)
   expect_setequal(
     vapply(rels, rel_key, ""),
-    c("tbl_visits|service_id|tlk_services|id", "tbl_visits|site_id|tlk_sites|id")
+    c(
+      "tbl_visits|service_id|tlk_services|id",
+      "tbl_visits|site_id|tlk_sites|id"
+    )
   )
 })
 
 test_that("declared links are cleaned and de-duplicated when merged", {
-  a <- list(from_table = "Orders", from_col = "CustomerID", to_table = "Customers", to_col = "ID")
+  a <- list(
+    from_table = "Orders",
+    from_col = "CustomerID",
+    to_table = "Customers",
+    to_col = "ID"
+  )
   merged <- merge_declared_rels(list(), list(a, a))
   expect_length(merged, 1)
   expect_equal(rel_key(merged[[1]]), "orders|customer_id|customers|id")

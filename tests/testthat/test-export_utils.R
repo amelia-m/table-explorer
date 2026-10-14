@@ -23,9 +23,13 @@ make_test_tables <- function() {
 make_test_rels <- function() {
   list(
     list(
-      from_table = "orders", from_col = "customer_id",
-      to_table = "customers", to_col = "customer_id",
-      detected_by = "naming", confidence = "high", score = 1.0,
+      from_table = "orders",
+      from_col = "customer_id",
+      to_table = "customers",
+      to_col = "customer_id",
+      detected_by = "naming",
+      confidence = "high",
+      score = 1.0,
       signals = list(naming_exact = 1.0),
       reasons = "exact FK naming"
     )
@@ -42,7 +46,11 @@ make_test_pks <- function() {
 # ── dbt schema.yml generator ────────────────────────────────
 
 test_that("generate_dbt_yaml produces valid structure", {
-  yaml_str <- generate_dbt_yaml(make_test_tables(), make_test_rels(), make_test_pks())
+  yaml_str <- generate_dbt_yaml(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("version: 2", yaml_str))
   expect_true(grepl("models:", yaml_str))
@@ -51,21 +59,33 @@ test_that("generate_dbt_yaml produces valid structure", {
 })
 
 test_that("generate_dbt_yaml includes PK tests", {
-  yaml_str <- generate_dbt_yaml(make_test_tables(), make_test_rels(), make_test_pks())
+  yaml_str <- generate_dbt_yaml(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("- unique", yaml_str))
   expect_true(grepl("- not_null", yaml_str))
 })
 
 test_that("generate_dbt_yaml includes FK relationship tests", {
-  yaml_str <- generate_dbt_yaml(make_test_tables(), make_test_rels(), make_test_pks())
+  yaml_str <- generate_dbt_yaml(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("relationships:", yaml_str))
   expect_true(grepl("ref\\('customers'\\)", yaml_str))
 })
 
 test_that("generate_dbt_yaml includes all columns", {
-  yaml_str <- generate_dbt_yaml(make_test_tables(), make_test_rels(), make_test_pks())
+  yaml_str <- generate_dbt_yaml(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("- name: customer_id", yaml_str))
   expect_true(grepl("- name: name", yaml_str))
@@ -82,34 +102,54 @@ test_that("generate_dbt_yaml handles empty tables", {
 # ── Mermaid ERD generator ────────────────────────────────────
 
 test_that("generate_mermaid_erd starts with erDiagram", {
-  mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
+  mmd <- generate_mermaid_erd(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
   lines <- strsplit(mmd, "\n")[[1]]
   expect_equal(trimws(lines[1]), "erDiagram")
 })
 
 test_that("generate_mermaid_erd includes table blocks", {
-  mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
+  mmd <- generate_mermaid_erd(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("customers \\{", mmd))
   expect_true(grepl("orders \\{", mmd))
 })
 
 test_that("generate_mermaid_erd marks PK columns", {
-  mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
+  mmd <- generate_mermaid_erd(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   expect_true(grepl("customer_id PK", mmd))
   expect_true(grepl("order_id PK", mmd))
 })
 
 test_that("generate_mermaid_erd includes relationships", {
-  mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
+  mmd <- generate_mermaid_erd(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   # Mandatory parent (no NULL FKs), many children; lines are always solid
   expect_true(grepl("customers \\|\\|--o\\{ orders", mmd))
 })
 
 test_that("generate_mermaid_erd assigns correct data types", {
-  mmd <- generate_mermaid_erd(make_test_tables(), make_test_rels(), make_test_pks())
+  mmd <- generate_mermaid_erd(
+    make_test_tables(),
+    make_test_rels(),
+    make_test_pks()
+  )
 
   # customer_id is numeric -> int
   expect_true(grepl("int customer_id", mmd))
@@ -195,8 +235,10 @@ test_that("restore_session_json round-trips manual relationships", {
   skip_if_not_installed("jsonlite")
 
   manual <- list(list(
-    from_table = "a", from_col = "b",
-    to_table = "c", to_col = "d",
+    from_table = "a",
+    from_col = "b",
+    to_table = "c",
+    to_col = "d",
     detected_by = "manual"
   ))
   json_str <- save_session_json(list(), list(), manual, list())
@@ -240,12 +282,19 @@ test_that("restore_session_json handles empty/missing fields", {
 
 test_that("session round-trips review decisions", {
   confirmed <- list(list(
-    from_table = "orders", from_col = "customer_id",
-    to_table = "customers", to_col = "customer_id",
-    detected_by = "naming", confidence = "high", score = 1
+    from_table = "orders",
+    from_col = "customer_id",
+    to_table = "customers",
+    to_col = "customer_id",
+    detected_by = "naming",
+    confidence = "high",
+    score = 1
   ))
   json_str <- save_session_json(
-    list(), list(), list(), list(),
+    list(),
+    list(),
+    list(),
+    list(),
     review = list(confirmed = confirmed, suppressed = list("a|b|c|d"))
   )
   result <- restore_session_json(json_str)
@@ -261,27 +310,41 @@ erd_export_fixture <- function() {
     orders = data.frame(order_id = 1:4, customer_id = c(1L, NA, 2L, 3L)),
     customer_profile = data.frame(customer_id = 1:3, bio = c("x", "y", "z")),
     order_items = data.frame(
-      order_id = c(1L, 1L, 2L), product_id = c(1L, 2L, 1L)
+      order_id = c(1L, 1L, 2L),
+      product_id = c(1L, 2L, 1L)
     ),
     products = data.frame(product_id = 1:2, sku = c("A", "B"))
   )
   mk <- function(ft, fc, tt, tc, by = "naming", conf = FALSE) {
     list(
-      from_table = ft, from_col = fc, to_table = tt, to_col = tc,
-      detected_by = by, confidence = "high", score = 0.87, confirmed = conf,
+      from_table = ft,
+      from_col = fc,
+      to_table = tt,
+      to_col = tc,
+      detected_by = by,
+      confidence = "high",
+      score = 0.87,
+      confirmed = conf,
       reasons = "exact FK naming"
     )
   }
   rels <- list(
     mk("orders", "customer_id", "customers", "customer_id"),
-    mk("customer_profile", "customer_id", "customers", "customer_id",
-       by = "schema"),
+    mk(
+      "customer_profile",
+      "customer_id",
+      "customers",
+      "customer_id",
+      by = "schema"
+    ),
     mk("order_items", "order_id", "orders", "order_id", conf = TRUE),
     mk("order_items", "product_id", "products", "product_id", conf = TRUE)
   )
   pks <- list(
-    customers = "customer_id", orders = "order_id",
-    customer_profile = "customer_id", products = "product_id"
+    customers = "customer_id",
+    orders = "order_id",
+    customer_profile = "customer_id",
+    products = "product_id"
   )
   cpks <- list(order_items = list(c("order_id", "product_id")))
   list(tables = tables, rels = rels, pks = pks, cpks = cpks)
@@ -294,13 +357,15 @@ test_that("Mermaid uses crow's-foot optionality with solid lines", {
   # break Mermaid's markers)
   expect_true(grepl(
     'customers |o--o{ orders : "customer_id \u2192 customer_id (inferred 87%)"',
-    mmd, fixed = TRUE
+    mmd,
+    fixed = TRUE
   ))
   expect_false(grepl("..", gsub("%%[^\n]*", "", mmd), fixed = TRUE))
   # 1:1, declared (no confidence label)
   expect_true(grepl(
     'customers ||--o| customer_profile : "customer_id \u2192 customer_id"',
-    mmd, fixed = TRUE
+    mmd,
+    fixed = TRUE
   ))
   # Composite-PK junction: identifying FK shows as a PK, FK column
   expect_true(grepl("orders ||--o{ order_items", mmd, fixed = TRUE))
@@ -326,10 +391,16 @@ test_that("DBML has tables, settings, refs, composite PK and groups", {
   dbml <- generate_dbml(f$tables, f$rels, f$pks, f$cpks)
   expect_true(grepl("Table customers [headerColor:", dbml, fixed = TRUE))
   expect_true(grepl("customer_id int [pk, not null]", dbml, fixed = TRUE))
-  expect_true(grepl("Ref: orders.customer_id > customers.customer_id [color: #94a3b8]",
-                    dbml, fixed = TRUE))
-  expect_true(grepl("Ref: customer_profile.customer_id - customers.customer_id",
-                    dbml, fixed = TRUE))
+  expect_true(grepl(
+    "Ref: orders.customer_id > customers.customer_id [color: #94a3b8]",
+    dbml,
+    fixed = TRUE
+  ))
+  expect_true(grepl(
+    "Ref: customer_profile.customer_id - customers.customer_id",
+    dbml,
+    fixed = TRUE
+  ))
   expect_true(grepl("(order_id, product_id) [pk]", dbml, fixed = TRUE))
   expect_true(grepl("TableGroup orders {", dbml, fixed = TRUE))
 })
@@ -431,8 +502,13 @@ dict_tables <- function() {
 }
 dict_rels <- function(by = "schema") {
   list(list(
-    from_table = "orders", from_col = "customer_id", to_table = "customers",
-    to_col = "customer_id", detected_by = by, confidence = "high", score = 1
+    from_table = "orders",
+    from_col = "customer_id",
+    to_table = "customers",
+    to_col = "customer_id",
+    detected_by = by,
+    confidence = "high",
+    score = 1
   ))
 }
 dict_pks <- function() list(customers = "customer_id", orders = "order_id")
@@ -455,7 +531,15 @@ test_that("build_data_dictionary describes every column", {
   expect_equal(dd$examples[dd$column == "email"], "")
   expect_equal(dd$examples_note[dd$column == "email"], "private")
   expect_equal(dd$privacy_status[dd$column == "email"], "auto_unreviewed")
-  expect_equal(build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), examples = FALSE)$examples[3], "")
+  expect_equal(
+    build_data_dictionary(
+      dict_tables(),
+      dict_rels(),
+      dict_pks(),
+      examples = FALSE
+    )$examples[3],
+    ""
+  )
   # Metadata stays for every column
   em <- dd[dd$column == "email", ]
   expect_equal(em$format, "email address")
@@ -470,16 +554,28 @@ test_that("dictionary edits are merged into the dictionary and its Markdown", {
     customers = list(description = "People who buy | things"),
     "customers|tier" = list(description = "Loyalty tier", label = "Tier")
   )
-  dd <- build_data_dictionary(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  dd <- build_data_dictionary(
+    dict_tables(),
+    dict_rels(),
+    dict_pks(),
+    dictionary = edits
+  )
   expect_equal(dd$description[dd$column == "tier"], "Loyalty tier")
   expect_equal(dd$label[dd$column == "tier"], "Tier")
-  expect_equal(unique(dd$table_description[dd$table == "customers"]), "People who buy | things")
+  expect_equal(
+    unique(dd$table_description[dd$table == "customers"]),
+    "People who buy | things"
+  )
   md <- generate_data_dictionary_md(dd)
   expect_match(md, "## customers", fixed = TRUE)
   expect_match(md, "## orders", fixed = TRUE)
   expect_match(md, "People who buy \\| things", fixed = TRUE)
   expect_match(md, "| `tier` | Tier |", fixed = TRUE)
-  expect_match(md, "`customer_id` → `customers.customer_id` (declared)", fixed = TRUE)
+  expect_match(
+    md,
+    "`customer_id` → `customers.customer_id` (declared)",
+    fixed = TRUE
+  )
   expect_identical(md, generate_data_dictionary_md(dd))
   expect_match(generate_data_dictionary_md(dd[0, ]), "No tables loaded")
 })
@@ -489,31 +585,76 @@ test_that("descriptions reach dbt, DBML and Mermaid", {
     orders = list(description = "Each \"order\" placed"),
     "orders|amount" = list(description = "Total in GBP")
   )
-  y <- generate_dbt_yaml(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
-  expect_match(y, "    description: \"Each \\\"order\\\" placed\"", fixed = TRUE)
+  y <- generate_dbt_yaml(
+    dict_tables(),
+    dict_rels(),
+    dict_pks(),
+    dictionary = edits
+  )
+  expect_match(
+    y,
+    "    description: \"Each \\\"order\\\" placed\"",
+    fixed = TRUE
+  )
   expect_match(y, "        description: \"Total in GBP\"", fixed = TRUE)
   expect_false(grepl("constraints:", y))
-  dbml <- generate_dbml(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  dbml <- generate_dbml(
+    dict_tables(),
+    dict_rels(),
+    dict_pks(),
+    dictionary = edits
+  )
   expect_match(dbml, "note: 'Total in GBP'", fixed = TRUE)
   expect_match(dbml, "Note: 'Each \"order\" placed (", fixed = TRUE)
-  mmd <- generate_mermaid_erd(dict_tables(), dict_rels(), dict_pks(), dictionary = edits)
+  mmd <- generate_mermaid_erd(
+    dict_tables(),
+    dict_rels(),
+    dict_pks(),
+    dictionary = edits
+  )
   expect_match(mmd, "amount \"Total in GBP\"", fixed = TRUE)
 })
 
 test_that("dbt constraints cover PKs and reviewed FKs only", {
-  y <- generate_dbt_yaml(dict_tables(), dict_rels("schema"), dict_pks(), constraints = TRUE)
+  y <- generate_dbt_yaml(
+    dict_tables(),
+    dict_rels("schema"),
+    dict_pks(),
+    constraints = TRUE
+  )
   expect_match(y, "- type: primary_key", fixed = TRUE)
-  expect_match(y, "- type: foreign_key\n            to: ref('customers')\n            to_columns: [customer_id]", fixed = TRUE)
-  detected <- generate_dbt_yaml(dict_tables(), dict_rels("naming"), dict_pks(), constraints = TRUE)
+  expect_match(
+    y,
+    "- type: foreign_key\n            to: ref('customers')\n            to_columns: [customer_id]",
+    fixed = TRUE
+  )
+  detected <- generate_dbt_yaml(
+    dict_tables(),
+    dict_rels("naming"),
+    dict_pks(),
+    constraints = TRUE
+  )
   expect_false(grepl("foreign_key", detected))
   confirmed <- dict_rels("naming")
   confirmed[[1]]$confirmed <- TRUE
-  expect_match(generate_dbt_yaml(dict_tables(), confirmed, dict_pks(), constraints = TRUE), "foreign_key", fixed = TRUE)
+  expect_match(
+    generate_dbt_yaml(dict_tables(), confirmed, dict_pks(), constraints = TRUE),
+    "foreign_key",
+    fixed = TRUE
+  )
 })
 
 test_that("sessions keep dictionary edits; older sessions still load", {
-  edits <- list("orders|amount" = list(description = "Total", label = "Order total"))
-  js <- save_session_json(dict_tables(), list(), list(), list(), dictionary = edits)
+  edits <- list(
+    "orders|amount" = list(description = "Total", label = "Order total")
+  )
+  js <- save_session_json(
+    dict_tables(),
+    list(),
+    list(),
+    list(),
+    dictionary = edits
+  )
   back <- restore_session_json(js)
   expect_equal(back$dictionary[["orders|amount"]]$label, "Order total")
   old <- save_session_json(dict_tables(), list(), list(), list())
@@ -531,21 +672,42 @@ test_that("sessions with missing values restore with their NAs", {
 })
 
 test_that("dbt constraints pick one primary key when several columns are unique", {
-  t <- list(orders = data.frame(order_id = 1:3, ref = c("a", "b", "c"), stringsAsFactors = FALSE))
-  y <- generate_dbt_yaml(t, list(), list(orders = c("order_id", "ref")), constraints = TRUE)
+  t <- list(
+    orders = data.frame(
+      order_id = 1:3,
+      ref = c("a", "b", "c"),
+      stringsAsFactors = FALSE
+    )
+  )
+  y <- generate_dbt_yaml(
+    t,
+    list(),
+    list(orders = c("order_id", "ref")),
+    constraints = TRUE
+  )
   expect_equal(lengths(regmatches(y, gregexpr("primary_key", y))), 1)
-  expect_match(y, "- name: order_id\n        data_type: integer\n        constraints:\n          - type: primary_key", fixed = TRUE)
+  expect_match(
+    y,
+    "- name: order_id\n        data_type: integer\n        constraints:\n          - type: primary_key",
+    fixed = TRUE
+  )
 })
 
 test_that("the dictionary leaves out low-confidence detected links", {
   low <- dict_rels("naming")
   low[[1]]$confidence <- "low"
   dd <- build_data_dictionary(dict_tables(), low, dict_pks())
-  expect_equal(dd$references[dd$table == "orders" & dd$column == "customer_id"], "")
+  expect_equal(
+    dd$references[dd$table == "orders" & dd$column == "customer_id"],
+    ""
+  )
   declared_low <- dict_rels("schema")
   declared_low[[1]]$confidence <- "low"
   dd2 <- build_data_dictionary(dict_tables(), declared_low, dict_pks())
-  expect_equal(dd2$references[dd2$table == "orders" & dd2$column == "customer_id"], "customers.customer_id")
+  expect_equal(
+    dd2$references[dd2$table == "orders" & dd2$column == "customer_id"],
+    "customers.customer_id"
+  )
 })
 
 test_that("dbt constraints come with an enforced contract and the parent's key", {
@@ -553,11 +715,22 @@ test_that("dbt constraints come with an enforced contract and the parent's key",
   rels[[1]]$from_col <- "customer_id"
   rels[[1]]$to_col <- "" # names only the parent table
   y <- generate_dbt_yaml(dict_tables(), rels, dict_pks(), constraints = TRUE)
-  expect_match(y, "    config:\n      contract:\n        enforced: true", fixed = TRUE)
+  expect_match(
+    y,
+    "    config:\n      contract:\n        enforced: true",
+    fixed = TRUE
+  )
   expect_match(y, "- name: amount\n        data_type: float", fixed = TRUE)
   expect_match(y, "- name: tier\n        data_type: varchar", fixed = TRUE)
-  expect_match(y, "to: ref('customers')\n            to_columns: [customer_id]", fixed = TRUE)
-  expect_false(grepl("contract", generate_dbt_yaml(dict_tables(), rels, dict_pks())))
+  expect_match(
+    y,
+    "to: ref('customers')\n            to_columns: [customer_id]",
+    fixed = TRUE
+  )
+  expect_false(grepl(
+    "contract",
+    generate_dbt_yaml(dict_tables(), rels, dict_pks())
+  ))
 })
 
 test_that("DBML notes escape backslashes and quotes", {
@@ -569,19 +742,32 @@ test_that("DBML notes escape backslashes and quotes", {
 # ── data-dict YAML ────────────────────────────────────────────
 
 dd_yaml_tables <- function() {
-  c(dict_tables(), list(staff = data.frame(staff_id = 1:3, manager_id = c(NA, 1L, 1L))))
+  c(
+    dict_tables(),
+    list(staff = data.frame(staff_id = 1:3, manager_id = c(NA, 1L, 1L)))
+  )
 }
 dd_yaml_rels <- function() {
   c(
     dict_rels("schema"),
     list(
       list(
-        from_table = "staff", from_col = "manager_id", to_table = "staff",
-        to_col = "staff_id", detected_by = "manual", confidence = "high", score = 1
+        from_table = "staff",
+        from_col = "manager_id",
+        to_table = "staff",
+        to_col = "staff_id",
+        detected_by = "manual",
+        confidence = "high",
+        score = 1
       ),
       list(
-        from_table = "orders", from_col = "order_id", to_table = "staff",
-        to_col = "staff_id", detected_by = "naming", confidence = "medium", score = 0.7
+        from_table = "orders",
+        from_col = "order_id",
+        to_table = "staff",
+        to_col = "staff_id",
+        detected_by = "naming",
+        confidence = "medium",
+        score = 0.7
       )
     )
   )
@@ -592,26 +778,43 @@ test_that("data-dict export follows the spec", {
   skip_if_not_installed("yaml")
   edits <- list(
     customers = list(description = "People", label = "Customers"),
-    "customers|tier" = list(label = "Tier", values = "gold = Gold; silver = Silver; bronze = Bronze"),
+    "customers|tier" = list(
+      label = "Tier",
+      values = "gold = Gold; silver = Silver; bronze = Bronze"
+    ),
     "orders|amount" = list(units = "GBP", description = "Total")
   )
-  y <- generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks(), dictionary = edits)
+  y <- generate_data_dict_yaml(
+    dd_yaml_tables(),
+    dd_yaml_rels(),
+    dd_yaml_pks(),
+    dictionary = edits
+  )
   doc <- yaml::yaml.load(y)
   expect_equal(doc[["$version"]], "0.1.0")
-  expect_equal(vapply(doc$tables, `[[`, "", "name"), c("customers", "orders", "staff"))
+  expect_equal(
+    vapply(doc$tables, `[[`, "", "name"),
+    c("customers", "orders", "staff")
+  )
   cust <- doc$tables[[1]]
   expect_equal(cust$label, "Customers")
   cols <- setNames(cust$columns, vapply(cust$columns, `[[`, "", "name"))
   expect_equal(cols$customer_id$type, "number(id)")
   expect_equal(cols$customer_id$constraints, "primary_key")
   expect_equal(cols$tier$type, "enum")
-  expect_equal(cols$tier$values, list(gold = "Gold", silver = "Silver", bronze = "Bronze"))
+  expect_equal(
+    cols$tier$values,
+    list(gold = "Gold", silver = "Silver", bronze = "Bronze")
+  )
   expect_null(cols$tier$examples)
   # Private: restricted, placeholder examples, never real values
   expect_equal(cols$email$display, "restricted")
   expect_equal(cols$email$examples, "person@example.com")
   expect_false(grepl("a@x.io", y, fixed = TRUE))
-  ord <- setNames(doc$tables[[2]]$columns, vapply(doc$tables[[2]]$columns, `[[`, "", "name"))
+  ord <- setNames(
+    doc$tables[[2]]$columns,
+    vapply(doc$tables[[2]]$columns, `[[`, "", "name")
+  )
   expect_equal(ord$amount$type, "number(quantity)")
   expect_equal(ord$amount$units, "GBP")
   expect_equal(unlist(ord$amount$range), c(1, 30))
@@ -619,19 +822,50 @@ test_that("data-dict export follows the spec", {
   expect_equal(unlist(ord$order_id$examples), c(1, 2, 4, 5, 6))
   # Relationships: declared and manual; the self-join is aliased
   joins <- vapply(doc$relationships, `[[`, "", "join")
-  expect_equal(joins, c("orders.customer_id = customers.customer_id", "child.manager_id = parent.staff_id"))
-  expect_equal(doc$relationships[[2]]$aliases, list(child = "staff", parent = "staff"))
+  expect_equal(
+    joins,
+    c(
+      "orders.customer_id = customers.customer_id",
+      "child.manager_id = parent.staff_id"
+    )
+  )
+  expect_equal(
+    doc$relationships[[2]]$aliases,
+    list(child = "staff", parent = "staff")
+  )
   expect_equal(doc$relationships[[1]]$cardinality, "many-to-one")
   # Unreviewed detected links are a todo, not a relationship
-  expect_match(doc$todo, "orders.order_id = staff.staff_id (medium confidence)", fixed = TRUE)
+  expect_match(
+    doc$todo,
+    "orders.order_id = staff.staff_id (medium confidence)",
+    fixed = TRUE
+  )
 })
 
 test_that("a private number gets an open range; units elsewhere go to details", {
   skip_if_not_installed("yaml")
-  t <- list(p = data.frame(id = 1:3, weight = c(50, 60, 70), tag = c("a", "b", "c"), stringsAsFactors = FALSE))
-  d <- list("p|weight" = list(units = "kg", private = TRUE), "p|tag" = list(units = "cm"))
-  doc <- yaml::yaml.load(generate_data_dict_yaml(t, list(), list(p = "id"), dictionary = d))
-  cols <- setNames(doc$tables[[1]]$columns, vapply(doc$tables[[1]]$columns, `[[`, "", "name"))
+  t <- list(
+    p = data.frame(
+      id = 1:3,
+      weight = c(50, 60, 70),
+      tag = c("a", "b", "c"),
+      stringsAsFactors = FALSE
+    )
+  )
+  d <- list(
+    "p|weight" = list(units = "kg", private = TRUE),
+    "p|tag" = list(units = "cm")
+  )
+  doc <- yaml::yaml.load(generate_data_dict_yaml(
+    t,
+    list(),
+    list(p = "id"),
+    dictionary = d
+  ))
+  cols <- setNames(
+    doc$tables[[1]]$columns,
+    vapply(doc$tables[[1]]$columns, `[[`, "", "name")
+  )
   expect_equal(unlist(cols$weight$range), c(-Inf, Inf))
   expect_equal(cols$weight$display, "restricted")
   expect_null(cols$tag$units)
@@ -642,76 +876,117 @@ test_that("data-dict files import as tables, declared links and dictionary entri
   skip_if_not_installed("yaml")
   edits <- list(
     customers = list(description = "People", label = "Customers"),
-    "customers|tier" = list(label = "Tier", values = "gold = Gold; silver = Silver"),
+    "customers|tier" = list(
+      label = "Tier",
+      values = "gold = Gold; silver = Silver"
+    ),
     "orders|amount" = list(units = "GBP"),
     "customers|email" = list(private = TRUE)
   )
   f <- tempfile(fileext = ".yaml")
-  writeLines(generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks(), dictionary = edits), f)
+  writeLines(
+    generate_data_dict_yaml(
+      dd_yaml_tables(),
+      dd_yaml_rels(),
+      dd_yaml_pks(),
+      dictionary = edits
+    ),
+    f
+  )
   back <- parse_schema_file(f, "data-dict.yaml")
   expect_equal(names(back$tables), c("customers", "orders", "staff"))
   expect_equal(names(back$tables$customers), c("customer_id", "email", "tier"))
   # Two declared joins, plus any candidate carried in the extension block
-  declared <- Filter(function(r) identical(rel_source(r), "declared"), back$relationships)
+  declared <- Filter(
+    function(r) identical(rel_source(r), "declared"),
+    back$relationships
+  )
   expect_length(declared, 2)
   r <- declared[[2]]
-  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("staff", "manager_id", "staff", "staff_id"))
+  expect_equal(
+    c(r$from_table, r$from_col, r$to_table, r$to_col),
+    c("staff", "manager_id", "staff", "staff_id")
+  )
   expect_equal(rel_source(r), "declared")
   expect_equal(back$dictionary$customers$label, "Customers")
-  expect_equal(back$dictionary[["customers|tier"]]$values, "gold = Gold; silver = Silver")
+  expect_equal(
+    back$dictionary[["customers|tier"]]$values,
+    "gold = Gold; silver = Silver"
+  )
   expect_equal(back$dictionary[["orders|amount"]]$units, "GBP")
   expect_true(back$dictionary[["customers|email"]]$private)
-  expect_equal(dict_privacy(back$dictionary, "customers", "email")$status, "imported")
+  expect_equal(
+    dict_privacy(back$dictionary, "customers", "email")$status,
+    "imported"
+  )
   # Merging keeps what the user already wrote
-  merged <- merge_dictionary(list("customers|tier" = list(label = "Mine")), back$dictionary)
+  merged <- merge_dictionary(
+    list("customers|tier" = list(label = "Mine")),
+    back$dictionary
+  )
   expect_equal(merged[["customers|tier"]]$label, "Mine")
-  expect_equal(merged[["customers|tier"]]$values, "gold = Gold; silver = Silver")
+  expect_equal(
+    merged[["customers|tier"]]$values,
+    "gold = Gold; silver = Silver"
+  )
 })
 
 test_that("a hand-written data-dict file imports, one-to-many joins included", {
   skip_if_not_installed("yaml")
   f <- tempfile(fileext = ".yml")
-  writeLines(c(
-    "$version: 0.1.0",
-    "tables:",
-    "  - name: food",
-    "    description: Each row is a food item.",
-    "    columns:",
-    "      - name: fdc_id",
-    "        label: FoodData Central ID",
-    "        type: number(id)",
-    "        constraints: [primary_key]",
-    "        examples: [167512, 174231]",
-    "      - name: food_category_id",
-    "        type: number(id)",
-    "        constraints: [foreign_key]",
-    "      - name: data_type",
-    "        type: enum",
-    "        values: [foundation, branded]",
-    "  - name: food_category",
-    "    columns:",
-    "      - name: id",
-    "        type: number(id)",
-    "relationships:",
-    "  - join: food_category.id = food.food_category_id",
-    "    cardinality: one-to-many",
-    "  - join: food.x >= food_category.y AND food.x <= food_category.z",
-    "    cardinality: many-to-one"
-  ), f)
+  writeLines(
+    c(
+      "$version: 0.1.0",
+      "tables:",
+      "  - name: food",
+      "    description: Each row is a food item.",
+      "    columns:",
+      "      - name: fdc_id",
+      "        label: FoodData Central ID",
+      "        type: number(id)",
+      "        constraints: [primary_key]",
+      "        examples: [167512, 174231]",
+      "      - name: food_category_id",
+      "        type: number(id)",
+      "        constraints: [foreign_key]",
+      "      - name: data_type",
+      "        type: enum",
+      "        values: [foundation, branded]",
+      "  - name: food_category",
+      "    columns:",
+      "      - name: id",
+      "        type: number(id)",
+      "relationships:",
+      "  - join: food_category.id = food.food_category_id",
+      "    cardinality: one-to-many",
+      "  - join: food.x >= food_category.y AND food.x <= food_category.z",
+      "    cardinality: many-to-one"
+    ),
+    f
+  )
   msgs <- character(0)
   back <- parse_schema_file(f, "dd.yml", function(m) msgs <<- c(msgs, m))
   expect_equal(names(back$tables), c("food", "food_category"))
   r <- back$relationships[[1]]
-  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("food", "food_category_id", "food_category", "id"))
+  expect_equal(
+    c(r$from_table, r$from_col, r$to_table, r$to_col),
+    c("food", "food_category_id", "food_category", "id")
+  )
   expect_length(back$relationships, 1)
   expect_match(msgs, "1 data-dict relationship")
   expect_equal(back$dictionary[["food|fdc_id"]]$label, "FoodData Central ID")
-  expect_equal(back$dictionary[["food|data_type"]]$values, "foundation; branded")
+  expect_equal(
+    back$dictionary[["food|data_type"]]$values,
+    "foundation; branded"
+  )
   expect_equal(back$dictionary$food$description, "Each row is a food item.")
 })
 
 test_that("allowed values parse both ways", {
-  expect_equal(dict_parse_values("A = Active; I = Inactive"), list(A = "Active", I = "Inactive"))
+  expect_equal(
+    dict_parse_values("A = Active; I = Inactive"),
+    list(A = "Active", I = "Inactive")
+  )
   expect_equal(dict_parse_values("a; b"), c("a", "b"))
   expect_null(dict_parse_values(" "))
   expect_equal(dict_format_values(list(A = "Active")), "A = Active")
@@ -721,24 +996,55 @@ test_that("allowed values parse both ways", {
 test_that("sessions keep privacy choices and reviews", {
   edits <- list(
     "orders|amount" = list(private = TRUE),
-    "customers|email" = list(privacy_review = list(state = "rejected", reason = "name contains \"email\"")),
+    "customers|email" = list(
+      privacy_review = list(
+        state = "rejected",
+        reason = "name contains \"email\""
+      )
+    ),
     .settings = list(private_patterns = "*_id", examples = "off")
   )
-  back <- restore_session_json(save_session_json(dict_tables(), list(), list(), list(), dictionary = edits))
+  back <- restore_session_json(save_session_json(
+    dict_tables(),
+    list(),
+    list(),
+    list(),
+    dictionary = edits
+  ))
   expect_true(back$dictionary[["orders|amount"]]$private)
-  expect_equal(dict_privacy(back$dictionary, "customers", "email", dict_tables()$customers$email)$status, "not_personal")
-  expect_equal(dict_settings(back$dictionary), list(private_patterns = "*_id", examples = "off"))
+  expect_equal(
+    dict_privacy(
+      back$dictionary,
+      "customers",
+      "email",
+      dict_tables()$customers$email
+    )$status,
+    "not_personal"
+  )
+  expect_equal(
+    dict_settings(back$dictionary),
+    list(private_patterns = "*_id", examples = "off")
+  )
 })
 
 test_that("imported data-dict tables keep their types for a re-export", {
   skip_if_not_installed("yaml")
   f <- tempfile(fileext = ".yaml")
-  writeLines(generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks()), f)
+  writeLines(
+    generate_data_dict_yaml(dd_yaml_tables(), dd_yaml_rels(), dd_yaml_pks()),
+    f
+  )
   back <- parse_schema_file(f, "data-dict.yaml")
   expect_true(is.numeric(back$tables$orders$amount))
   expect_true(is.character(back$tables$customers$tier))
-  doc <- yaml::yaml.load(generate_data_dict_yaml(back$tables, back$relationships, dd_yaml_pks()))
-  types <- unlist(lapply(doc$tables, function(t) vapply(t$columns, `[[`, "", "type")))
+  doc <- yaml::yaml.load(generate_data_dict_yaml(
+    back$tables,
+    back$relationships,
+    dd_yaml_pks()
+  ))
+  types <- unlist(lapply(doc$tables, function(t) {
+    vapply(t$columns, `[[`, "", "type")
+  }))
   expect_false("boolean" %in% types)
 })
 
@@ -754,26 +1060,54 @@ test_that("large whole-number examples are written in full", {
 })
 
 test_that("imported entries for a column named like its table land on it", {
-  merged <- merge_dictionary(list(), list("status|status" = list(label = "Status")))
+  merged <- merge_dictionary(
+    list(),
+    list("status|status" = list(label = "Status"))
+  )
   expect_equal(names(merged), "status|status")
 })
 
-dd_doc <- function(...) yaml::yaml.load(generate_data_dict_yaml(...), handlers = list(int = function(x) as.numeric(x)))
-dd_cols <- function(tdef) setNames(tdef$columns, vapply(tdef$columns, `[[`, "", "name"))
+dd_doc <- function(...) {
+  yaml::yaml.load(
+    generate_data_dict_yaml(...),
+    handlers = list(int = function(x) as.numeric(x))
+  )
+}
+dd_cols <- function(tdef) {
+  setNames(tdef$columns, vapply(tdef$columns, `[[`, "", "name"))
+}
 
 test_that("a single-table data-dict round trip keeps its docs and primary key", {
   skip_if_not_installed("yaml")
-  t <- list(people = data.frame(code = c("a", "b"), note = c("x", NA), stringsAsFactors = FALSE))
+  t <- list(
+    people = data.frame(
+      code = c("a", "b"),
+      note = c("x", NA),
+      stringsAsFactors = FALSE
+    )
+  )
   d <- list(people = list(label = "People", description = "All the people"))
   f <- tempfile(fileext = ".yaml")
-  writeLines(generate_data_dict_yaml(t, list(), list(people = "code"), dictionary = d), f)
+  writeLines(
+    generate_data_dict_yaml(t, list(), list(people = "code"), dictionary = d),
+    f
+  )
   back <- parse_schema_file(f, "dd.yaml")
   expect_equal(back$dictionary$people$label, "People")
   expect_equal(back$dictionary$people$description, "All the people")
   expect_equal(back$primary_keys, list(people = "code"))
   # Re-export from the imported (empty) tables with the declared key
-  pks <- apply_declared_pks(list(people = character(0)), merge_declared_pks(list(), back$primary_keys), back$tables)
-  doc <- dd_doc(back$tables, back$relationships, pks, dictionary = back$dictionary)
+  pks <- apply_declared_pks(
+    list(people = character(0)),
+    merge_declared_pks(list(), back$primary_keys),
+    back$tables
+  )
+  doc <- dd_doc(
+    back$tables,
+    back$relationships,
+    pks,
+    dictionary = back$dictionary
+  )
   cols <- dd_cols(doc$tables[[1]])
   expect_equal(cols$code$constraints, "primary_key")
   # Nothing is known about missing values in a table without rows
@@ -783,32 +1117,83 @@ test_that("a single-table data-dict round trip keeps its docs and primary key", 
 
 test_that("JSON/YAML schema files declare primary keys", {
   f <- tempfile(fileext = ".json")
-  writeLines('{"tables":[{"name":"A","columns":[{"name":"Code","primary_key":true},{"name":"x"}]},
-    {"name":"b","primary_key":["k1","k2"],"columns":[{"name":"k1"},{"name":"k2"}]}]}', f)
+  writeLines(
+    '{"tables":[{"name":"A","columns":[{"name":"Code","primary_key":true},{"name":"x"}]},
+    {"name":"b","primary_key":["k1","k2"],"columns":[{"name":"k1"},{"name":"k2"}]}]}',
+    f
+  )
   s <- parse_schema_file(f, "s.json")
   expect_equal(s$primary_keys, list(A = "Code", b = c("k1", "k2")))
   pks <- merge_declared_pks(list(), s$primary_keys)
   expect_equal(pks, list(a = "code", b = c("k1", "k2")))
   tabs <- list(a = data.frame(code = 1, x = 2), b = data.frame(k1 = 1, k2 = 2))
-  expect_equal(apply_declared_pks(list(a = "x", b = "k1"), pks, tabs), list(a = structure("code", declared = TRUE), b = character(0)))
-  expect_equal(apply_declared_composite_pks(list(a = NULL, b = NULL), pks, tabs)$b, list(c("k1", "k2")))
+  expect_equal(
+    apply_declared_pks(list(a = "x", b = "k1"), pks, tabs),
+    list(a = structure("code", declared = TRUE), b = character(0))
+  )
+  expect_equal(
+    apply_declared_composite_pks(list(a = NULL, b = NULL), pks, tabs)$b,
+    list(c("k1", "k2"))
+  )
 })
 
 test_that("data-dict joins: non-key targets become todos, duplicates collapse", {
   skip_if_not_installed("yaml")
   t <- list(
-    a = data.frame(a_id = 1:3, ref = c("x", "y", "x"), b_id = c(1L, 2L, 2L), stringsAsFactors = FALSE),
+    a = data.frame(
+      a_id = 1:3,
+      ref = c("x", "y", "x"),
+      b_id = c(1L, 2L, 2L),
+      stringsAsFactors = FALSE
+    ),
     b = data.frame(b_id = 1:2, ref = c("x", "y"), stringsAsFactors = FALSE),
     c = data.frame(k1 = c(1L, 1L), k2 = 1:2, n = 1:2)
   )
   rels <- list(
-    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "schema"),
-    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "manual"),
-    list(from_table = "a", from_col = "b_id", to_table = "b", to_col = "b_id", detected_by = "naming", confidence = "high", score = 0.9),
-    list(from_table = "b", from_col = "ref", to_table = "a", to_col = "ref", detected_by = "manual"),
-    list(from_table = "a", from_col = "a_id", to_table = "c", to_col = "k1", detected_by = "manual")
+    list(
+      from_table = "a",
+      from_col = "b_id",
+      to_table = "b",
+      to_col = "b_id",
+      detected_by = "schema"
+    ),
+    list(
+      from_table = "a",
+      from_col = "b_id",
+      to_table = "b",
+      to_col = "b_id",
+      detected_by = "manual"
+    ),
+    list(
+      from_table = "a",
+      from_col = "b_id",
+      to_table = "b",
+      to_col = "b_id",
+      detected_by = "naming",
+      confidence = "high",
+      score = 0.9
+    ),
+    list(
+      from_table = "b",
+      from_col = "ref",
+      to_table = "a",
+      to_col = "ref",
+      detected_by = "manual"
+    ),
+    list(
+      from_table = "a",
+      from_col = "a_id",
+      to_table = "c",
+      to_col = "k1",
+      detected_by = "manual"
+    )
   )
-  doc <- dd_doc(t, rels, list(a = "a_id", b = "b_id"), composite_pks = list(c = list(c("k1", "k2"))))
+  doc <- dd_doc(
+    t,
+    rels,
+    list(a = "a_id", b = "b_id"),
+    composite_pks = list(c = list(c("k1", "k2")))
+  )
   expect_equal(vapply(doc$relationships, `[[`, "", "join"), "a.b_id = b.b_id")
   expect_null(doc$relationships[[1]]$description)
   expect_false(grepl("a.b_id = b.b_id", doc$todo, fixed = TRUE))
@@ -826,7 +1211,10 @@ test_that("data-dict spec edge cases", {
       blank = c("", " ", ""),
       val = c(1, Inf, 3),
       day = as.Date(c("2024-01-02", "2024-03-04", NA)),
-      at = as.POSIXct(c("2024-01-02 03:04:05", "2024-01-03 00:00:00", NA), tz = "UTC"),
+      at = as.POSIXct(
+        c("2024-01-02 03:04:05", "2024-01-03 00:00:00", NA),
+        tz = "UTC"
+      ),
       stringsAsFactors = FALSE
     )
   )
@@ -837,12 +1225,22 @@ test_that("data-dict spec edge cases", {
   cols <- dd_cols(doc$tables[[1]])
   expect_equal(cols$status$type, "number")
   expect_null(cols$status$values)
-  expect_match(cols$status$details, "Allowed values: 1 = Open; 2 = Closed", fixed = TRUE)
+  expect_match(
+    cols$status$details,
+    "Allowed values: 1 = Open; 2 = Closed",
+    fixed = TRUE
+  )
   expect_equal(cols$blank$examples, "(withheld)")
   expect_equal(unlist(cols$val$examples), c(1, 3))
   expect_equal(unlist(cols$day$range), c("2024-01-02", "2024-03-04"))
-  expect_equal(unlist(cols$at$range), c("2024-01-02T03:04:05Z", "2024-01-03T00:00:00Z"))
-  expect_equal(dict_parse_values("1 = Open; = Bad; 1 = Dup; 2"), list("1" = "Open", "2" = "2"))
+  expect_equal(
+    unlist(cols$at$range),
+    c("2024-01-02T03:04:05Z", "2024-01-03T00:00:00Z")
+  )
+  expect_equal(
+    dict_parse_values("1 = Open; = Bad; 1 = Dup; 2"),
+    list("1" = "Open", "2" = "2")
+  )
 })
 
 test_that("data-dict: one-to-one joins, and aliases that avoid table names", {
@@ -850,13 +1248,33 @@ test_that("data-dict: one-to-one joins, and aliases that avoid table names", {
   t <- list(
     child = data.frame(id = 1:3, boss = c(NA, 1L, 1L)),
     parent = data.frame(id = 1:2),
-    profile = data.frame(child_id = 1:3, bio = c("a", "b", "c"), stringsAsFactors = FALSE)
+    profile = data.frame(
+      child_id = 1:3,
+      bio = c("a", "b", "c"),
+      stringsAsFactors = FALSE
+    )
   )
   rels <- list(
-    list(from_table = "child", from_col = "boss", to_table = "child", to_col = "id", detected_by = "schema"),
-    list(from_table = "profile", from_col = "child_id", to_table = "child", to_col = "id", detected_by = "schema")
+    list(
+      from_table = "child",
+      from_col = "boss",
+      to_table = "child",
+      to_col = "id",
+      detected_by = "schema"
+    ),
+    list(
+      from_table = "profile",
+      from_col = "child_id",
+      to_table = "child",
+      to_col = "id",
+      detected_by = "schema"
+    )
   )
-  doc <- dd_doc(t, rels, list(child = "id", parent = "id", profile = "child_id"))
+  doc <- dd_doc(
+    t,
+    rels,
+    list(child = "id", parent = "id", profile = "child_id")
+  )
   joins <- vapply(doc$relationships, `[[`, "", "join")
   expect_true("child_.boss = parent_.id" %in% joins)
   self <- doc$relationships[[match("child_.boss = parent_.id", joins)]]
@@ -868,66 +1286,144 @@ test_that("data-dict: one-to-one joins, and aliases that avoid table names", {
 test_that("data-dict import: one-to-many joins with aliases", {
   skip_if_not_installed("yaml")
   f <- tempfile(fileext = ".yaml")
-  writeLines(c(
-    "$version: 0.1.0",
-    "tables:",
-    "  - name: otters",
-    "    columns:",
-    "      - {name: otter_no, type: number(id), constraints: [primary_key]}",
-    "      - {name: pup_number, type: number(id)}",
-    "relationships:",
-    "  - join: mother.otter_no = pup.pup_number",
-    "    aliases: {mother: otters, pup: otters}",
-    "    cardinality: one-to-many"
-  ), f)
+  writeLines(
+    c(
+      "$version: 0.1.0",
+      "tables:",
+      "  - name: otters",
+      "    columns:",
+      "      - {name: otter_no, type: number(id), constraints: [primary_key]}",
+      "      - {name: pup_number, type: number(id)}",
+      "relationships:",
+      "  - join: mother.otter_no = pup.pup_number",
+      "    aliases: {mother: otters, pup: otters}",
+      "    cardinality: one-to-many"
+    ),
+    f
+  )
   back <- parse_schema_file(f, "o.yaml")
   r <- back$relationships[[1]]
-  expect_equal(c(r$from_table, r$from_col, r$to_table, r$to_col), c("otters", "pup_number", "otters", "otter_no"))
+  expect_equal(
+    c(r$from_table, r$from_col, r$to_table, r$to_col),
+    c("otters", "pup_number", "otters", "otter_no")
+  )
   expect_equal(back$primary_keys, list(otters = "otter_no"))
   # A table the file gives no key has none while it has no rows
   f2 <- tempfile(fileext = ".yaml")
-  writeLines(c("$version: 0.1.0", "tables:", "  - name: log", "    columns:", "      - {name: log_id, type: number(id)}"), f2)
+  writeLines(
+    c(
+      "$version: 0.1.0",
+      "tables:",
+      "  - name: log",
+      "    columns:",
+      "      - {name: log_id, type: number(id)}"
+    ),
+    f2
+  )
   b2 <- parse_schema_file(f2, "l.yaml")
   expect_equal(b2$primary_keys, list(log = character(0)))
   pks <- merge_declared_pks(list(), b2$primary_keys)
-  expect_equal(apply_declared_pks(list(log = "log_id"), pks, b2$tables), list(log = structure(character(0), declared = TRUE)))
-  expect_equal(apply_declared_pks(list(log = "log_id"), pks, list(log = data.frame(log_id = 1:2))), list(log = "log_id"))
+  expect_equal(
+    apply_declared_pks(list(log = "log_id"), pks, b2$tables),
+    list(log = structure(character(0), declared = TRUE))
+  )
+  expect_equal(
+    apply_declared_pks(
+      list(log = "log_id"),
+      pks,
+      list(log = data.frame(log_id = 1:2))
+    ),
+    list(log = "log_id")
+  )
 })
 
 test_that("sessions keep declared keys; an old business_name session restores end to end", {
-  js <- save_session_json(dict_tables(), list(), list(), list(), declared_pks = list(orders = "order_id", c = c("a", "b")))
-  expect_equal(restore_session_json(js)$declared_pks, list(orders = "order_id", c = c("a", "b")))
-  old <- save_session_json(dict_tables(), list(), list(), list(),
-    dictionary = list("orders|amount" = list(business_name = "Order total")))
+  js <- save_session_json(
+    dict_tables(),
+    list(),
+    list(),
+    list(),
+    declared_pks = list(orders = "order_id", c = c("a", "b"))
+  )
+  expect_equal(
+    restore_session_json(js)$declared_pks,
+    list(orders = "order_id", c = c("a", "b"))
+  )
+  old <- save_session_json(
+    dict_tables(),
+    list(),
+    list(),
+    list(),
+    dictionary = list("orders|amount" = list(business_name = "Order total"))
+  )
   back <- restore_session_json(old)
-  dd <- build_data_dictionary(back$tables, list(), dict_pks(), dictionary = back$dictionary)
+  dd <- build_data_dictionary(
+    back$tables,
+    list(),
+    dict_pks(),
+    dictionary = back$dictionary
+  )
   expect_equal(dd$label[dd$column == "amount"], "Order total")
 })
 
 test_that("declared primary keys win over detection's filters and composite keys", {
-  t <- list(ps = data.frame(
-    sku = c(1.5, 2.5, 3.5), product_id = c(1L, 1L, 2L), supplier_id = c(1L, 2L, 1L)
-  ))
+  t <- list(
+    ps = data.frame(
+      sku = c(1.5, 2.5, 3.5),
+      product_id = c(1L, 1L, 2L),
+      supplier_id = c(1L, 2L, 1L)
+    )
+  )
   rels <- list(
-    list(from_table = "ps", from_col = "product_id", to_table = "p", to_col = "id"),
-    list(from_table = "ps", from_col = "supplier_id", to_table = "s", to_col = "id")
+    list(
+      from_table = "ps",
+      from_col = "product_id",
+      to_table = "p",
+      to_col = "id"
+    ),
+    list(
+      from_table = "ps",
+      from_col = "supplier_id",
+      to_table = "s",
+      to_col = "id"
+    )
   )
   t$p <- data.frame(id = 1:2)
   t$s <- data.frame(id = 1:2)
   declared <- list(ps = "sku")
-  pks <- apply_declared_pks(list(ps = character(0), p = "id", s = "id"), declared, t)
-  comp <- apply_declared_composite_pks(list(ps = list(c("product_id", "supplier_id"))), declared, t)
+  pks <- apply_declared_pks(
+    list(ps = character(0), p = "id", s = "id"),
+    declared,
+    t
+  )
+  comp <- apply_declared_composite_pks(
+    list(ps = list(c("product_id", "supplier_id"))),
+    declared,
+    t
+  )
   m <- erd_model(t, rels, pks, comp)
   expect_equal(m$tables$ps$columns$name[m$tables$ps$columns$pk], "sku")
-  expect_equal(merge_declared_pks(list(), list(Orders = c("ID", "ID"))), list(orders = "id"))
+  expect_equal(
+    merge_declared_pks(list(), list(Orders = c("ID", "ID"))),
+    list(orders = "id")
+  )
 })
 
 test_that("sessions keep empty tables and column types", {
   t <- list(
-    empty = data.frame(a = integer(0), b = character(0), stringsAsFactors = FALSE),
+    empty = data.frame(
+      a = integer(0),
+      b = character(0),
+      stringsAsFactors = FALSE
+    ),
     d = data.frame(day = as.Date(c("2024-01-02", NA)), n = c(1L, 2L))
   )
-  back <- restore_session_json(save_session_json(t, list(), list(), list()))$tables
+  back <- restore_session_json(save_session_json(
+    t,
+    list(),
+    list(),
+    list()
+  ))$tables
   expect_equal(names(back$empty), c("a", "b"))
   expect_equal(nrow(back$empty), 0)
   expect_true(is.integer(back$empty$a))
@@ -936,13 +1432,26 @@ test_that("sessions keep empty tables and column types", {
 })
 
 test_that("sessions keep full precision and datetimes", {
-  t <- list(x = data.frame(
-    v = c(1234.5678, 0.000123456),
-    at = as.POSIXct(c("2024-01-01 00:00:00", "2024-01-01 10:00:00"), tz = "UTC")
-  ))
-  back <- restore_session_json(save_session_json(t, list(), list(), list()))$tables$x
+  t <- list(
+    x = data.frame(
+      v = c(1234.5678, 0.000123456),
+      at = as.POSIXct(
+        c("2024-01-01 00:00:00", "2024-01-01 10:00:00"),
+        tz = "UTC"
+      )
+    )
+  )
+  back <- restore_session_json(save_session_json(
+    t,
+    list(),
+    list(),
+    list()
+  ))$tables$x
   expect_equal(back$v, t$x$v)
-  expect_equal(format(back$at, "%H:%M:%S", tz = "UTC"), c("00:00:00", "10:00:00"))
+  expect_equal(
+    format(back$at, "%H:%M:%S", tz = "UTC"),
+    c("00:00:00", "10:00:00")
+  )
 })
 
 test_that("a declared key the loaded data contradicts is not used", {
@@ -962,17 +1471,27 @@ test_that("unconfirmed links survive a data-dict round trip as candidates", {
   )
   rels <- list(
     list(
-      from_table = "visits", from_col = "client_id",
-      to_table = "clients", to_col = "client_id",
-      detected_by = "naming", confidence = "high", score = 0.96,
-      signals = list(naming_exact = 1), reasons = "exact FK naming",
+      from_table = "visits",
+      from_col = "client_id",
+      to_table = "clients",
+      to_col = "client_id",
+      detected_by = "naming",
+      confidence = "high",
+      score = 0.96,
+      signals = list(naming_exact = 1),
+      reasons = "exact FK naming",
       confirmed = TRUE
     ),
     list(
-      from_table = "visits", from_col = "visit_id",
-      to_table = "clients", to_col = "client_id",
-      detected_by = "value_overlap", confidence = "medium", score = 0.72,
-      signals = list(overlap_high = 0.9), reasons = "value overlap 90%"
+      from_table = "visits",
+      from_col = "visit_id",
+      to_table = "clients",
+      to_col = "client_id",
+      detected_by = "value_overlap",
+      confidence = "medium",
+      score = 0.72,
+      signals = list(overlap_high = 0.9),
+      reasons = "value overlap 90%"
     )
   )
   pks <- list(visits = "visit_id", clients = "client_id")
@@ -991,7 +1510,9 @@ test_that("unconfirmed links survive a data-dict round trip as candidates", {
   f <- tempfile(fileext = ".yaml")
   on.exit(unlink(f))
   writeLines(y, f)
-  back <- parse_schema_file(f, "data-dict.yaml", notify_fn = function(...) invisible(NULL))
+  back <- parse_schema_file(f, "data-dict.yaml", notify_fn = function(...) {
+    invisible(NULL)
+  })
   pairs <- vapply(
     back$relationships,
     function(r) paste(r$from_table, r$from_col, r$to_table, r$to_col),
@@ -1012,14 +1533,24 @@ test_that("a data-dict file with no candidates gains no extension block", {
   )
   rels <- list(
     list(
-      from_table = "visits", from_col = "client_id",
-      to_table = "clients", to_col = "client_id",
-      detected_by = "naming", confidence = "high", score = 0.96,
-      signals = list(naming_exact = 1), reasons = "exact FK naming",
+      from_table = "visits",
+      from_col = "client_id",
+      to_table = "clients",
+      to_col = "client_id",
+      detected_by = "naming",
+      confidence = "high",
+      score = 0.96,
+      signals = list(naming_exact = 1),
+      reasons = "exact FK naming",
       confirmed = TRUE
     )
   )
-  y <- generate_data_dict_yaml(tables, rels, list(visits = "visit_id", clients = "client_id"), list())
+  y <- generate_data_dict_yaml(
+    tables,
+    rels,
+    list(visits = "visit_id", clients = "client_id"),
+    list()
+  )
   doc <- yaml::yaml.load(y)
   expect_null(doc[["x-tableexplorer"]])
 })
