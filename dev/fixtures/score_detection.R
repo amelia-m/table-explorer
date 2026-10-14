@@ -12,7 +12,9 @@
 # Before PR #19's names-first parent resolution, ~1,400 links were reported.
 
 suppressMessages(library(shiny))
-for (f in setdiff(list.files("R", full.names = TRUE), "R/run_app.R")) source(f)
+for (f in setdiff(list.files("R", full.names = TRUE), "R/run_app.R")) {
+  source(f)
+}
 source("dev/fixtures/access52.R")
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -20,13 +22,26 @@ min_conf <- if (length(args)) args[[1]] else "medium"
 fx <- access52_fixture()
 
 r <- detect_fks(fx$tables, "both", min_conf)
-key <- vapply(r, function(x) paste(x$from_table, x$from_col, x$to_table, sep = "|"), "")
+key <- vapply(
+  r,
+  function(x) paste(x$from_table, x$from_col, x$to_table, sep = "|"),
+  ""
+)
 conf <- vapply(r, `[[`, "", "confidence")
 shown <- key[conf != "low"]
 
-cat(sprintf("reported: %d (%s)\n", length(r), paste(names(table(conf)), table(conf), collapse = ", ")))
-cat(sprintf("medium+: %d   real: %d of %d   false: %d\n",
-  length(shown), sum(shown %in% fx$truth), length(fx$truth), sum(!shown %in% fx$truth)))
+cat(sprintf(
+  "reported: %d (%s)\n",
+  length(r),
+  paste(names(table(conf)), table(conf), collapse = ", ")
+))
+cat(sprintf(
+  "medium+: %d   real: %d of %d   false: %d\n",
+  length(shown),
+  sum(shown %in% fx$truth),
+  length(fx$truth),
+  sum(!shown %in% fx$truth)
+))
 missed <- setdiff(fx$truth, shown)
 if (length(missed)) {
   cat("missed:\n")
@@ -35,7 +50,17 @@ if (length(missed)) {
 fp <- r[conf != "low" & !key %in% fx$truth]
 if (length(fp)) {
   cat("most common false links:\n")
-  print(head(sort(table(vapply(fp, function(x) {
-    paste(x$from_col, "->", x$to_table, paste0("(", x$detected_by, ")"))
-  }, "")), decreasing = TRUE), 15))
+  print(head(
+    sort(
+      table(vapply(
+        fp,
+        function(x) {
+          paste(x$from_col, "->", x$to_table, paste0("(", x$detected_by, ")"))
+        },
+        ""
+      )),
+      decreasing = TRUE
+    ),
+    15
+  ))
 }

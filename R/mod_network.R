@@ -182,13 +182,21 @@ mod_network_server <- function(
             net$nodes$y <- sin(angles) * radius
           }
 
-          vis <- visNetwork::visNetwork(net$nodes, net$edges, background = "#0f172a") |>
+          vis <- visNetwork::visNetwork(
+            net$nodes,
+            net$edges,
+            background = "#0f172a"
+          ) |>
             visNetwork::visOptions(
               highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
               nodesIdSelection = FALSE
             ) |>
-            visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic")) |>
-            visNetwork::visNodes(widthConstraint = list(minimum = 130, maximum = 230)) |>
+            visNetwork::visEdges(
+              smooth = list(enabled = TRUE, type = "dynamic")
+            ) |>
+            visNetwork::visNodes(
+              widthConstraint = list(minimum = 130, maximum = 230)
+            ) |>
             visNetwork::visInteraction(
               navigationButtons = TRUE,
               tooltipDelay = 80,

@@ -25,16 +25,22 @@ test_that("db_types has human-readable names", {
 
 test_that("db_connect notifies for unsupported type", {
   errors <- character(0)
-  conn <- db_connect("fakedb", notify_fn = function(msg) errors <<- c(errors, msg))
+  conn <- db_connect("fakedb", notify_fn = function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_null(conn)
   expect_true(any(grepl("Unsupported|failed", errors)))
 })
 
 test_that("db_connect notifies when package missing for postgres", {
-  skip_if(requireNamespace("RPostgres", quietly = TRUE), "RPostgres is installed")
+  skip_if(
+    requireNamespace("RPostgres", quietly = TRUE),
+    "RPostgres is installed"
+  )
   errors <- character(0)
-  conn <- db_connect("postgres", host = "localhost",
-                     notify_fn = function(msg) errors <<- c(errors, msg))
+  conn <- db_connect("postgres", host = "localhost", notify_fn = function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_null(conn)
   expect_true(any(grepl("RPostgres|failed", errors)))
 })
@@ -42,8 +48,9 @@ test_that("db_connect notifies when package missing for postgres", {
 test_that("db_connect notifies when package missing for mysql", {
   skip_if(requireNamespace("RMariaDB", quietly = TRUE), "RMariaDB is installed")
   errors <- character(0)
-  conn <- db_connect("mysql", host = "localhost",
-                     notify_fn = function(msg) errors <<- c(errors, msg))
+  conn <- db_connect("mysql", host = "localhost", notify_fn = function(msg) {
+    errors <<- c(errors, msg)
+  })
   expect_null(conn)
   expect_true(any(grepl("RMariaDB|failed", errors)))
 })
@@ -60,10 +67,14 @@ test_that("db_connect works with SQLite", {
   expect_false(is.null(conn))
 
   # Write a test table
-  DBI::dbWriteTable(conn, "test_table", data.frame(
-    id = 1:5,
-    value = c("a", "b", "c", "d", "e")
-  ))
+  DBI::dbWriteTable(
+    conn,
+    "test_table",
+    data.frame(
+      id = 1:5,
+      value = c("a", "b", "c", "d", "e")
+    )
+  )
 
   # Verify we can read it
   tables <- DBI::dbListTables(conn)
@@ -79,7 +90,11 @@ test_that("db_introspect lists SQLite tables", {
   on.exit(unlink(tmp_db))
 
   conn <- db_connect("sqlite", path = tmp_db)
-  DBI::dbWriteTable(conn, "customers", data.frame(id = 1:3, name = letters[1:3]))
+  DBI::dbWriteTable(
+    conn,
+    "customers",
+    data.frame(id = 1:3, name = letters[1:3])
+  )
   DBI::dbWriteTable(conn, "orders", data.frame(id = 1:2, cust_id = c(1, 2)))
 
   meta <- db_introspect(conn, "sqlite")
@@ -96,10 +111,14 @@ test_that("db_load_table reads from SQLite", {
   on.exit(unlink(tmp_db))
 
   conn <- db_connect("sqlite", path = tmp_db)
-  DBI::dbWriteTable(conn, "items", data.frame(
-    id = 1:10,
-    name = paste0("item_", 1:10)
-  ))
+  DBI::dbWriteTable(
+    conn,
+    "items",
+    data.frame(
+      id = 1:10,
+      name = paste0("item_", 1:10)
+    )
+  )
 
   df <- db_load_table(conn, "items")
   expect_true(is.data.frame(df))
@@ -117,10 +136,14 @@ test_that("db_load_table respects limit parameter", {
   on.exit(unlink(tmp_db))
 
   conn <- db_connect("sqlite", path = tmp_db)
-  DBI::dbWriteTable(conn, "big_table", data.frame(
-    id = 1:100,
-    value = rnorm(100)
-  ))
+  DBI::dbWriteTable(
+    conn,
+    "big_table",
+    data.frame(
+      id = 1:100,
+      value = rnorm(100)
+    )
+  )
 
   df <- db_load_table(conn, "big_table", limit = 5)
   expect_true(is.data.frame(df))

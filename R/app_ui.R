@@ -17,7 +17,9 @@ app_ui <- function(request) {
       tags$script(src = "tableexplorer/app.js"),
       # ERD diagram: layout (elkjs, EPL-2.0) and pan/zoom (BSD-2)
       tags$script(src = "tableexplorer/vendor/elkjs/elk-api.js"),
-      tags$script(src = "tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js"),
+      tags$script(
+        src = "tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js"
+      ),
       tags$script(src = "tableexplorer/erd.js")
     ),
 

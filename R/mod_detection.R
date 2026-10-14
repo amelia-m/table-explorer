@@ -238,7 +238,11 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       } else {
         paste0("~", round(est$est_time_sec / 60, 1), " minutes")
       }
-      tier_color <- if (est$tier == "moderate") "var(--warn)" else "var(--danger)"
+      tier_color <- if (est$tier == "moderate") {
+        "var(--warn)"
+      } else {
+        "var(--danger)"
+      }
 
       showModal(modalDialog(
         title = tagList(
@@ -260,7 +264,10 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
           tags$table(
             style = "width:100%;border-collapse:collapse;margin-bottom:12px;",
             tags$tr(
-              tags$td(style = "color:var(--text-secondary);padding:4px 10px;", "Tables"),
+              tags$td(
+                style = "color:var(--text-secondary);padding:4px 10px;",
+                "Tables"
+              ),
               tags$td(
                 style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 est$n_tables
@@ -277,7 +284,10 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
               )
             ),
             tags$tr(
-              tags$td(style = "color:var(--text-secondary);padding:4px 10px;", "Total rows"),
+              tags$td(
+                style = "color:var(--text-secondary);padding:4px 10px;",
+                "Total rows"
+              ),
               tags$td(
                 style = "color:var(--text-primary);padding:4px 10px;font-weight:700;",
                 format(est$total_rows, big.mark = ",")
@@ -396,7 +406,9 @@ mod_detection_server <- function(id, all_tables_rv, fk_cache) {
       enable_composite_pk = reactive(isTRUE(input$enable_composite_pk)),
       detect_method = reactive(input$detect_method %||% "both"),
       rel_sources = reactive(input$rel_sources %||% "both"),
-      hide_detected_on_declared = reactive(isTRUE(input$hide_detected_on_declared))
+      hide_detected_on_declared = reactive(isTRUE(
+        input$hide_detected_on_declared
+      ))
     )
   })
 }

@@ -89,7 +89,11 @@ mod_relationships_server <- function(
       rels <- rels_rv()
       src <- vapply(rels, rel_source, character(1))
       n_supp <- length(false_positives_rv())
-      n_low <- sum(vapply(rels, function(r) identical(r$confidence, "low"), logical(1)))
+      n_low <- sum(vapply(
+        rels,
+        function(r) identical(r$confidence, "low"),
+        logical(1)
+      ))
       count <- function(k) sum(src == k)
       div(
         class = "rel-toolbar",
@@ -209,7 +213,11 @@ mod_relationships_server <- function(
           function(r) r$overlap %||% NA_real_,
           numeric(1)
         ),
-        n_from = vapply(rels, function(r) r$n_from %||% NA_integer_, integer(1)),
+        n_from = vapply(
+          rels,
+          function(r) r$n_from %||% NA_integer_,
+          integer(1)
+        ),
         n_to = vapply(rels, function(r) r$n_to %||% NA_integer_, integer(1)),
         reasons = vapply(
           rels,
@@ -234,11 +242,13 @@ mod_relationships_server <- function(
         filtered <- length(rels_rv()) > 0
         return(div(
           class = "empty-state",
-          h4(if (filtered) {
-            "No relationships match the current filters"
-          } else {
-            "No relationships detected"
-          }),
+          h4(
+            if (filtered) {
+              "No relationships match the current filters"
+            } else {
+              "No relationships detected"
+            }
+          ),
           p(
             style = "color:var(--text-muted); font-size:13px;",
             if (filtered) {
@@ -345,9 +355,20 @@ mod_relationships_server <- function(
         ),
         # Row counts and overlap in the table itself: a 0-row table cannot
         # produce value evidence, and that was invisible here before
-        `Child rows` = ifelse(is.na(rows$n_from), "", format(rows$n_from, big.mark = ",")),
-        from_sort = sprintf("%012d", ifelse(is.na(rows$n_from), 0L, rows$n_from)),
-        `Parent rows` = ifelse(is.na(rows$n_to), "", format(rows$n_to, big.mark = ",")),
+        `Child rows` = ifelse(
+          is.na(rows$n_from),
+          "",
+          format(rows$n_from, big.mark = ",")
+        ),
+        from_sort = sprintf(
+          "%012d",
+          ifelse(is.na(rows$n_from), 0L, rows$n_from)
+        ),
+        `Parent rows` = ifelse(
+          is.na(rows$n_to),
+          "",
+          format(rows$n_to, big.mark = ",")
+        ),
         to_sort = sprintf("%012d", ifelse(is.na(rows$n_to), 0L, rows$n_to)),
         `Overlap %` = ifelse(
           is.na(rows$overlap),
@@ -399,23 +420,36 @@ mod_relationships_server <- function(
             list(targets = idx("Confidence"), orderData = idx("conf_rank")),
             list(targets = idx("Score %"), orderData = idx("score_sort")),
             # Source sorts declared, manual, confirmed, then to review
-            list(targets = idx("Source"), orderData = c(idx("source_rank"), idx("score_sort"))),
+            list(
+              targets = idx("Source"),
+              orderData = c(idx("source_rank"), idx("score_sort"))
+            ),
             list(targets = idx("Child rows"), orderData = idx("from_sort")),
             list(targets = idx("Parent rows"), orderData = idx("to_sort")),
             list(targets = idx("Overlap %"), orderData = idx("overlap_sort")),
             list(
               targets = c(
-                idx("conf_rank"), idx("score_sort"), idx("source_rank"),
-                idx("from_sort"), idx("to_sort"), idx("overlap_sort")
+                idx("conf_rank"),
+                idx("score_sort"),
+                idx("source_rank"),
+                idx("from_sort"),
+                idx("to_sort"),
+                idx("overlap_sort")
               ),
               visible = FALSE,
               searchable = FALSE
             ),
-            list(targets = idx("Actions"), orderable = FALSE, searchable = FALSE),
+            list(
+              targets = idx("Actions"),
+              orderable = FALSE,
+              searchable = FALSE
+            ),
             list(
               className = "dt-center",
               targets = c(
-                idx("Score %"), idx("Child rows"), idx("Parent rows"),
+                idx("Score %"),
+                idx("Child rows"),
+                idx("Parent rows"),
                 idx("Overlap %")
               )
             )
@@ -429,20 +463,24 @@ mod_relationships_server <- function(
     # survive. Selection is cleared, because the action that triggered the
     # update consumed it and row numbers no longer mean the same rows.
     rel_proxy <- DT::dataTableProxy("rel_table")
-    observeEvent(rel_df(), {
-      df <- rel_df()
-      req(df)
-      DT::replaceData(
-        rel_proxy,
-        df,
-        resetPaging = FALSE,
-        clearSelection = "all",
-        rownames = FALSE
-        # No escape argument: DT::replaceData passes ... to dataTableAjax,
-        # which has no such formal, so passing it errors on every update.
-        # The escaping set at render time applies to the new data too.
-      )
-    }, ignoreInit = TRUE)
+    observeEvent(
+      rel_df(),
+      {
+        df <- rel_df()
+        req(df)
+        DT::replaceData(
+          rel_proxy,
+          df,
+          resetPaging = FALSE,
+          clearSelection = "all",
+          rownames = FALSE
+          # No escape argument: DT::replaceData passes ... to dataTableAjax,
+          # which has no such formal, so passing it errors on every update.
+          # The escaping set at render time applies to the new data too.
+        )
+      },
+      ignoreInit = TRUE
+    )
 
     .selected_keys <- function() {
       rows <- rel_rows()
@@ -618,14 +656,20 @@ mod_relationships_server <- function(
           columnDefs = list(
             list(targets = idx("Distinct in A"), orderData = idx("a_sort")),
             list(targets = idx("Distinct in B"), orderData = idx("b_sort")),
-            list(targets = idx("Shared values"), orderData = idx("shared_sort")),
+            list(
+              targets = idx("Shared values"),
+              orderData = idx("shared_sort")
+            ),
             list(targets = idx("Overlap %"), orderData = idx("overlap_sort")),
             list(targets = hidden, visible = FALSE, searchable = FALSE),
             list(
               className = "dt-center",
               targets = c(
-                idx("Distinct in A"), idx("Distinct in B"),
-                idx("Shared values"), idx("Overlap %"), idx("Contained")
+                idx("Distinct in A"),
+                idx("Distinct in B"),
+                idx("Shared values"),
+                idx("Overlap %"),
+                idx("Contained")
               )
             )
           )
