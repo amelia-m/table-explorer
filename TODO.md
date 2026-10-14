@@ -94,6 +94,245 @@ Open items from this work:
       whether a chosen preset is remembered between sessions; proposed per
       session only, recorded in the export.
 
+## Open items from the detection measurement work (2026-10-14)
+
+Everything four agents deferred, plus this session's own deferrals, in full
+wording. Written here rather than left in pull request bodies, because nobody
+rereads those for open work. Decisions are marked **Amelia decides**.
+
+### Decisions waiting on Amelia
+
+- [ ] **Which combinations become presets, and what the defaults should be.**
+      `dev/fixtures/public/sweep-2026-10-13.csv` on branch
+      `feat/detection-settings-sweep` holds 117 measured rows over Chinook,
+      Lahman and FAERS, covering 70 distinct settings combinations. Measured
+      apart, only `prose_parent_guard = "refuse_target"` improves any figure
+      at high confidence on any public schema: Chinook precision 90.0 to
+      100.0 at unchanged 81.8 recall, nothing on Lahman or FAERS, which have
+      no prose parent to refuse. Nothing beats the defaults on Lahman (37
+      combinations tie at 95.7 / 100.0) or on FAERS. **Amelia decides** which
+      combinations are worth naming as presets, after checking the candidates
+      against her own data.
+- [ ] **Whether `prose_parent_guard` should default to `"refuse_target"`.**
+      It is the only switch with measured support, it costs no recall
+      anywhere, and it scores a third fewer pairs on Chinook. The default is
+      still `"allow"` because a sweep is not a licence to pick a default.
+      **Amelia decides.**
+- [ ] **PR #54 (`feat/detection-rules-scoring`): which of its three rules
+      stay on.** The sweep answers the question that blocked it. Measured
+      apart on the three public schemas: the cardinality floor
+      (`cardinality_min_distinct`) and the possible-key-name tier change no
+      reported link and no confidence level in any of the 117 rows, and the
+      chance-overlap discount changes a figure only in the Chinook
+      combinations where containment is switched off, so containment and the
+      discount cover the same pairs. **This does not mean those three rules
+      are useless.** The case the chance discount was written for,
+      `episode.number_of_items` wholly inside `member.width_cm`, is
+      in Amelia's own data, which is not in this harness. **Amelia
+      decides**, ideally after one run against her extract.
+- [ ] **Whether to relax the parent-key requirement, which the measurement
+      says no to.** `parent_key_requirement = "composite"` is the only route
+      to the two FAERS `drug_seq` links, but it buys them at low confidence
+      while demoting three links that were high, so a reviewer sees fewer
+      correct links, not more; and it takes Lahman precision from 100.0 to
+      16.4 at high. Recommendation on the measurement: leave the default at
+      `"key"`. **Amelia decides.**
+- [ ] **Whether an exact-uniqueness-only composite setting is worth
+      measuring as a fourth value.** The composite probe uses
+      `parent_key_min_frac`'s tolerance rather than exact uniqueness, because
+      exact uniqueness recovers nothing on FAERS (measured: 0 columns
+      admitted). That tolerance is where most of the Lahman precision cost
+      comes from: 86 of 107 high-confidence inventions attach to one near
+      component, `pitching.BFP`, a count of batters faced. **Amelia decides.**
+- [ ] **Whether `resolve_fk_parents()`' ambiguity rule should be revisited
+      before the parent-key requirement is touched at all.** Relaxing the
+      requirement demotes five of six real FAERS `primaryid` links from high
+      to low, which is a larger loss than the two links it buys. The two
+      changes interact, and measuring either alone understates the other.
+      **Amelia decides** whether that is its own piece of work.
+- [ ] **Pagila.** Identified as a fourth public dataset and deferred
+      (Amelia, 2026-10-10): it needs a running PostgreSQL instance. Until it
+      is in, the harness covers three schemas, two of them small and
+      conventionally named and one (FAERS) large and barely named. The
+      harness still names Pagila in its dataset list, so `score_public.R
+      pagila` reports what it parsed and stops. **Amelia decides** whether to
+      set up Postgres or to say in the harness README that Pagila is out.
+- [ ] **The four root-level R files.** `db_connectors.R`, `export_utils.R`,
+      `file_readers.R` and `inference.R` mirror the `R/utils_*.R` files and
+      nothing sources them, but they are stale rather than identical:
+      `inference.R` is 611 lines against `R/utils_inference.R`'s 1476,
+      `export_utils.R` 166 against 1298. `tests/testthat/test-db_connectors.R:2`
+      still names the old path in a header comment. **Amelia decides** whether
+      they are legacy copies to delete.
+- [ ] **`sample_data/` exists twice**: seven CSVs at the repository root
+      against a four-table subset in `inst/extdata/sample_data/`, with
+      `customer_addresses.csv`, `product_suppliers.csv` and `suppliers.csv`
+      only at the root, and `dev/browser-checks/sample_app.R` reading the root
+      copy. The two `schema.json` files also differ and have not been diffed.
+      **Amelia decides** whether to move the three extra files into
+      `inst/extdata/` or to keep the root copy as the browser-check input
+      deliberately.
+- [ ] **Whether the preset UI contract is ready to dispatch.**
+      `docs/contracts/2026-10-10-detection-presets-draft.md` has one open
+      question left: whether a chosen preset is remembered between sessions.
+      Proposed per session only, recorded in the export. It also waits on the
+      preset list above. **Amelia decides.**
+
+### Work items, no decision needed
+
+- [ ] **The six excluded files still need formatting.** The partial Air
+      reformat deliberately leaves `R/utils_inference.R`,
+      `tests/testthat/test-inference.R`, `tests/testthat/test-prose-parent.R`,
+      `dev/fixtures/public/fetch.R`, `dev/fixtures/public/score_public.R` and
+      `dev/fixtures/public/sweep_settings.R` unformatted, because open
+      branches edit them and reformatting would mean resolving the same
+      conflict six times. Format them in their own formatter-only commit once
+      the detection chain has landed.
+- [ ] **FAERS was measured at 8 of the 70 settings combinations**, and the
+      two combinations handed over from the Chinook and Lahman frontiers both
+      deduplicated onto rows already in its base set, so the frontier handoff
+      contributed nothing. A combination that ties on Chinook need not tie on
+      FAERS, and FAERS is the schema most like a real extract, so this is the
+      gap that most affects a preset decision. What would close it: run the
+      24 Chinook-frontier-tied combinations on FAERS, about an hour at 50 to
+      150 seconds each.
+- [ ] **The 31 Lahman combinations at `parent_key = "composite"` were not
+      run.** Measured, Lahman at composite takes 122 seconds with the pair cap
+      raised and scores 117,620 pairs, so 32 of them is about 65 minutes, past
+      the contract's 30-minute-per-dataset stop line. At the default 50,000
+      cap they finish in 81 seconds but are CAPPED, and the capped run reports
+      60.9 percent recall where the uncapped run reports 95.7, so their recall
+      would have been an artefact of where the scan stopped.
+- [ ] **`parent_key_requirement = "any"` was measured on Chinook only**
+      (high 81.8 / 50.0, overall 90.9 / 13.2). It is documented as a
+      measurement bound rather than a setting to ship. What would settle its
+      cost on the others: one run each of Lahman and FAERS at
+      `parent_key=any` with `max_pairs` high enough not to truncate.
+- [ ] **`parent_key_min_frac` (0.99) is still a constant**, not a setting.
+      The original sweep contract named it as one of the constants to
+      parameterise; the dispatch amendment's list of six switches does not
+      include it, and the amendment won. What would settle its effect: one
+      sweep axis over 0.95, 0.99 and 1.0 on the three public datasets.
+- [ ] **The recall and precision arithmetic now exists twice**, in
+      `score_public.R`'s `score_one()` and in `sweep_settings.R`'s
+      `run_combo()`. They agree today, which the sweep's default rows
+      reproducing the harness baselines proves, and nothing keeps them in
+      step: a change to `score_one()`'s notion of `found` would make the
+      sweep's rows silently incomparable with the harness's. A shared
+      `metrics(rels, truth)` that both call would fix it.
+- [ ] **`score_candidate()` takes its settings on trust.** `detect_fks()`
+      validates them and every pair in a scan arrives through it, so a
+      per-pair check would cost a comparison 1.9 million times over on FAERS
+      to catch what the entry point already caught. A standalone caller
+      passing a wrong type still switches a rule off silently. The reasoning
+      is in a comment above the function; whether that is enough is open.
+- [ ] **`dev/fixtures/public/fetch.R` prints `missing: parent_key=composite`
+      and `unknown dataset: max_pairs=2000000` on stderr**, because it reads
+      `commandArgs()` itself when `score_public.R` sources it. Cosmetic, and
+      confusing in a log. One line in `fetch.R` fixes it.
+- [ ] **Two sessions carry the same Lahman truth-file commit under different
+      hashes.** The composite-parent branch cherry-picked `6ab4b0e` ("fix:
+      write the Lahman ground truth from the data") because its stated base
+      predated the fix. Either that cherry-pick stays, or the branch is
+      rebased onto the `feat/containment-signal` tip that carries the
+      original. Harmless until those branches merge, then it is a conflict to
+      resolve by hand.
+- [ ] **`composite_probe_max_pairs` (8) and `composite_probe_sample_rows`
+      (100,000) were taken from the contract and never tuned against a
+      measurement.** The reasoning is in comments beside them.
+- [ ] **No review skill has been run on `feat/containment-composite-parent`.**
+      Its contract asked for a push and no pull request, so it was pushed
+      without one. A review is needed before a pull request is opened, if one
+      ever is: the measurement's verdict was "do not relax", so the branch may
+      exist only as evidence.
+- [ ] **Lahman comes from the CRAN package in the user library**, installed
+      with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` so that worktrees can see
+      it. A clone on another machine, and CI, will not have it:
+      `score_public.R lahman` prints a SKIP line there rather than failing, so
+      a CI run that silently stops measuring Lahman is possible. Either add
+      Lahman to the renv lockfile, or make the harness exit non-zero when a
+      dataset named on the command line is unavailable.
+- [ ] **`dev/check.R` runs only the synthetic scorer, not the public
+      harness**, so the public figures are measured by hand and can drift from
+      the branch they are quoted against. Chinook and Lahman together take
+      about a minute. Decide whether `dev/check.R` and CI should run them.
+- [ ] **`dev/check.R` cannot disable the renv autoloader for its own
+      session.** It sets the variable, but `.Rprofile` has already run by
+      then, so the setting only reaches the scorer it launches as a child
+      process. A fresh worktree therefore needs
+      `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` on the command line, or every
+      check fails with "there is no package called 'testthat'", which reads
+      like a broken checkout. Documented in the README, not fixed.
+- [ ] **A probable defect in session restore, flagged and not fixed.**
+      `R/mod_export.R:250-271` writes manual links, declared links, confirmed
+      reviews and suppressed links only when the restored file has some, so
+      restoring a session that legitimately had none leaves the current
+      session's in place and the result is a merge rather than a restore. The
+      dictionary and declared keys are handled the other way on purpose, with
+      a comment saying so.
+- [ ] **Nothing gates the `R CMD check` findings.** `tests/testthat.R:5`
+      uses `test_package()`, which runs nothing under `R CMD check`, and
+      neither CI nor `dev/check.R` goes through `R CMD check`, so the review
+      backlog's I6, I7 and C1 have no check at all.
+- [ ] **A stale comment at `R/app_server.R:301-302`** says hiding empty
+      tables "affects the ERD, Table Details and Relationships views only",
+      but `visible_tables_rv` also reaches Network overview and the Data
+      Dictionary.
+- [ ] **The empty test at `tests/testthat/test-inference.R`** ("detect_composite_pks
+      skips columns with NAs in the combo") is still empty and is now
+      unblocked: C2, the fix it waited on, is done. It is the only
+      self-inflicted skip in the suite.
+- [ ] **Nothing writes `inst/BUILD`**, so the footer build stamp's file path
+      is dead code today and an installed copy built without one shows the
+      package version with no sha or date. Whether the deploy path should
+      write one is a code decision.
+
+### Assumptions recorded, not findings
+
+Each of these was written down without being checked directly. The check that
+would settle it is named.
+
+- [ ] **"No Lahman table has a strictly unique width-2 pair other than the
+      ones admitted."** The exhaustive width-2 search was run on FAERS
+      `drug24q1` only. The Lahman admissions come from the capped per-column
+      probe, which stops at the first pair it finds, so other unique pairs may
+      exist. A per-table exhaustive width-2 search over Lahman would settle
+      it, and would also say whether the 12 admitted columns are the whole set
+      or only the first found.
+- [ ] **"`pitching.BFP` is admitted because `(playerID, BFP)` is within the
+      duplicate tolerance."** Inferred from the reason text, not measured.
+      Printing the distinct-pair count for that pair against `nrow(Pitching)`
+      would settle it.
+- [ ] **"`parent_key = any` is the true upper bound on recall."** Both `any`
+      runs reach the same recall as `composite`, so there is no case where
+      `any` finds something `composite` does not. Assumed, not demonstrated.
+- [ ] **"`cardinality_min_distinct` and `possible_key_names` change
+      nothing"** means they change no reported link and no confidence level in
+      any of the 117 sweep rows. A signal may still have been added or removed
+      inside a row without changing which pairs were reported: the outcome key
+      tested was (found, hit, high_found, high_hit). Comparing signal sets per
+      pair, rather than per row, would settle the stronger claim.
+- [ ] **The browser checks' expected output values** (step 0's "6 columns
+      were flagged", step 1's 17 columns, steps 2 to 8, `import_check.js`'s
+      "7 table(s)" and 32 rows) were never run: Playwright and a Chromium
+      binary are not installed. The privacy review changed underneath them,
+      and no column in `sample_data/` is empty so the new empty-column filter
+      cannot fire, which is reasoning and not a run. Running the block with
+      Playwright available would settle it.
+- [ ] **Most of the README's feature table was not re-verified** in the
+      documentation refresh and is recorded as an assumption rather than a
+      finding: database connectors, schema import, confidence scoring, signal
+      toggles, scan triage, Table Details, the Data Dictionary tab, privacy,
+      data-dict YAML, name cleaning, manual overrides, exports, duplicate
+      handling, and the whole Python section. Several of those modules changed
+      in the 75 commits the refresh was re-based over. Reading each row
+      against its module would settle it.
+- [ ] **The `secs` column in the sweep file ranks cost coarsely and is not a
+      benchmark.** It is one timing per row on a shared desktop, and the same
+      combination varied about 50 percent between runs. The accuracy columns
+      reproduced exactly across four independent runs of the grid; the
+      timings did not and cannot.
+
 ## Open items from the 2026-10-09 session
 
 - [ ] **Vendored JavaScript is watched by nothing.** `inst/app/www/vendor/`
