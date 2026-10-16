@@ -29,6 +29,7 @@ Suggests:
     pkgload,
     jsonlite,
     readxl,
+    openxlsx,
     arrow,
     haven,
     readODS,
