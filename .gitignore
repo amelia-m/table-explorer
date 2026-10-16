@@ -2,3 +2,7 @@ tmp/
 /venv
 .claude/settings.local.json
 _scratch/
+
+# USPS ZIP Locale Detail: the raw spreadsheet stays local; the derived
+# docs/ref/usps-zip-locale.csv is what the repository tracks (Amelia, 2026-10-16)
+docs/ref/*.xlsx
