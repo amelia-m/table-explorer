@@ -236,7 +236,10 @@ db_introspect <- function(conn, type, schema = "public") {
         )
         # Every MySQL primary key constraint is named PRIMARY, hence the
         # table_name join; key columns in their declared order
-        pk_df <- DBI::dbGetQuery(conn, paste0(q, " ORDER BY tc.table_name, kcu.ordinal_position"))
+        pk_df <- DBI::dbGetQuery(
+          conn,
+          paste0(q, " ORDER BY tc.table_name, kcu.ordinal_position")
+        )
         if (nrow(pk_df) > 0) {
           split(pk_df[[2]], pk_df[[1]])
         } else {
@@ -413,7 +416,9 @@ db_load_table <- function(
         error = function(e) {
           # Keep the first error: later attempts fail with a syntax error
           # from the other dialect, which hides the real cause
-          if (is.null(first_err)) first_err <<- conditionMessage(e)
+          if (is.null(first_err)) {
+            first_err <<- conditionMessage(e)
+          }
           NULL
         }
       )

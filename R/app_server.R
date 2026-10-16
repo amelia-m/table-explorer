@@ -261,7 +261,10 @@ app_server <- function(input, output, session) {
     sig <- vapply(tbls, table_signature, character(1))
     if (identical(request$scope, "new")) {
       prev_sig <- fk_cache$scanned_sig %||% character(0)
-      prev_sig <- prev_sig[intersect(names(prev_sig), setdiff(current, to_scan))]
+      prev_sig <- prev_sig[intersect(
+        names(prev_sig),
+        setdiff(current, to_scan)
+      )]
       fk_cache$scanned_sig <- c(prev_sig, sig[to_scan])
     } else {
       fk_cache$scanned_sig <- sig

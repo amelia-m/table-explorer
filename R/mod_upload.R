@@ -362,7 +362,10 @@ mod_upload_server <- function(
           ),
           tags$tbody(
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "Dimensions"),
+              tags$td(
+                style = "padding:5px 10px;color:var(--text-secondary);",
+                "Dimensions"
+              ),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -377,7 +380,10 @@ mod_upload_server <- function(
               )
             ),
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "File size"),
+              tags$td(
+                style = "padding:5px 10px;color:var(--text-secondary);",
+                "File size"
+              ),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -585,7 +591,10 @@ mod_upload_server <- function(
         dictionary_rv(merge_dictionary(dictionary_rv(), result$dictionary))
       }
       if (length(result$primary_keys) > 0 && !is.null(declared_pks_rv)) {
-        declared_pks_rv(merge_declared_pks(declared_pks_rv(), result$primary_keys))
+        declared_pks_rv(merge_declared_pks(
+          declared_pks_rv(),
+          result$primary_keys
+        ))
       }
 
       if (length(result$relationships) > 0) {
@@ -637,7 +646,9 @@ mod_upload_server <- function(
       rename_log_rv(log[log$source != nm, , drop = FALSE])
       # Decisions that let the old data's values show don't carry over to
       # whatever is loaded under this name next
-      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv(), nm))
+      if (!is.null(dictionary_rv)) {
+        dictionary_rv(privacy_reset(dictionary_rv(), nm))
+      }
       showNotification(paste0("Removed: ", nm), type = "message", duration = 3)
     })
 
@@ -656,7 +667,9 @@ mod_upload_server <- function(
       fk_cache$scanned_sig <- character(0)
       # Labels, descriptions and private-name patterns stay; "not private"
       # choices and rejected flags go, so new data starts on the safe side
-      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv()))
+      if (!is.null(dictionary_rv)) {
+        dictionary_rv(privacy_reset(dictionary_rv()))
+      }
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

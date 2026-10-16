@@ -5,41 +5,75 @@
 
 # ── Null-coalescing operator ─────────────────────────────────
 `%||%` <- function(a, b) {
-  if (!is.null(a) && length(a) > 0 && !(is.character(a) && length(a) == 1L && !nzchar(a))) a else b
+  if (
+    !is.null(a) &&
+      length(a) > 0 &&
+      !(is.character(a) && length(a) == 1L && !nzchar(a))
+  ) {
+    a
+  } else {
+    b
+  }
 }
 
 # ── Supported file extensions ──────────────────────────────────
 
 supported_extensions <- c(
-  ".csv", ".tsv", ".txt",
-  ".xlsx", ".xls", ".xlsm",
+  ".csv",
+  ".tsv",
+  ".txt",
+  ".xlsx",
+  ".xls",
+  ".xlsm",
   ".ods",
   ".parquet",
-  ".json", ".ndjson",
-  ".sav", ".por",
-  ".sas7bdat", ".xpt",
+  ".json",
+  ".ndjson",
+  ".sav",
+  ".por",
+  ".sas7bdat",
+  ".xpt",
   ".dta",
-  ".rds", ".rdata", ".rda",
-  ".mdb", ".accdb"
+  ".rds",
+  ".rdata",
+  ".rda",
+  ".mdb",
+  ".accdb"
 )
 
 # ── Multi-format file reader dispatcher ────────────────────────
 
 read_table_file <- function(path, name, notify_fn = message) {
   ext <- tolower(tools::file_ext(name))
-  if (!startsWith(ext, ".")) ext <- paste0(".", ext)
+  if (!startsWith(ext, ".")) {
+    ext <- paste0(".", ext)
+  }
 
   result <- tryCatch(
-    switch(ext,
-      ".csv"      = list(tables = setNames(list(
-        read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
-      ), tools::file_path_sans_ext(name))),
+    switch(
+      ext,
+      ".csv" = list(
+        tables = setNames(
+          list(
+            read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+          ),
+          tools::file_path_sans_ext(name)
+        )
+      ),
 
-      ".tsv" = , ".txt" = list(tables = setNames(list(
-        read.delim(path, stringsAsFactors = FALSE, check.names = FALSE)
-      ), tools::file_path_sans_ext(name))),
+      ".tsv" = ,
+      ".txt" = list(
+        tables = setNames(
+          list(
+            read.delim(path, stringsAsFactors = FALSE, check.names = FALSE)
+          ),
+          tools::file_path_sans_ext(name)
+        )
+      ),
 
-      ".xlsx" = , ".xls" = , ".xlsm" = read_excel_file(path, name, notify_fn),
+      ".xlsx" = ,
+      ".xls" = ,
+      ".xlsm" = read_excel_file(path, name, notify_fn),
 
       ".ods" = read_ods_file(path, name, notify_fn),
 
@@ -56,9 +90,11 @@ read_table_file <- function(path, name, notify_fn = message) {
       ".dta" = read_haven_file(path, name, "dta", notify_fn),
 
       ".rds" = read_rds_file(path, name, notify_fn),
-      ".rdata" = , ".rda" = read_rdata_file(path, name, notify_fn),
+      ".rdata" = ,
+      ".rda" = read_rdata_file(path, name, notify_fn),
 
-      ".mdb" = , ".accdb" = {
+      ".mdb" = ,
+      ".accdb" = {
         tbls <- read_access_db(path, notify_fn)
         list(tables = tbls)
       },
@@ -74,7 +110,9 @@ read_table_file <- function(path, name, notify_fn = message) {
     }
   )
 
-  if (is.null(result$tables)) result$tables <- list()
+  if (is.null(result$tables)) {
+    result$tables <- list()
+  }
   result
 }
 
@@ -82,7 +120,9 @@ read_table_file <- function(path, name, notify_fn = message) {
 
 read_excel_file <- function(path, name, notify_fn) {
   if (!requireNamespace("readxl", quietly = TRUE)) {
-    notify_fn("Install the 'readxl' package to read Excel files: install.packages('readxl')")
+    notify_fn(
+      "Install the 'readxl' package to read Excel files: install.packages('readxl')"
+    )
     return(list(tables = list()))
   }
   sheets <- readxl::excel_sheets(path)
@@ -92,12 +132,21 @@ read_excel_file <- function(path, name, notify_fn) {
     df <- tryCatch(
       as.data.frame(readxl::read_excel(path, sheet = s)),
       error = function(e) {
-        notify_fn(paste0("Could not read sheet '", s, "': ", conditionMessage(e)))
+        notify_fn(paste0(
+          "Could not read sheet '",
+          s,
+          "': ",
+          conditionMessage(e)
+        ))
         NULL
       }
     )
     if (!is.null(df) && nrow(df) > 0) {
-      tname <- if (length(sheets) == 1) base else paste0(base, "_", janitor::make_clean_names(s))
+      tname <- if (length(sheets) == 1) {
+        base
+      } else {
+        paste0(base, "_", janitor::make_clean_names(s))
+      }
       tbls[[tname]] <- df
     }
   }
@@ -108,7 +157,9 @@ read_excel_file <- function(path, name, notify_fn) {
 
 read_ods_file <- function(path, name, notify_fn) {
   if (!requireNamespace("readODS", quietly = TRUE)) {
-    notify_fn("Install the 'readODS' package to read ODS files: install.packages('readODS')")
+    notify_fn(
+      "Install the 'readODS' package to read ODS files: install.packages('readODS')"
+    )
     return(list(tables = list()))
   }
   sheets <- readODS::list_ods_sheets(path)
@@ -118,12 +169,21 @@ read_ods_file <- function(path, name, notify_fn) {
     df <- tryCatch(
       as.data.frame(readODS::read_ods(path, sheet = s)),
       error = function(e) {
-        notify_fn(paste0("Could not read sheet '", s, "': ", conditionMessage(e)))
+        notify_fn(paste0(
+          "Could not read sheet '",
+          s,
+          "': ",
+          conditionMessage(e)
+        ))
         NULL
       }
     )
     if (!is.null(df) && nrow(df) > 0) {
-      tname <- if (length(sheets) == 1) base else paste0(base, "_", janitor::make_clean_names(s))
+      tname <- if (length(sheets) == 1) {
+        base
+      } else {
+        paste0(base, "_", janitor::make_clean_names(s))
+      }
       tbls[[tname]] <- df
     }
   }
@@ -134,7 +194,9 @@ read_ods_file <- function(path, name, notify_fn) {
 
 read_parquet_file <- function(path, name, notify_fn) {
   if (!requireNamespace("arrow", quietly = TRUE)) {
-    notify_fn("Install the 'arrow' package to read Parquet files: install.packages('arrow')")
+    notify_fn(
+      "Install the 'arrow' package to read Parquet files: install.packages('arrow')"
+    )
     return(list(tables = list()))
   }
   df <- as.data.frame(arrow::read_parquet(path))
@@ -145,7 +207,9 @@ read_parquet_file <- function(path, name, notify_fn) {
 
 read_json_file <- function(path, name, notify_fn) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    notify_fn("Install the 'jsonlite' package to read JSON files: install.packages('jsonlite')")
+    notify_fn(
+      "Install the 'jsonlite' package to read JSON files: install.packages('jsonlite')"
+    )
     return(list(tables = list()))
   }
   raw <- jsonlite::fromJSON(path, flatten = TRUE)
@@ -163,21 +227,28 @@ read_json_file <- function(path, name, notify_fn) {
 
 read_ndjson_file <- function(path, name, notify_fn) {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    notify_fn("Install the 'jsonlite' package to read NDJSON files: install.packages('jsonlite')")
+    notify_fn(
+      "Install the 'jsonlite' package to read NDJSON files: install.packages('jsonlite')"
+    )
     return(list(tables = list()))
   }
   df <- jsonlite::stream_in(file(path), verbose = FALSE)
-  list(tables = setNames(list(as.data.frame(df)), tools::file_path_sans_ext(name)))
+  list(
+    tables = setNames(list(as.data.frame(df)), tools::file_path_sans_ext(name))
+  )
 }
 
 # ── Haven reader (SPSS, SAS, Stata) ───────────────────────────
 
 read_haven_file <- function(path, name, fmt, notify_fn) {
   if (!requireNamespace("haven", quietly = TRUE)) {
-    notify_fn("Install the 'haven' package to read SPSS/SAS/Stata files: install.packages('haven')")
+    notify_fn(
+      "Install the 'haven' package to read SPSS/SAS/Stata files: install.packages('haven')"
+    )
     return(list(tables = list()))
   }
-  df <- switch(fmt,
+  df <- switch(
+    fmt,
     sav = haven::read_sav(path),
     por = haven::read_por(path),
     sas = haven::read_sas(path),
@@ -232,7 +303,9 @@ parse_schema_file <- function(path, name, notify_fn = message) {
         jsonlite::fromJSON(path, simplifyVector = FALSE)
       } else if (ext %in% c("yaml", "yml")) {
         if (!requireNamespace("yaml", quietly = TRUE)) {
-          notify_fn("Install the 'yaml' package to import YAML schema files: install.packages('yaml')")
+          notify_fn(
+            "Install the 'yaml' package to import YAML schema files: install.packages('yaml')"
+          )
           return(list(tables = list(), relationships = list()))
         }
         yaml::read_yaml(path)
@@ -254,9 +327,13 @@ parse_schema_file <- function(path, name, notify_fn = message) {
   if (!is.null(schema$tables)) {
     for (tdef in schema$tables) {
       tname <- tdef$name
-      if (is.null(tname)) next
+      if (is.null(tname)) {
+        next
+      }
       cols <- tdef$columns
-      if (is.null(cols)) cols <- tdef$fields
+      if (is.null(cols)) {
+        cols <- tdef$fields
+      }
       if (!is.null(cols)) {
         col_names <- vapply(cols, function(c) c$name %||% "", character(1))
         col_names <- col_names[nzchar(col_names)]
@@ -273,15 +350,15 @@ parse_schema_file <- function(path, name, notify_fn = message) {
           fk <- cdef$foreign_key
           if (!is.null(fk)) {
             rel <- list(
-              from_table  = tname,
-              from_col    = cdef$name %||% "",
-              to_table    = fk$table %||% "",
-              to_col      = fk$column %||% "",
+              from_table = tname,
+              from_col = cdef$name %||% "",
+              to_table = fk$table %||% "",
+              to_col = fk$column %||% "",
               detected_by = "schema",
-              confidence  = "high",
-              score       = 1.0,
-              signals     = list(schema = 1.0),
-              reasons     = "schema-defined"
+              confidence = "high",
+              score = 1.0,
+              signals = list(schema = 1.0),
+              reasons = "schema-defined"
             )
             if (nzchar(rel$from_table) && nzchar(rel$to_table)) {
               relationships[[length(relationships) + 1]] <- rel
@@ -296,15 +373,15 @@ parse_schema_file <- function(path, name, notify_fn = message) {
   if (!is.null(schema$relationships)) {
     for (rdef in schema$relationships) {
       rel <- list(
-        from_table  = rdef$from_table %||% rdef$from %||% "",
-        from_col    = rdef$from_column %||% rdef$from_col %||% "",
-        to_table    = rdef$to_table %||% rdef$to %||% "",
-        to_col      = rdef$to_column %||% rdef$to_col %||% "",
+        from_table = rdef$from_table %||% rdef$from %||% "",
+        from_col = rdef$from_column %||% rdef$from_col %||% "",
+        to_table = rdef$to_table %||% rdef$to %||% "",
+        to_col = rdef$to_column %||% rdef$to_col %||% "",
         detected_by = "schema",
-        confidence  = "high",
-        score       = 1.0,
-        signals     = list(schema = 1.0),
-        reasons     = "schema-defined"
+        confidence = "high",
+        score = 1.0,
+        signals = list(schema = 1.0),
+        reasons = "schema-defined"
       )
       if (nzchar(rel$from_table) && nzchar(rel$to_table)) {
         relationships[[length(relationships) + 1]] <- rel

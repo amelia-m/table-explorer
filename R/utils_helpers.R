@@ -224,10 +224,18 @@ apply_declared_pks <- function(pk_map, declared, tables) {
   for (t in intersect(names(declared %||% list()), names(tables))) {
     cols <- intersect(declared[[t]], names(tables[[t]]))
     if (length(declared[[t]]) == 0) {
-      if (nrow(tables[[t]]) == 0) pk_map[t] <- list(structure(character(0), declared = TRUE))
+      if (nrow(tables[[t]]) == 0) {
+        pk_map[t] <- list(structure(character(0), declared = TRUE))
+      }
     } else if (length(cols) == length(declared[[t]])) {
       # Several columns: the key comes from the composite map
-      pk_map[t] <- list(if (length(cols) == 1) structure(cols, declared = TRUE) else character(0))
+      pk_map[t] <- list(
+        if (length(cols) == 1) {
+          structure(cols, declared = TRUE)
+        } else {
+          character(0)
+        }
+      )
     }
   }
   pk_map
@@ -238,7 +246,9 @@ apply_declared_pks <- function(pk_map, declared, tables) {
 apply_declared_composite_pks <- function(composite_map, declared, tables) {
   for (t in intersect(names(declared %||% list()), names(tables))) {
     cols <- intersect(declared[[t]], names(tables[[t]]))
-    if (length(cols) != length(declared[[t]])) next
+    if (length(cols) != length(declared[[t]])) {
+      next
+    }
     if (length(cols) >= 2) {
       composite_map[t] <- list(list(cols))
     } else if (length(cols) == 1 || nrow(tables[[t]]) == 0) {
@@ -267,9 +277,16 @@ app_build_stamp <- function() {
     error = function(e) ""
   )
   if (nzchar(build_file) && file.exists(build_file)) {
-    fields <- tryCatch(readLines(build_file, warn = FALSE), error = function(e) character(0))
+    fields <- tryCatch(
+      readLines(build_file, warn = FALSE),
+      error = function(e) character(0)
+    )
     sha <- sub("^sha:[[:space:]]*", "", grep("^sha:", fields, value = TRUE)[1])
-    when <- sub("^date:[[:space:]]*", "", grep("^date:", fields, value = TRUE)[1])
+    when <- sub(
+      "^date:[[:space:]]*",
+      "",
+      grep("^date:", fields, value = TRUE)[1]
+    )
   }
 
   # Development checkout: ask git, but never let a missing git or a
@@ -295,7 +312,9 @@ app_build_stamp <- function() {
         )),
         error = function(e) character(0)
       )
-      if (length(dirty) > 0) sha <- paste0(sha, "+")
+      if (length(dirty) > 0) {
+        sha <- paste0(sha, "+")
+      }
       when <- tryCatch(
         suppressWarnings(system2(
           "git",
