@@ -29,6 +29,23 @@ In practice:
   count drawn from a sample says so where it is shown.
 - A slow check that answers the question beats a fast one that answers a
   different question.
+
+**What this rule covers, and what it does not** (Amelia, 2026-10-16). It is
+"primarily aimed at app design and code habits": how agents measure, verify
+and write code. It is not an instruction to make the app itself slow by
+default. The app "should still have some speed prioritization but with
+warnings and options to use more thorough/slower procedures." In practice,
+for a user-facing default:
+
+- Default to the fast path when the fast path is usually right.
+- Say so whenever the fast path may not have been right for this data, at
+  the moment it matters, in terms of what the user can do about it.
+- Offer the thorough path as a setting, named for what it costs.
+
+The worked case is Excel type guessing: readxl's 1000-row guess is the
+default, a sheet longer than 1000 rows says so when it loads, and "Guess
+from every row" is one setting away.
+
 ## Read identifiers from the data, not from documentation
 
 Amelia asked why a particular mistake happened, 2026-10-11. A hand-written
