@@ -49,7 +49,10 @@ test_that("identifying relationships follow composite PKs", {
 test_that("provenance distinguishes declared, manual, confirmed, inferred", {
   m <- erd_fixture_model()
   expect_equal(rel_of(m, "orders", "customer_id")$provenance, "inferred")
-  expect_equal(rel_of(m, "customer_profile", "customer_id")$provenance, "declared")
+  expect_equal(
+    rel_of(m, "customer_profile", "customer_id")$provenance,
+    "declared"
+  )
   expect_equal(rel_of(m, "order_items", "order_id")$provenance, "confirmed")
   expect_equal(rel_of(m, "order_items", "product_id")$provenance, "manual")
 })
@@ -77,8 +80,11 @@ test_that("empty child tables give unknown cardinality", {
     tbl_income = data.frame(customer_id = integer(0))
   )
   rels <- list(list(
-    from_table = "tbl_income", from_col = "customer_id",
-    to_table = "customers", to_col = "customer_id", detected_by = "naming"
+    from_table = "tbl_income",
+    from_col = "customer_id",
+    to_table = "customers",
+    to_col = "customer_id",
+    detected_by = "naming"
   ))
   m <- erd_model(tables, rels, list(customers = "customer_id"))
   expect_equal(m$rels[[1]]$child_max, "unknown")

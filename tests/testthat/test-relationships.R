@@ -1,22 +1,44 @@
 # Tests for mod_relationships.R
 
-make_rel <- function(from_table, from_col, to_table, to_col, detected_by,
-                     confirmed = FALSE, overlap = NA_real_,
-                     n_from = NA_integer_, n_to = NA_integer_) {
+make_rel <- function(
+  from_table,
+  from_col,
+  to_table,
+  to_col,
+  detected_by,
+  confirmed = FALSE,
+  overlap = NA_real_,
+  n_from = NA_integer_,
+  n_to = NA_integer_
+) {
   list(
-    from_table = from_table, from_col = from_col,
-    to_table = to_table, to_col = to_col,
-    detected_by = detected_by, confirmed = confirmed,
-    confidence = "high", score = 0.9,
-    signals = list(naming_exact = 1), reasons = "exact FK naming",
-    overlap = overlap, n_from = n_from, n_to = n_to
+    from_table = from_table,
+    from_col = from_col,
+    to_table = to_table,
+    to_col = to_col,
+    detected_by = detected_by,
+    confirmed = confirmed,
+    confidence = "high",
+    score = 0.9,
+    signals = list(naming_exact = 1),
+    reasons = "exact FK naming",
+    overlap = overlap,
+    n_from = n_from,
+    n_to = n_to
   )
 }
 
 rel_fixture <- function() {
   list(
     make_rel("visits", "client_id", "clients", "client_id", "naming"),
-    make_rel("visits", "site_id", "sites", "site_id", "naming", confirmed = TRUE),
+    make_rel(
+      "visits",
+      "site_id",
+      "sites",
+      "site_id",
+      "naming",
+      confirmed = TRUE
+    ),
     make_rel("visits", "staff_id", "staff", "staff_id", "schema"),
     make_rel("visits", "note_id", "notes", "note_id", "manual")
   )
@@ -28,15 +50,33 @@ test_that("rel_rows carries the evidence the table columns are built from", {
   # Regression: the Child rows, Parent rows and Overlap % columnDefs
   # shipped without the columns they index, so idx() returned integer(0)
   rels <- list(
-    make_rel("visits", "client_id", "clients", "client_id", "naming",
-             overlap = 0.97, n_from = 2688L, n_to = 1045L),
-    make_rel("empty_t", "client_id", "clients", "client_id", "naming",
-             overlap = NA_real_, n_from = 0L, n_to = 1045L)
+    make_rel(
+      "visits",
+      "client_id",
+      "clients",
+      "client_id",
+      "naming",
+      overlap = 0.97,
+      n_from = 2688L,
+      n_to = 1045L
+    ),
+    make_rel(
+      "empty_t",
+      "client_id",
+      "clients",
+      "client_id",
+      "naming",
+      overlap = NA_real_,
+      n_from = 0L,
+      n_to = 1045L
+    )
   )
   shiny::testServer(
     mod_relationships_server,
     args = list(
-      all_tables_rv = shiny::reactiveVal(list(visits = data.frame(client_id = 1:3))),
+      all_tables_rv = shiny::reactiveVal(list(
+        visits = data.frame(client_id = 1:3)
+      )),
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
@@ -62,7 +102,9 @@ test_that("'To review only' keeps just the links still awaiting a decision", {
   shiny::testServer(
     mod_relationships_server,
     args = list(
-      all_tables_rv = shiny::reactiveVal(list(visits = data.frame(client_id = 1:3))),
+      all_tables_rv = shiny::reactiveVal(list(
+        visits = data.frame(client_id = 1:3)
+      )),
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
@@ -70,7 +112,11 @@ test_that("'To review only' keeps just the links still awaiting a decision", {
       shared_cols_rv = shiny::reactive(list())
     ),
     {
-      session$setInputs(source_filter = "all", show_low = TRUE, hide_reviewed = FALSE)
+      session$setInputs(
+        source_filter = "all",
+        show_low = TRUE,
+        hide_reviewed = FALSE
+      )
       session$flushReact()
       expect_equal(length(shown_rels_rv()), 4)
 
@@ -96,7 +142,9 @@ test_that("the source filter and 'To review only' combine", {
   shiny::testServer(
     mod_relationships_server,
     args = list(
-      all_tables_rv = shiny::reactiveVal(list(visits = data.frame(client_id = 1:3))),
+      all_tables_rv = shiny::reactiveVal(list(
+        visits = data.frame(client_id = 1:3)
+      )),
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
@@ -105,7 +153,11 @@ test_that("the source filter and 'To review only' combine", {
     ),
     {
       # Declared plus to-review is empty: nothing is both at once
-      session$setInputs(source_filter = "declared", show_low = TRUE, hide_reviewed = TRUE)
+      session$setInputs(
+        source_filter = "declared",
+        show_low = TRUE,
+        hide_reviewed = TRUE
+      )
       session$flushReact()
       expect_equal(length(shown_rels_rv()), 0)
       # And the table reports no rows rather than pretending to have some
@@ -120,7 +172,9 @@ test_that("the row data carries the evidence the table shows", {
   shiny::testServer(
     mod_relationships_server,
     args = list(
-      all_tables_rv = shiny::reactiveVal(list(visits = data.frame(client_id = 1:3))),
+      all_tables_rv = shiny::reactiveVal(list(
+        visits = data.frame(client_id = 1:3)
+      )),
       all_rels_rv = shiny::reactive(rels),
       false_positives_rv = shiny::reactiveVal(character(0)),
       conf_overrides_rv = shiny::reactiveVal(list()),
@@ -128,7 +182,11 @@ test_that("the row data carries the evidence the table shows", {
       shared_cols_rv = shiny::reactive(list())
     ),
     {
-      session$setInputs(source_filter = "all", show_low = TRUE, hide_reviewed = FALSE)
+      session$setInputs(
+        source_filter = "all",
+        show_low = TRUE,
+        hide_reviewed = FALSE
+      )
       session$flushReact()
       df <- rel_df()
       expect_true(all(
@@ -214,7 +272,10 @@ test_that("the cached scan is reused per request id and filtered to loaded table
   req1 <- list(id = 7L, scope = "all", strategy = "auto")
   expect_length(
     shared_columns_for_scan(
-      shared_fixture_tables(), req1, shared_settings(), cache
+      shared_fixture_tables(),
+      req1,
+      shared_settings(),
+      cache
     ),
     1
   )
@@ -241,7 +302,10 @@ test_that("the cached scan is reused per request id and filtered to loaded table
   # Dropping a table filters its rows out of the cached result, no rescan
   expect_length(
     shared_columns_for_scan(
-      tbls[c("incidents", "inspections")], req2, shared_settings(), cache
+      tbls[c("incidents", "inspections")],
+      req2,
+      shared_settings(),
+      cache
     ),
     1
   )
@@ -250,16 +314,24 @@ test_that("the cached scan is reused per request id and filtered to loaded table
 shared_found_fixture <- function() {
   list(
     list(
-      from_table = "incidents", to_table = "inspections",
-      column = "incident_year", n_shared = 3L,
-      n_distinct_from = 3L, n_distinct_to = 4L,
-      overlap = 0.75, contained = FALSE
+      from_table = "incidents",
+      to_table = "inspections",
+      column = "incident_year",
+      n_shared = 3L,
+      n_distinct_from = 3L,
+      n_distinct_to = 4L,
+      overlap = 0.75,
+      contained = FALSE
     ),
     list(
-      from_table = "incidents", to_table = "reviews",
-      column = "county_code", n_shared = 12L,
-      n_distinct_from = 12L, n_distinct_to = 40L,
-      overlap = 1, contained = TRUE
+      from_table = "incidents",
+      to_table = "reviews",
+      column = "county_code",
+      n_shared = 12L,
+      n_distinct_from = 12L,
+      n_distinct_to = 40L,
+      overlap = 1,
+      contained = TRUE
     )
   )
 }
@@ -294,8 +366,14 @@ test_that("the shared-column rows reaching the table carry the counts", {
       df <- shared_df()
       expect_true(all(
         c(
-          "Table A", "Table B", "Column", "Distinct in A", "Distinct in B",
-          "Shared values", "Overlap %", "Contained"
+          "Table A",
+          "Table B",
+          "Column",
+          "Distinct in A",
+          "Distinct in B",
+          "Shared values",
+          "Overlap %",
+          "Contained"
         ) %in%
           names(df)
       ))

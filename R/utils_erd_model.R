@@ -116,9 +116,14 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     # (a stale declaration for data loaded later under the same name)
     if (isTRUE(attr(pk_map[[t]], "declared"))) {
       declared <- intersect(as.character(pk_map[[t]]), names(df))
-      holds <- nrow(df) == 0 || all(vapply(declared, function(cn) {
-        !anyNA(df[[cn]]) && !anyDuplicated(df[[cn]])
-      }, logical(1)))
+      holds <- nrow(df) == 0 ||
+        all(vapply(
+          declared,
+          function(cn) {
+            !anyNA(df[[cn]]) && !anyDuplicated(df[[cn]])
+          },
+          logical(1)
+        ))
       if (holds) return(declared)
     }
     cands <- intersect(pk_map[[t]] %||% character(0), names(df))
@@ -133,7 +138,8 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
       # A column that is unique by chance (unit_cost, a timestamp) is not a
       # key unless its name says so
       cands <- cands[
-        erd_col_type_vec(df[cands]) %in% c("int", "string") |
+        erd_col_type_vec(df[cands]) %in%
+          c("int", "string") |
           is_key_name(clean_name(cands)) |
           clean_name(cands) %in% generic_key_names
       ]
@@ -174,7 +180,9 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     r
   })
   rels <- Filter(
-    function(r) !is.na(r$to_col) && r$from_col %in% names(tables[[r$from_table]]),
+    function(r) {
+      !is.na(r$to_col) && r$from_col %in% names(tables[[r$from_table]])
+    },
     rels
   )
   rels <- lapply(rels, function(r) {
@@ -286,18 +294,27 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   # own) that is named like a lookup, shaped like one, or is a narrow table
   # referenced by 3+ tables.
   for (t in tnames) {
-    parents_of <- vapply(Filter(function(r) r$from_table == t, rels), `[[`, "", "to_table")
-    children <- unique(vapply(Filter(function(r) r$to_table == t, rels), `[[`, "", "from_table"))
+    parents_of <- vapply(
+      Filter(function(r) r$from_table == t, rels),
+      `[[`,
+      "",
+      "to_table"
+    )
+    children <- unique(vapply(
+      Filter(function(r) r$to_table == t, rels),
+      `[[`,
+      "",
+      "from_table"
+    ))
     children <- setdiff(children, t)
     df <- tables[[t]]
     leaf_parent <- length(children) > 0 && length(setdiff(parents_of, t)) == 0
     # Shape: at most 500 rows and 4 columns (the referenced key is unique by
     # definition, so no need to find it again)
-    tbl_models[[t]]$is_reference <- leaf_parent && (
-      is_lookup_name(t) ||
+    tbl_models[[t]]$is_reference <- leaf_parent &&
+      (is_lookup_name(t) ||
         (nrow(df) <= 500 && ncol(df) <= 4) ||
-        (length(children) >= 3 && ncol(df) <= 6)
-    )
+        (length(children) >= 3 && ncol(df) <= 6))
   }
 
   # ── Subject areas ──────────────────────────────────────────
@@ -307,14 +324,18 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
   area <- setNames(rep(NA_character_, length(tnames)), tnames)
   for (t in tnames) {
     role <- tbl_models[[t]]$role
-    if (role == "lookup") area[[t]] <- "Lookups"
+    if (role == "lookup") {
+      area[[t]] <- "Lookups"
+    }
     if (role == "orphan") area[[t]] <- "Unconnected"
   }
   core <- tnames[is.na(area)]
   if (length(core) > 0) {
     parent <- setNames(core, core)
     find <- function(x) {
-      while (parent[[x]] != x) x <- parent[[x]]
+      while (parent[[x]] != x) {
+        x <- parent[[x]]
+      }
       x
     }
     for (r in rels) {
@@ -373,7 +394,9 @@ erd_view <- function(
     )
   }
   # Unconnected: no shown relationship (lookups included, whatever their role)
-  linked <- unique(unlist(lapply(rels, function(r) c(r$from_table, r$to_table))))
+  linked <- unique(unlist(lapply(rels, function(r) {
+    c(r$from_table, r$to_table)
+  })))
   orphans <- sort(setdiff(all_names, linked))
 
   keep <- all_names
@@ -411,7 +434,11 @@ erd_view <- function(
 
   linked_cols <- function(t) {
     unique(c(
-      unlist(lapply(Filter(function(r) r$from_table == t, rels), `[[`, "from_col")),
+      unlist(lapply(
+        Filter(function(r) r$from_table == t, rels),
+        `[[`,
+        "from_col"
+      )),
       unlist(lapply(
         Filter(function(r) r$to_table == t, rels),
         function(r) r$to_col %||% r$from_col
@@ -423,7 +450,9 @@ erd_view <- function(
     t$header_color <- colors[[t$subject_area]]
     cols <- t$columns
     if (identical(detail, "keys")) {
-      show <- cols$pk | !is.na(cols$fk_index) | cols$uk |
+      show <- cols$pk |
+        !is.na(cols$fk_index) |
+        cols$uk |
         cols$name %in% linked_cols(t$name)
       t$hidden_columns <- sum(!show)
       t$columns <- cols[show, , drop = FALSE]
