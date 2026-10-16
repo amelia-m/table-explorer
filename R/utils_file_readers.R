@@ -127,9 +127,14 @@ read_table_file <- function(
 #   text    read every column as text and let the app's own profiling
 #           describe it; nothing can be lost to a wrong guess
 excel_type_guesses <- c("all", "sample", "text")
-# Every row, because a wrong guess loses data without saying so, and the
-# project rule is that correctness outweighs speed.
-excel_type_guess_default <- "all"
+# The first 1000 rows, for a fast first load (Amelia, 2026-10-16: the app
+# should still prioritise speed, "but with warnings and options to use more
+# thorough/slower procedures"). The warning is the other half of the
+# default: any sheet longer than the guess window says so when it loads, so
+# nobody is relying on a 1000-row guess without knowing it.
+excel_type_guess_default <- "sample"
+# readxl's own guess window. Named so the warning and the default agree.
+excel_guess_rows <- 1000L
 # Excel's own row limit (2^20), so "every row" is exact for any sheet Excel
 # can hold. readxl caps guess_max at .Machine$integer.max %/% 100 with a
 # warning, which this stays well under.
@@ -181,12 +186,32 @@ read_excel_file <- function(
         NULL
       }
     )
+    # Said whether or not anything was lost: a guess from the first rows
+    # can be wrong without readxl noticing, for instance a column of codes
+    # that is all digits for 1000 rows and has leading zeros later.
+    if (
+      identical(excel_types, "sample") &&
+        !is.null(df) &&
+        nrow(df) > excel_guess_rows
+    ) {
+      notify_fn(sprintf(
+        paste(
+          "Sheet '%s' has %s rows; column types were guessed from the first",
+          "%s. If a column changes type further down, choose 'Guess from",
+          "every row' under Excel column types and add the file again."
+        ),
+        s,
+        format(nrow(df), big.mark = ","),
+        format(excel_guess_rows, big.mark = ",")
+      ))
+    }
     if (lost > 0L) {
       notify_fn(sprintf(
         paste(
           "Sheet '%s': %d value%s could not be read as the type guessed for",
-          "%s column and %s set to missing. Choose 'Read every column as",
-          "text' under Excel column types and add the file again to keep them."
+          "%s column and %s set to missing. Choose 'Guess from every row' or",
+          "'Read every column as text' under Excel column types and add the",
+          "file again to keep them."
         ),
         s,
         lost,
