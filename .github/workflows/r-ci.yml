@@ -39,6 +39,11 @@ jobs:
             any::yaml
             any::RSQLite
             any::stringdist
+            # Spreadsheet tests need both: readxl to read, openxlsx to write
+            # the fixture. Without them those tests skip here and CI reports
+            # green on code it never ran.
+            any::readxl
+            any::openxlsx
 
       - name: Run test suite
         shell: Rscript {0}

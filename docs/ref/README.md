@@ -11,11 +11,12 @@ reference list.
 | Source page | <https://postalpro.usps.com/ZIP_Locale_Detail> |
 | Publisher | United States Postal Service, PostalPro |
 | USPS "file updated" date | see `file_updated` in [`zip-locale-source.yml`](zip-locale-source.yml) |
-| Date this copy was fetched and recorded | see `recorded_on` in the same file |
+| Date this copy was downloaded and recorded | see `fetched_on` in the same file |
 | Distinct ZIP Codes, range | see `distinct_zips`, `lowest_zip`, `highest_zip` |
 
-The dates and counts live in `zip-locale-source.yml`, which the build script
-writes, rather than here, so the two cannot disagree.
+The current dates and counts live in `zip-locale-source.yml`, which the build
+script writes. Figures quoted below are dated and describe the edition they
+name.
 
 ### Columns
 
@@ -31,15 +32,21 @@ The classification codes are USPS's own, from the *Address Information System
 Products Technical Guide*, "ZIP Classification Code", printed pages 77 to 78
 (<https://postalpro.usps.com/storages/2016-04/AIS_0.PDF>).
 
-A ZIP can appear on more than one row when USPS lists it under more than one
-locale. The USPS file also holds each post office's street address and other
+A ZIP can appear on more than one row: when USPS lists it under more than one
+locale, when it appears on more than one sheet (in the October 2026 edition,
+247 ZIPs are on both `Unique` and `Other` with the same locale), or when the
+same ZIP and locale carry two states (24605, Bluefield, is listed under both
+VA and WV). One row in that edition, 05076 TOPSHAM DPOBU, has no state.
+
+The USPS file also holds each post office's street address and other
 operational fields; they are not carried here.
 
 ### What it does not cover
 
-- **Not complete.** The file lists 41,486 distinct ZIPs in the October 2026
-  edition, against USPS's own published count of 41,554, so about 68 assigned
-  ZIPs are missing. Which ones is not known: nothing published names them.
+- **Not complete.** The October 2026 edition lists 41,486 distinct ZIPs,
+  against USPS's own published count of 41,554
+  (<https://facts.usps.com/42000-zip-codes/>, read 2026-10-16), so about 68
+  assigned ZIPs are missing. Which ones is not known: nothing published names them.
   This is why a ZIP absent from this list is reported as "not in the
   reference list" and never as invalid.
 - **Retired ZIPs are absent, and look the same as missing ones.** The
@@ -62,17 +69,29 @@ reclassified (Amelia, 2026-10-16).
 
 To update after USPS publishes a new edition:
 
-1. Download the file from the source page into `docs/ref/Zip_Locale_Detail.xlsx`
-   (ignored by git).
-2. Run `Rscript dev/check_usps_zip_locale.R --record` from the repository root.
-   It rebuilds this CSV and `zip-locale-source.yml` from the download, writing
-   neither until every value has been read.
-3. Commit both files.
+1. Run `Rscript dev/check_usps_zip_locale.R --record` from the repository root.
+   It downloads the edition the source page links to (it does not use any copy
+   already on disk, so the record cannot name one edition and hold another),
+   rebuilds this CSV and `zip-locale-source.yml` from it, and writes both or
+   neither. It refuses an edition whose ZIP count moves by more than five
+   percent from the last one; check the file, then add `--force`. The download
+   is kept at `docs/ref/Zip_Locale_Detail.xlsx`, which git ignores.
+2. Commit both files.
 
 A weekly GitHub workflow, `.github/workflows/usps-zip-locale.yml`, compares
 the source page with `zip-locale-source.yml` and opens an issue when USPS has
-published a newer edition. Run the same check locally with
+published a newer edition. When the page cannot be reached or read, or the
+check itself fails, the run fails, so GitHub sends its failure email rather
+than leaving a warning on a green run. Run the same check locally with
 `Rscript dev/check_usps_zip_locale.R`.
+
+"Current" means the page shows the recorded edition date and download link.
+The check reads the page, not the file, so a file USPS replaced at the same
+address without changing the page would still read as current.
+
+GitHub disables scheduled workflows in public repositories after 60 days with
+no activity. If the weekly runs stop, re-enable the workflow from the Actions
+tab.
 
 ### Terms
 
