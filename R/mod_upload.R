@@ -25,16 +25,17 @@ mod_upload_ui <- function(id) {
       ns("excel_types"),
       "Excel column types",
       choices = c(
-        "Guess from every row" = "all",
         "Guess from the first 1,000 rows (faster)" = "sample",
+        "Guess from every row (slower, thorough)" = "all",
         "Read every column as text" = "text"
       ),
       selected = excel_type_guess_default
     ),
     div(
       style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
-      "Applies to files added after you change it. A value that does not fit ",
-      "its column's guessed type is read as missing, and you are told how many."
+      "Applies to files added after you change it. A sheet longer than 1,000 ",
+      "rows says so when it loads, and any value that did not fit its column's ",
+      "guessed type is reported as missing."
     ),
     fileInput(
       ns("schema_file"),
