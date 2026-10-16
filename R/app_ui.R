@@ -64,7 +64,9 @@ app_ui <- function(request) {
         `aria-label` = "Show controls",
         `aria-expanded` = "false",
         `aria-controls` = "sidebar-col",
-        tags$span(class = "sidebar-chevron", "â€º"),
+        # Escaped, not literal: a literal chevron was re-encoded through
+        # Windows-1252 once and rendered as three characters of mojibake
+        tags$span(class = "sidebar-chevron", "›"),
         # A bare chevron does not say what comes back
         tags$span(class = "sidebar-rail-label", "DATA & DETECTION")
       ),
@@ -84,7 +86,7 @@ app_ui <- function(request) {
               `aria-label` = "Hide controls",
               `aria-expanded` = "true",
               `aria-controls` = "sidebar-col",
-              tags$span(class = "sidebar-chevron", "â€¹")
+              tags$span(class = "sidebar-chevron", "‹")
             ),
             mod_upload_ui("upload"),
             tags$hr(),
