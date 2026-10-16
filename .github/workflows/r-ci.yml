@@ -39,6 +39,11 @@ jobs:
             any::yaml
             any::RSQLite
             any::stringdist
+            # The Excel reader's tests need both: readxl to read, openxlsx to
+            # write the fixture. Without them every Excel test skips here and
+            # CI reports green on code it never ran.
+            any::readxl
+            any::openxlsx
 
       - name: Run test suite
         shell: Rscript {0}

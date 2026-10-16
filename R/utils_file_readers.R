@@ -31,7 +31,12 @@ supported_extensions <- c(
 
 # ── Multi-format file reader dispatcher ────────────────────────
 
-read_table_file <- function(path, name, notify_fn = message) {
+read_table_file <- function(
+  path,
+  name,
+  notify_fn = message,
+  excel_types = excel_type_guess_default
+) {
   ext <- tolower(tools::file_ext(name))
   if (!startsWith(ext, ".")) {
     ext <- paste0(".", ext)
@@ -61,7 +66,7 @@ read_table_file <- function(path, name, notify_fn = message) {
 
       ".xlsx" = ,
       ".xls" = ,
-      ".xlsm" = read_excel_file(path, name, notify_fn),
+      ".xlsm" = read_excel_file(path, name, notify_fn, excel_types),
 
       ".ods" = read_ods_file(path, name, notify_fn),
 
@@ -113,7 +118,30 @@ read_table_file <- function(path, name, notify_fn = message) {
 
 # ── Excel reader ───────────────────────────────────────────────
 
-read_excel_file <- function(path, name, notify_fn) {
+# How readxl decides each column's type. readxl's own default looks at the
+# first 1000 rows only, so a column that is numeric for 1000 rows and holds
+# text further down has those later values read as missing, silently, and
+# the dictionary then reports them as missing data.
+#   all     guess from every row: correct, and slower on very large sheets
+#   sample  readxl's default, the first 1000 rows
+#   text    read every column as text and let the app's own profiling
+#           describe it; nothing can be lost to a wrong guess
+excel_type_guesses <- c("all", "sample", "text")
+# Every row, because a wrong guess loses data without saying so, and the
+# project rule is that correctness outweighs speed.
+excel_type_guess_default <- "all"
+# Excel's own row limit (2^20), so "every row" is exact for any sheet Excel
+# can hold. readxl caps guess_max at .Machine$integer.max %/% 100 with a
+# warning, which this stays well under.
+excel_max_rows <- 1048576L
+
+read_excel_file <- function(
+  path,
+  name,
+  notify_fn,
+  excel_types = excel_type_guess_default
+) {
+  excel_types <- match.arg(excel_types, excel_type_guesses)
   if (!requireNamespace("readxl", quietly = TRUE)) {
     notify_fn(
       "Install the 'readxl' package to read Excel files: install.packages('readxl')"
@@ -124,8 +152,25 @@ read_excel_file <- function(path, name, notify_fn) {
   base <- tools::file_path_sans_ext(name)
   tbls <- list()
   for (s in sheets) {
+    # readxl warns once per value it could not read as the guessed type and
+    # sets that value to missing. Count those warnings rather than letting
+    # them vanish, because each one is a value the user never sees.
+    lost <- 0L
     df <- tryCatch(
-      as.data.frame(readxl::read_excel(path, sheet = s)),
+      withCallingHandlers(
+        as.data.frame(switch(
+          excel_types,
+          all = readxl::read_excel(path, sheet = s, guess_max = excel_max_rows),
+          sample = readxl::read_excel(path, sheet = s),
+          text = readxl::read_excel(path, sheet = s, col_types = "text")
+        )),
+        warning = function(w) {
+          if (grepl("^Expecting ", conditionMessage(w))) {
+            lost <<- lost + 1L
+            invokeRestart("muffleWarning")
+          }
+        }
+      ),
       error = function(e) {
         notify_fn(paste0(
           "Could not read sheet '",
@@ -136,6 +181,20 @@ read_excel_file <- function(path, name, notify_fn) {
         NULL
       }
     )
+    if (lost > 0L) {
+      notify_fn(sprintf(
+        paste(
+          "Sheet '%s': %d value%s could not be read as the type guessed for",
+          "%s column and %s set to missing. Choose 'Read every column as",
+          "text' under Excel column types and add the file again to keep them."
+        ),
+        s,
+        lost,
+        if (lost == 1L) "" else "s",
+        if (lost == 1L) "its" else "their",
+        if (lost == 1L) "was" else "were"
+      ))
+    }
     if (!is.null(df) && nrow(df) > 0) {
       tname <- if (length(sheets) == 1) {
         base
