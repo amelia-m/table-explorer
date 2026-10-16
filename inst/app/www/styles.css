@@ -636,6 +636,9 @@
     .dict-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
     .dict-row-actions .dict-hint { margin: 0; }
     table.dict-dt td.dict-muted { color: var(--text-secondary); font-size: 12px; }
+    /* Review window: examples shown only on request */
+    .dict-review-table .dict-muted { color: var(--text-secondary); font-size: 12px; }
+    .dict-review-table td code { margin-right: 4px; white-space: nowrap; }
     table.dict-dt td.dict-range { min-width: 170px; }
     table.dict-dt td.dict-privacy { min-width: 200px; }
     table.dict-dt td.dict-examples { min-width: 180px; }

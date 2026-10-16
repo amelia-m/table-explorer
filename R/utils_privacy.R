@@ -460,3 +460,26 @@ privacy_review_set <- function(dictionary, tables, keys, state) {
   }
   dictionary
 }
+
+# A few values from a flagged column, for the reviewer deciding whether it is
+# personal. Shown only on request in the review window and never stored. The
+# first distinct values in row order rather than the most frequent: the
+# commonest value in a personal column is not more telling than any other,
+# and row order keeps the sample the same every time the window opens.
+review_examples_n <- 5L
+# Long enough to recognise an email, a name or an address, short enough that
+# a free-text field shows its shape without showing its content.
+review_examples_max_chars <- 40L
+
+review_examples <- function(
+  v,
+  n = review_examples_n,
+  max_chars = review_examples_max_chars
+) {
+  vals <- as.character(v[!is.na(v)])
+  vals <- vals[nzchar(trimws(vals))]
+  vals <- utils::head(unique(vals), n)
+  long <- nchar(vals) > max_chars
+  vals[long] <- paste0(substr(vals[long], 1L, max_chars), "\u2026")
+  vals
+}
