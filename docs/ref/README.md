@@ -38,10 +38,16 @@ operational fields; they are not carried here.
 ### What it does not cover
 
 - **Not complete.** The file lists 41,486 distinct ZIPs in the October 2026
-  edition, against USPS's own published count of 41,554. About 68 assigned
-  ZIPs are missing, among them the unique ZIPs of Young America, Minnesota.
+  edition, against USPS's own published count of 41,554, so about 68 assigned
+  ZIPs are missing. Which ones is not known: nothing published names them.
   This is why a ZIP absent from this list is reported as "not in the
   reference list" and never as invalid.
+- **Retired ZIPs are absent, and look the same as missing ones.** The
+  `zipcodeR` package's list, frozen in June 2021, holds 1,031 ZIPs that are
+  not in this file (536 unique, 285 PO box, 210 standard), among them 22222
+  in Arlington and the Young America, Minnesota rebate-processing ZIPs such
+  as 55555. Most are probably retired since 2021, but the two lists alone
+  cannot tell a retired ZIP from one of the 68 missing (compared 2026-10-16).
 - **No ZIP+4 codes.** USPS does not publish assigned +4 codes as a free list.
   A ZIP+4 value can be checked here for its shape and its 5-digit part only.
 - **No history.** A ZIP retired before this edition is simply absent.
