@@ -424,3 +424,88 @@ test_that("the Access jar set pins the HSQLDB that UCanAccess expects", {
   # The file named in each entry is the one the URL ends with
   expect_equal(basename(urls), files)
 })
+
+# ── Excel column type guessing ───────────────────────────────
+# readxl's default guesses each column's type from its first 1000 rows, so a
+# value that does not fit the guess further down is read as missing without
+# a word. These pin the three settings and the warning that replaces silence.
+
+# A workbook whose `code` column holds numbers for 1,500 rows and then one
+# text cell, the shape that loses data under readxl's default. Written with
+# openxlsx so the numbers are stored as numbers, as a spreadsheet holds them.
+late_text_xlsx <- function() {
+  skip_if_not_installed("readxl")
+  skip_if_not_installed("openxlsx")
+  path <- tempfile(fileext = ".xlsx")
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb, "s")
+  openxlsx::writeData(wb, "s", data.frame(id = 1:1501, code = c(1:1500, NA)))
+  openxlsx::writeData(wb, "s", "A-17", startCol = 2, startRow = 1502)
+  openxlsx::saveWorkbook(wb, path)
+  path
+}
+
+test_that("guessing from the first 1000 rows loses a late text value, and says so", {
+  path <- late_text_xlsx()
+  msgs <- character(0)
+  res <- read_excel_file(
+    path,
+    "late.xlsx",
+    function(m) msgs <<- c(msgs, m),
+    excel_types = "sample"
+  )
+  df <- res$tables[["late"]]
+  expect_true(is.numeric(df$code))
+  expect_true(is.na(df$code[1501]))
+  expect_length(msgs, 1L)
+  expect_match(msgs, "1 value could not be read", fixed = TRUE)
+})
+
+test_that("guessing from every row keeps the late text value", {
+  path <- late_text_xlsx()
+  msgs <- character(0)
+  res <- read_excel_file(
+    path,
+    "late.xlsx",
+    function(m) msgs <<- c(msgs, m),
+    excel_types = "all"
+  )
+  expect_identical(res$tables[["late"]]$code[1501], "A-17")
+  expect_length(msgs, 0L)
+})
+
+test_that("reading every column as text keeps everything as text", {
+  path <- late_text_xlsx()
+  res <- read_excel_file(
+    path,
+    "late.xlsx",
+    function(m) NULL,
+    excel_types = "text"
+  )
+  df <- res$tables[["late"]]
+  expect_true(all(vapply(df, is.character, logical(1))))
+  expect_identical(df$code[c(1, 1501)], c("1", "A-17"))
+})
+
+test_that("read_table_file reads Excel types from every row by default", {
+  # Which setting is the default is a decision recorded beside
+  # excel_type_guess_default. What this pins is that a caller naming nothing
+  # reaches the Excel reader with it, and so does not get readxl's
+  # 1000-row guess.
+  path <- late_text_xlsx()
+  res <- read_table_file(path, "late.xlsx", function(m) NULL)
+  expect_identical(res$tables[["late"]]$code[1501], "A-17")
+})
+
+test_that("an unknown Excel type setting is refused", {
+  skip_if_not_installed("readxl")
+  expect_error(
+    read_excel_file(
+      "x.xlsx",
+      "x.xlsx",
+      function(m) NULL,
+      excel_types = "guess"
+    ),
+    "should be one of"
+  )
+})
