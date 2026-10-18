@@ -62,6 +62,21 @@ Before cutting a worktree or quoting a commit in a brief, compare
 requests here are merged on GitHub and nothing pulls afterwards, so the local
 `main` is routinely tens of commits stale.
 
+## Public test data from R packages
+
+Amelia, 2026-10-17, on the CRAN `fec16` package (Federal Election
+Commission data, 2015-2016 cycle, which includes individual contributors'
+ZIP codes): "we can use it to test and refer to it in docs (with the fec16
+package as provenance) but don't commit copies of its data."
+
+- **Use it, cite it, do not copy it.** Tests and measurements load it from
+  the installed package (`utils::data(..., package = "fec16")`) and skip when
+  it is not installed. Docs name the package and version as the source.
+- **Nothing from it is committed**: no fixtures, extracts, CSVs, snapshots or
+  printed rows. Counts and rates measured on it may be committed.
+- Other R-package datasets follow the same rule until Amelia says otherwise
+  for a given package.
+
 ## Review, push and merge
 
 Amelia, 2026-10-09, for this repository only. Her GitHub Copilot and Codex

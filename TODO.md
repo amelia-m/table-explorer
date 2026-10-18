@@ -56,10 +56,13 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       page states no terms (read 2026-10-16); usps.com's site terms reportedly restrict
       reproduction, not re-read because the hosts were not resolving. Check: read
       https://about.usps.com/termsofuse.htm. **Amelia decides** what follows.
-- [ ] **R-package datasets that would need installing**, listed by the messy-data agent and not
-      measured: `fec16` (individual contributions with typed ZIP and ZIP+4; personal data under
-      FEC's no-sale condition, so a privacy decision first) and `campfin` (a deliberately messy,
-      made-up Vermont file, useful for the normaliser, not the threshold). **Amelia decides.**
+- [x] **`fec16`**: approved 2026-10-17 for tests and as a cited source, with no copies of its
+      data committed (rule in `.agents/project-profile.md`). Measured the same day (fec16 0.1.6,
+      six ZIP columns): every one mixes 5- and 9-digit values; the 9-digit values' first five
+      digits hit the USPS list at 98.85% to 100%, and their USPS state matches the row's state at
+      99.83% to 100%. All 9-digit values are bare, with no separator.
+- [ ] **`campfin`** (a deliberately messy, made-up Vermont file, useful for the normaliser, not
+      the threshold) would need installing and is not measured. **Amelia decides.**
 - [ ] **Scratch downloads**: about 173 MB of federal files in `_scratch/research/data/public/`
       and the city, TidyTuesday and Rdatasets files in `.../public/messy/`. Keep or delete.
       Also six public USPS and Census documentation files that web tools auto-saved into the
