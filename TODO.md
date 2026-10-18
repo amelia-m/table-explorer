@@ -1,5 +1,105 @@
 # TODO
 
+## Open items from the ZIP, Excel and privacy work (2026-10-16 to 2026-10-17)
+
+In full wording. Research behind these lives in `_scratch/research/` (local only):
+`zip-repdigits.md`, `zip-validation-sources.md`, `zipcoder-contribution.md`,
+`zip4-threshold-measurement.md`, `state-agreement-results.csv`, `zip-messy-data.md`. The
+draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
+
+### Decisions waiting on Amelia
+
+- [ ] **Second signal for bare 9-digit ZIP+4 columns.** Measured: on public data a bare
+      9-digit column's first five digits hit the USPS list at 99.55% or better on real ZIP
+      columns and at most about 75% on EIN columns, so 0.90 separates typical columns; but an
+      identifier concentrated in one prefix can clear it (EINs with prefix 77 reach 98.3%; SSNs
+      from one SSA area reach 99%). Two second signals measured well: **state agreement** (the
+      ZIP's USPS state matches the row's state column: real columns 97.3% to 100%, EINs at most
+      51.7%, Nebraska-area SSNs 0%), and **mixed forms** (every real column with bare 9-digit
+      values also held 5-digit values; no identifier column did). Proposed rule: label ZIP+4 when
+      the hit rate is at least 0.90 and either state agreement is at least 0.90 or 5- and
+      9-digit forms are mixed; otherwise "probable ZIP+4", awaiting confirmation. **Amelia
+      decides** whether to adopt it.
+- [ ] **Normaliser rules from the messy-data run** (city open data, TidyTuesday, Rdatasets),
+      each a proposal: (2) in text columns, do not pad 6 to 8 digit values to 9, because there
+      they are typos that hit the USPS list at about 1%; report them as invalid ("6 to 8 digits;
+      a ZIP+4 has 9") and leave them out of the confirmation count, while numeric columns keep
+      the padding, where it restores lost zeros correctly; (3) require exactly 4 digits after a
+      separator and never pad a short +4; (4) accept `99999-` and a blank +4 as a 5-digit ZIP
+      (Los Angeles writes 43,206 of them); (5) show "leading zeros lost" only when the loss is
+      systematic, since an isolated 4-digit value in a text column is mostly a typo. **Amelia
+      decides** which to adopt.
+- [ ] **What "invalid" means.** Proposed: unreadable values, `00000`, and anything outside the
+      USPS list's own range, taken from its minimum and maximum (today 00501 to 99950, which
+      matches USPS's published range at facts.usps.com) rather than hard-coded. Repeating-digit
+      ZIPs absent from the list are "not in the USPS list; may be a placeholder" (Amelia's
+      wording, 2026-10-16); ZIPs in zipcodeR's 2021 list but not today's are "possibly
+      retired"; a +4 of `0000` is valid (the IRS uses it on up to 24% of values). **Amelia
+      decides** whether the definition stands.
+- [ ] **Unformatted SSNs are not flagged by value.** The privacy value pattern requires hyphens
+      (`R/utils_privacy.R`), so a column of bare 9-digit SSNs whose name says nothing is labelled
+      "phone number" and treated as not personal. Proposed: flag a column that is at least 80%
+      bare 9-digit values as "possibly SSN or ZIP+4" for review, which also sends ZIP+4 columns
+      through review once. **Amelia decides.** The name additions in #67 are separate and do not
+      cover this.
+- [ ] **Bare 10-digit phone numbers are not flagged by value either.** Flagging them would also
+      flag NPI provider numbers, which are 10 digits and public. **Amelia decides** whether the
+      review cost is worth it.
+- [ ] **Contributing the USPS list to zipcodeR.** zipcodeR has no contributing guide, freezes
+      its bundled `zip_code_db` by policy, builds newer bundles from Census, GeoNames and
+      uszipcode only, and never drops a ZIP. The maintainer's own unposted draft names
+      "authoritative USPS validation" as the bar for adding ZIPs. Suggested route: settle the
+      USPS licence question, then Amelia opens an issue offering the USPS edition as validation
+      data, with the comparison numbers; a pull request only if he agrees. Opening it is
+      Amelia's outward action. He has replied to such issues in 19 to 207 days.
+- [ ] **The USPS licence question**, which also affects the CSV tracked in #66. The PostalPro
+      page states no terms (read 2026-10-16); usps.com's site terms reportedly restrict
+      reproduction, not re-read because the hosts were not resolving. Check: read
+      https://about.usps.com/termsofuse.htm. **Amelia decides** what follows.
+- [ ] **R-package datasets that would need installing**, listed by the messy-data agent and not
+      measured: `fec16` (individual contributions with typed ZIP and ZIP+4; personal data under
+      FEC's no-sale condition, so a privacy decision first) and `campfin` (a deliberately messy,
+      made-up Vermont file, useful for the normaliser, not the threshold). **Amelia decides.**
+- [ ] **Scratch downloads**: about 173 MB of federal files in `_scratch/research/data/public/`
+      and the city, TidyTuesday and Rdatasets files in `.../public/messy/`. Keep or delete.
+      Also six public USPS and Census documentation files that web tools auto-saved into the
+      Claude session's own results folder. **Amelia decides.**
+
+### Pull requests waiting on Amelia
+
+- [ ] **#63** example values in the privacy review window, on request (interaction on real data).
+- [ ] **#64** Excel column types: fast 1,000-row guess by default, a notice on longer sheets.
+- [ ] **#65** ERD settings and key collapsible, settings on one row (visual).
+- [ ] **#66** USPS ZIP list as a derived CSV plus the weekly update check. After merging, one
+      manual run from the Actions tab shows whether USPS lets GitHub's runners in.
+- [ ] **#67** privacy name additions (SSN spellings, tax ids, `bday`, `cell`).
+
+### Work items, no decision needed
+
+- [ ] **Build the ZIP detection itself** once the decisions above are made, from
+      `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
+- [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
+      middle dots). They render today and would break the way the sidebar chevrons did (#62) if
+      the file were ever re-encoded. Convert them to `\u` escapes.
+- [ ] **Other disclosures lack a visible marker.** #65 fixed the ERD settings and key with a
+      `te-disclosure` class; the dictionary's "Privacy and example settings", the Table Details
+      column lists and the unconnected-tables list still show no triangle. One class per element.
+- [ ] **The six files left out of the Air reformat** (#61) still need formatting once the
+      detection chain lands: `R/utils_inference.R`, `tests/testthat/test-inference.R`,
+      `tests/testthat/test-prose-parent.R`, `dev/fixtures/public/fetch.R`,
+      `dev/fixtures/public/score_public.R`, `dev/fixtures/public/sweep_settings.R`.
+
+### Assumptions recorded, not findings
+
+- [ ] **SSA area-to-state assignments** used in the state-agreement check (Massachusetts 010 to
+      034, New York 050 to 134, Nebraska 505 to 508 and others) were recalled, not read from an
+      SSA source. An SSA table would settle them.
+- [ ] **No real bare 9-digit ZIP+4 column without 5-digit values was found** in either public
+      measurement, so the "mixed forms" signal has not been tested against one. Searching for
+      such a column would settle whether it should ever reject.
+- [ ] **The messy-data "read as number" rows** used `data.table::fread`'s type guess as a stand-in
+      for the app's `read.csv()`; a column-by-column comparison would settle whether they match.
+
 ## Detection measurement on public datasets (2026-10-10)
 
 Harness: `dev/fixtures/public/fetch.R` then
