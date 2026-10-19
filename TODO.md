@@ -19,22 +19,50 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       values also held 5-digit values; no identifier column did). Proposed rule: label ZIP+4 when
       the hit rate is at least 0.90 and either state agreement is at least 0.90 or 5- and
       9-digit forms are mixed; otherwise "probable ZIP+4", awaiting confirmation. **Amelia
-      decides** whether to adopt it.
+      decides** whether to adopt it. Synthetic test 2026-10-19 (`_scratch/research/
+      zip4-second-signal-synth.md`, one note): a ZIP+4-only column with no state column is
+      never rejected, it lands on "probable ZIP+4" in 100% of samples; with a state column it is
+      ZIP+4 in 100%, but a state column 10% wrong splits 60/40 at the 0.90 cut. An identifier
+      built in the densest ZIP block (770, 98.1% hit) passes state agreement when its rows are
+      all in that block's state, and passes "mixed" when 5% of its values are 5 digits: both
+      constructed, neither seen in real data. No public bare 9-digit-only ZIP column was found in
+      the files already downloaded; none beyond them was searched.
 - [ ] **Normaliser rules from the messy-data run** (city open data, TidyTuesday, Rdatasets),
       each a proposal: (2) in text columns, do not pad 6 to 8 digit values to 9, because there
       they are typos that hit the USPS list at about 1%; report them as invalid ("6 to 8 digits;
       a ZIP+4 has 9") and leave them out of the confirmation count, while numeric columns keep
       the padding, where it restores lost zeros correctly; (3) require exactly 4 digits after a
       separator and never pad a short +4; (4) accept `99999-` and a blank +4 as a 5-digit ZIP
-      (Los Angeles writes 43,206 of them); (5) show "leading zeros lost" only when the loss is
-      systematic, since an isolated 4-digit value in a text column is mostly a typo. **Amelia
+      (Los Angeles writes 43,206 of them); **(4) decided 2026-10-19: yes, as long as the
+      leading five digits are a valid ZIP** (Amelia; `99999-` is a shape, five digits and a
+      trailing separator, not the ZIP 99999); (5) show "leading zeros lost" only when the loss is
+      systematic, since an isolated 4-digit value in a text column is mostly a typo. Measured
+      2026-10-19 (`_scratch/research/leading-zeros-threshold.md`, with its script and CSV; the
+      note holds 4 open items, copied below): pad 4-digit values in a text ZIP column and say
+      "leading zeros lost" when at least 80% of them, padded, are in the USPS list; otherwise
+      leave them and report them invalid. On 16 text columns with 4-digit values it matches
+      the ground truth on all 10 non-thin and all 6 thin ones; typo columns score 49.9% to
+      54.3%, lost-zero columns 83.3% to 100%, and the highest "delete a digit" baseline is
+      66.8%. The hypothesis "no 5-digit value starting with 0" fails on SF `mail_zipcode`. Weak
+      point: the lower margin rests on one text column (SF `mail_zipcode`, 24 values, 83.3%).
+      Open from that run, **Amelia decides**: (i) thin columns (under 20 four-digit values):
+      apply the 80% rule anyway, never pad below some count, or pad with an "uncertain" note;
+      (ii) whether to measure the "read as number" variant (not done, since proposal 2 already
+      pads numeric columns); (iii) whether to commission new downloads to find more text
+      columns with lost zeros and firm up the 83.3% margin; (iv) the invalid reason's wording,
+      placeholder "4 digits; a ZIP has 5", which belongs in the ZIP detection draft.
+      Unverified there: that the app guesses column types as `fread` does (reading the app's
+      file-reading code would settle it); NYC Dog's "lost zeros" label, which no state confirms;
+      that the TidyTuesday and Rdatasets Seattle pets columns are the same data. **Amelia
       decides** which to adopt.
 - [ ] **What "invalid" means.** Proposed: unreadable values, `00000`, and anything outside the
       USPS list's own range, taken from its minimum and maximum (today 00501 to 99950, which
       matches USPS's published range at facts.usps.com) rather than hard-coded. Repeating-digit
       ZIPs absent from the list are "not in the USPS list; may be a placeholder" (Amelia's
       wording, 2026-10-16); ZIPs in zipcodeR's 2021 list but not today's are "possibly
-      retired"; a +4 of `0000` is valid (the IRS uses it on up to 24% of values). **Amelia
+      retired" (when zipcodeR is not installed, proposed 2026-10-19: such values fall to "not in
+      the USPS list", and the app says once that the retired check needs zipcodeR); a +4 of
+      `0000` is valid (the IRS uses it on up to 24% of values). **Amelia
       decides** whether the definition stands.
 - [ ] **Unformatted SSNs are not flagged by value.** The privacy value pattern requires hyphens
       (`R/utils_privacy.R`), so a column of bare 9-digit SSNs whose name says nothing is labelled
