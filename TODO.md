@@ -52,10 +52,22 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       USPS licence question, then Amelia opens an issue offering the USPS edition as validation
       data, with the comparison numbers; a pull request only if he agrees. Opening it is
       Amelia's outward action. He has replied to such issues in 19 to 207 days.
-- [ ] **The USPS licence question**, which also affects the CSV tracked in #66. The PostalPro
-      page states no terms (read 2026-10-16); usps.com's site terms reportedly restrict
-      reproduction, not re-read because the hosts were not resolving. Check: read
-      https://about.usps.com/termsofuse.htm. **Amelia decides** what follows.
+- [ ] **The USPS licence question**, which also affects the CSV tracked in #66 and whether
+      `docs/ref/Zip_Locale_Detail.xlsx` (the file Amelia supplied, untracked) is committed or
+      ignored. Read 2026-10-19 in the in-app browser (WebFetch still could not resolve the
+      host): https://about.usps.com/termsofuse.htm now redirects to
+      https://about.usps.com/who/legal/terms-of-use.htm. It claims USPS copyright on all site
+      material; allows viewing and downloading only for personal, non-commercial home use,
+      where a page says it may be copied, or with written permission; and otherwise requires
+      written permission to "reproduce, republish, upload, post, transmit, distribute or
+      publicly display" it. The PostalPro ZIP Locale Detail page has no terms of its own and
+      no copy permission; its only legal link is the accessibility statement. So as written
+      the terms cover the file, and a public repository is distribution. Not settled, and
+      legal questions rather than findings: whether a bare list of ZIP codes and classes is
+      copyrightable at all, and whether USPS's status as a federal entity matters. Options:
+      (a) keep USPS data out of git and read it from `docs/ref/` when present, which would
+      change #66 before it merges; (b) keep the derived CSV, as #66 does now; (c) ask USPS,
+      or university counsel, for a ruling. **Amelia decides.**
 - [x] **`fec16`**: approved 2026-10-17 for tests and as a cited source, with no copies of its
       data committed (rule in `.agents/project-profile.md`). Measured the same day (fec16 0.1.6,
       six ZIP columns): every one mixes 5- and 9-digit values; the 9-digit values' first five
