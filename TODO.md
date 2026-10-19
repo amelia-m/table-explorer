@@ -103,6 +103,62 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
 - [ ] **The messy-data "read as number" rows** used `data.table::fread`'s type guess as a stand-in
       for the app's `read.csv()`; a column-by-column comparison would settle whether they match.
 
+## Recovered from older scratch notes (2026-10-19)
+
+These were in untracked notes under `_scratch/` and had not reached this file. Each is given as
+the note had it; the date says how old it is, and none has been re-checked against the current
+branches unless it says so.
+
+From the containment-signal hand-back (2026-10-10, branch `feat/containment-signal`):
+
+- [ ] **Ambiguity-demoted links are returned with the rest.** `resolve_fk_parents()` demotes a
+      link to low confidence ("ambiguous: values fit 9 tables") but keeps it so it can be
+      reviewed, and `score_public.R` counts every returned link. On Chinook, containment took the
+      returned set from 29 found / 9 hit to 59 found / 10 hit, because a child with a handful of
+      distinct values is contained in every unrelated 1..N primary key. The real
+      `customer.supportrepid -> employee.employeeid` came back at low (0.486) among eight junk
+      siblings. **Amelia decides** between: `detect_fks()` dropping ambiguity-demoted links whose
+      only value evidence is containment; or the Relationships tab hiding demoted links by
+      default, so the returned set and the reviewed set stop being the same list.
+- [ ] **Self-references cannot be found on values.** `detect_fks()` skips `t2 == t1` in the
+      content path, so only `self_ref_match()`'s naming path can find a self-reference, and it
+      misses Chinook's `employee.reportsto -> employee.employeeid`. Containment adds eight junk
+      links for `ReportsTo` instead (its three values sit inside eight unrelated keys). **Amelia
+      decides** whether the content path should also run a table against its own `pk_map[[t1]]`.
+- [ ] **Containment has no switch of its own.** It is gated behind
+      `enable_flags[["value_overlap"]]` (still so on `feat/tentative-presets`, checked
+      2026-10-19), because `app_server.R` passes an explicit flag list and a new key would read as
+      `FALSE` there. If presets should switch containment on its own, the flag goes into
+      `R/utils_inference.R` and both callers in the same change. Decide with the preset work.
+- [ ] **The "nearly contained" tier can never carry a link by itself.** A child needs 100
+      distinct values before one can be the missing 1%, and from 25 distinct values the chance
+      discount stops applying, so `containment_near` (0.99) always arrives with `overlap_high`
+      (0.98), and its weight (0.84, below the 0.85 high threshold) only adds to a link already at
+      high. Written into the comment beside the weight. An orphan-tolerant tier that asserts a link
+      alone would need one of those thresholds to move. **Amelia decides** whether that is wanted.
+- [ ] **Assumed, not measured: containment above the sample cap.** `overlap_from_profiles()`
+      compares the child's `uniq_sample` (at most 5,000 distinct values) with the parent's full
+      distinct set, so "all N values present" is a claim about the values sampled. The reason text
+      prints the sample count as the mitigation. A child with more than 5,000 distinct values, one
+      outside the sample and absent from the parent, would settle whether the text reports the
+      sample size rather than the column's distinct count.
+
+From the follow-ups to #23, drop golem (2026-10-09), checked against `main` on 2026-10-19:
+
+- [ ] **`withr` is used in tests but not declared.** `tests/testthat/test-run_app.R` calls
+      `withr::local_options()` and `DESCRIPTION` does not list `withr` in Suggests, so
+      `R CMD check` would warn. It works only because another package pulls it in. Add it to
+      Suggests. (The same note's backlog item D3 is already marked done.)
+- [ ] **A stale finding in `docs/research/shiny-framework/decision.md`** (around line 252) still
+      says "`R/_disable_autoload.R` is missing". #23 added the file. Mark the finding resolved.
+
+From #64's own "Not covered" list (2026-10-16):
+
+- [ ] **Assumed, not checked: the Excel upload path and spaced paths.** On this machine readxl
+      fails on `.xlsx` files whose path contains spaces. Uploads land in a temp directory without
+      spaces, which probably avoids it. Uploading an `.xlsx` from a spaced folder through the app
+      would settle it. (ODS files go through `readODS` and #64 does not touch them.)
+
 ## Detection measurement on public datasets (2026-10-10)
 
 Harness: `dev/fixtures/public/fetch.R` then
