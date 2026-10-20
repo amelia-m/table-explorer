@@ -121,6 +121,20 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
 
 - [ ] **Build the ZIP detection itself** once the decisions above are made, from
       `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
+- [ ] **Pair each ZIP column with its state column** (added 2026-10-20, as part of the ZIP
+      detection build). The state-agreement signal needs to know which column holds the row's
+      state, and the app has no step that finds it: every measurement so far named the state
+      column by hand (`state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R`). Cases the
+      step has to handle, from the measured files: names that share a prefix with the ZIP
+      column (`CMTE_ZIP` and `CMTE_ST`, `SF_SPONS_US_ZIP` and `SF_SPONS_US_STATE`, `mailingzipcode`
+      and `mailingstate`); one table with several address blocks, where each ZIP must pair with
+      its own block's state (NPPES mailing and practice, DOL sponsor and administrator); state
+      written as abbreviations or full names (`state_agreement.R`'s `norm_state()` handles
+      both). How often a state column exists: 20 of the 21 measured columns with bare 9-digit
+      values had one, but only 15 of 30 text ZIP columns in the messy-data run did, and the
+      federal files are address records, which carry a state by nature; whether
+      Amelia's own extracts usually have one is unknown and is hers to say. The step is also not
+      in the draft contract yet; add it there.
 - [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
       middle dots). They render today and would break the way the sidebar chevrons did (#62) if
       the file were ever re-encoded. Convert them to `\u` escapes.
