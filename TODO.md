@@ -1,5 +1,50 @@
 # TODO
 
+## Lost session on real data (2026-10-20)
+
+Amelia loaded a few large files into build
+`tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16`, run from Positron with `shiny::runApp()`.
+Several thousand readxl warnings followed, then the Positron console showed
+"R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links
+she had confirmed and privacy decisions she had made were gone. No values or column names
+from her data are recorded here.
+
+- [ ] **Why Positron lost the R kernel.** Observed: after the event, Positron's R kernel
+      (`ark`) was still running and still listening on 127.0.0.1:5640 with an established
+      browser connection (`Get-NetTCPConnection -LocalPort 5640`, 2026-10-20), so R did not
+      crash; Positron's console lost its link to the kernel. Hypothesis, not tested: the
+      flood of readxl warnings to the console (many lines) overwhelmed
+      Positron's console channel while R was busy reading. A second, weaker hypothesis is
+      memory (the kernel's memory stayed high afterwards). The check that would settle it: load the
+      same files with #64's branch, which muffles those warnings, and see whether the
+      disconnect recurs. Whether to also report it to Positron is **Amelia's call**.
+- [ ] **The app keeps no state between Shiny sessions, so a dropped session loses all
+      review work.** Confirmed links, false positives, privacy decisions and dictionary
+      edits live only in the session; the only way back is a manual "Save Session" /
+      "Restore Session" on the Export tab (`R/mod_export.R`). Proposed: autosave review
+      decisions (not the data) on every change, and offer to restore them when the same
+      tables are loaded again. Where to keep them is a privacy question, because the
+      decisions name columns and the saved session holds the data: **Amelia decides**
+      whether autosave is wanted and where it may write.
+- [ ] **Readxl warnings flood the console and mean silently dropped values.** On `main`,
+      `read_excel_file()` (`R/utils_file_readers.R`) calls `readxl::read_excel()` with its
+      default 1,000-row type guess and no warning handler. A column that is blank for the
+      first 1,000 rows is guessed logical, and every later value is set to NA with one
+      warning each. In this event two columns lost values across a large
+      sheet, so anything reviewed on those columns was reviewed on missing data. #64 already
+      fixes this (counts the warnings, muffles them, says on load that types were guessed
+      from the first 1,000 rows, and offers "Guess from every row"). Work item: merge #64,
+      which waits on Amelia as a visual PR. #64 also reports how many values were set to
+      missing per sheet (read in `_scratch/wt-excel/R/utils_file_readers.R`, its notify call
+      after the type-guess notice). Open: readxl warnings come only from an Excel file, and
+      the files were described only roughly; which file produced them is
+      **Amelia's to say**, without sharing its contents.
+- [ ] **The build string's "+" counts untracked files.** `R/utils_helpers.R` marks the build
+      dirty when `git status --porcelain` prints anything, so the untracked `docs/ref/`
+      folder alone produced `4b6f5e2+` although the code was exactly `main`. Proposed: use
+      `git status --porcelain --untracked-files=no`, so "+" means changed tracked code.
+      Work item, no decision needed.
+
 ## Open items from the ZIP, Excel and privacy work (2026-10-16 to 2026-10-17)
 
 In full wording. Research behind these lives in `_scratch/research/` (local only):
