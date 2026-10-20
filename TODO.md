@@ -103,15 +103,16 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       99.83% to 100%. All 9-digit values are bare, with no separator.
 - [ ] **`campfin`** (a deliberately messy, made-up Vermont file, useful for the normaliser, not
       the threshold) would need installing and is not measured. **Amelia decides.**
-- [ ] **Scratch downloads** (updated 2026-10-20). Deleted 2026-10-20, with Amelia's go-ahead:
-      the 13 TidyTuesday files and `tidytuesday_tree.json` from
-      `_scratch/research/data/public/messy/`. Everything pulled for the messy-data run
+- [ ] **Scratch downloads** (updated 2026-10-20). Deleted 2026-10-20, with Amelia's go-ahead,
+      from `_scratch/research/data/public/messy/`: the 13 TidyTuesday files and
+      `tidytuesday_tree.json`; then the six Rdatasets files in `files/` (now empty) and
+      `rdatasets_index.csv`. Everything pulled for the messy-data run
       (TidyTuesday, Rdatasets and the ten portal tables) is now recorded in
       `docs/research/zip-detection/messy-test-data.md`: what was pulled and why, URLs, sizes,
       MD5s, columns used, terms, what each file showed, and how to fetch it again. Still on disk
-      (sizes from `du -sb`, 2026-10-20): the ten portal tables, ZIP and state columns only (about
-      145 MiB), with their `meta/` schemas; the six Rdatasets files in `messy/files/` (5.2 MiB);
-      the two scan indexes, `header_scan.csv` and `rdatasets_index.csv`; and the federal files
+      (sizes from `du -sb`, 2026-10-20): in `messy/`, the ten portal tables, ZIP and state
+      columns only, with their `meta/` schemas and `header_scan.csv` (154,141,681 bytes together,
+      about 147 MiB); and the federal files
       in `dol5500/`, `irs_eobmf/`, `nppes/` and `fec/` (172,703,059 bytes, about 165 MiB). Also
       six public USPS and Census documentation files that web tools auto-saved into the earlier
       Claude session's own results folder, outside the repository. Keep or delete the rest:
@@ -142,7 +143,8 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       both). How often a state column exists: 20 of the 21 measured columns with bare 9-digit
       values had one, but only 15 of 30 text ZIP columns in the messy-data run did, and the
       federal files are address records, which carry a state by nature; whether
-      Amelia's own extracts usually have one is unknown and is hers to say. The step is also not
+      Amelia's own extracts usually have one: "I think so but uncertain" (Amelia, 2026-10-20),
+      so the step should not assume a state column is present. The step is also not
       in the draft contract yet; add it there.
 - [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
       middle dots). They render today and would break the way the sidebar chevrons did (#62) if

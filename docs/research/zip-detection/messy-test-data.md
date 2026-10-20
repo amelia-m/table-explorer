@@ -6,7 +6,8 @@ git-ignored `_scratch/research/` folder (paths such as `data/public/messy/` are 
 this file is the durable record of what was pulled, why, and what each file showed. None of the
 data is committed, following the project profile's rule on public test data: counts, rates and
 checksums only. TidyTuesday comes first, then the Rdatasets files, then the open-data portal
-tables. The TidyTuesday files were deleted locally on 2026-10-20; the rest are still in
+tables. The TidyTuesday and Rdatasets files were deleted locally on 2026-10-20; only the portal
+tables (with their `meta/` schemas and `header_scan.csv`) are still in
 `_scratch/research/data/public/messy/`.
 
 ## What they were for
