@@ -1,11 +1,13 @@
-# TidyTuesday and Rdatasets files used in the messy-data ZIP measurement
+# Public data used in the messy-data ZIP measurement
 
-Written 2026-10-20 from `zip-messy-data.md`, `messy_download_files.R` and
-`messy_download_files.log`. Those, the other scripts named below and the downloads live in the
+Written 2026-10-20 from `zip-messy-data.md`, `messy_download_files.R`, `messy_download.R` and
+their logs. Those, the other scripts named below and the downloads live in the
 git-ignored `_scratch/research/` folder (paths such as `data/public/messy/` are relative to it), so
 this file is the durable record of what was pulled, why, and what each file showed. None of the
 data is committed, following the project profile's rule on public test data: counts, rates and
-checksums only. TidyTuesday comes first; the Rdatasets files have their own section below.
+checksums only. TidyTuesday comes first, then the Rdatasets files, then the open-data portal
+tables. The TidyTuesday files were deleted locally on 2026-10-20; the rest are still in
+`_scratch/research/data/public/messy/`.
 
 ## What they were for
 
@@ -144,6 +146,80 @@ What each one showed:
 - **`openintro::nyc`:** no ZIP column. Downloaded only because the header scan could not read its
   first line. Not used.
 
+## The open-data portal tables
+
+Ten tables from city and state Socrata portals, chosen because their ZIPs were typed by people
+(licences, inspections, business filings) and several hold ZIP+4 or a state column.
+
+- Found by reading each portal's catalogue and each table's own schema, licence and update date
+  (`messy_socrata_meta.R`; the schemas are saved in `data/public/messy/meta/<domain>_<id>.json`).
+- Downloaded by `messy_download.R` from
+  `https://<domain>/resource/<id>.csv?$select=<columns>&$order=:id&$limit=200000&$offset=<k>`
+  (dataset page `https://<domain>/d/<id>`), saved as `data/public/messy/<domain>_<id>.csv`.
+  **Only the ZIP and state columns were downloaded**, over the whole table, so no other field
+  (names, addresses, licence numbers) ever reached this machine.
+- Every table arrived complete: rows received equal the publisher's `count(*)` at download time
+  (verified, `messy_download.log` and `messy_download2.log`). The first four were downloaded on
+  2026-10-17 at about 00:31 UTC, the other six about 23 hours later.
+- "Updated" is Socrata's `rowsUpdatedAt` (UTC), read on 2026-10-17 at about 00:30 UTC. The later
+  six downloads may hold rows newer than that. Portal tables change daily, so a fresh download
+  will not reproduce these counts; the MD5s pin what was measured. They were computed on
+  2026-10-20 from the saved files, whose sizes match the download log byte for byte.
+
+| Saved as | Publisher, dataset | Updated | Rows | Size | MD5 | Columns downloaded | Terms, as the publisher states them |
+|---|---|---|---|---|---|---|---|
+| `data.colorado.gov_4ykn-tg5h.csv` | Colorado Secretary of State, Business Entities in Colorado | 2026-10-16 | 3,124,420 | 68,753,198 | `a9169eaf842c2e69068a101cbb7f1064` | `principalzipcode`, `principalstate`, `mailingzipcode`, `mailingstate` | Public Domain (metadata, verified) |
+| `data.ct.gov_n7gp-d28j.csv` | Connecticut Secretary of the State, Business Registry, Business Master | 2026-10-16 | 1,303,289 | 25,429,481 | `d6680f36297681017f4569af87373fb8` | `billingpostalcode`, `billingstate`, `records_address_zip_code`, `records_address_state` | Public Domain (metadata, verified) |
+| `data.cityofchicago.org_r5kz-chrr.csv` | City of Chicago, Business Licenses | 2026-10-16 | 1,209,190 | 16,926,846 | `bf8574ccb918fb6cd53d8bbc496be22b` | `zip_code`, `state` | "See Terms of Use"; the terms pages returned HTTP 403, **not read** |
+| `data.lacity.org_6rrh-rzua.csv` | City of Los Angeles Office of Finance, Listing of Active Businesses | 2026-10-15 | 632,799 | 13,807,481 | `9010122b33348cc23cc0c8026dcce889` | `zip_code`, `mailing_zip_code` | CC0 1.0 (metadata, verified) |
+| `data.sfgov.org_g8m3-pdis.csv` | City and County of San Francisco, Registered Business Locations | 2026-10-16 | 368,422 | 8,522,790 | `ae04378cec74d39aff13897faa27a3ed` | `business_zip`, `state`, `mail_zipcode`, `mail_state` | ODC Public Domain Dedication and License (metadata, verified) |
+| `data.cityofnewyork.us_nu7n-tubp.csv` | NYC DOHMH, NYC Dog Licensing Dataset | 2026-07-15 | 819,323 | 7,373,438 | `6074e1781cc0ea41afb7a02850dcd3c7` | `zipcode` | No licence in the metadata; nyc.gov's general terms reserve rights (corroborated); NYC Open Data's own terms **not read** |
+| `data.cityofchicago.org_4ijn-s7e5.csv` | City of Chicago, Food Inspections | 2026-10-16 | 317,111 | 4,439,207 | `29601882186ec665a67d67d8e325cf10` | `zip`, `state` | As for Business Licenses, **not read** |
+| `data.wa.gov_f6w7-q2d2.csv` | Washington State Dept of Licensing, Electric Vehicle Population Data | 2026-10-14 | 300,142 | 4,201,926 | `6f1cdc2ca4823adae1c6ddb30aeeeba3` | `zip_code`, `state` | ODC Open Database License (metadata, verified) |
+| `data.cityofnewyork.us_43nn-pn8j.csv` | NYC DOHMH, Restaurant Inspection Results | 2026-10-16 | 296,819 | 2,655,677 | `b19b32526f70bc0f4cad850b38a443c2` | `zipcode` | As for Dog Licensing |
+| `data.seattle.gov_jguv-t9rb.csv` | City of Seattle, Seattle Pet Licenses | 2026-10-06 | 38,413 | 345,116 | `f2826fca2b2bb30a4d5c7d3ad15b543c` | `zip_code` | Public Domain (metadata, verified) |
+
+Ten tables, 152,455,160 bytes (about 145 MiB), plus ten small schema files in `meta/`. The
+Washington table is under the ODbL. This file publishes only counts and rates from it; whether
+the ODbL's share-alike terms reach summary figures like these was not checked.
+
+What each one showed:
+
+- **Colorado business entities** (3,031,769 principal ZIPs, 897,214 mailing): the largest and
+  messiest. 2.9% and 4.3% 9-digit, mostly separated (85,392 and 37,547) with a few thousand bare.
+  Found at 97.99% and 97.35%. Held 6 to 8 digit typos that front-padding turns into fake ZIP+4s
+  (1,648 and 963 of them, found at 1.46% and 1.25%), which is why proposal 2 says not to pad 6 to
+  8 digit text values. Counted with those, the bare 9-digit subset falls to 31.84% and 34.62%;
+  without them, exactly-9-digit bare values are found at 99.86% and 99.80%. Also 1,075 `00000`,
+  Canadian and UK postcodes, `99999-` and `99999-____` shapes, and 4-digit values that are typos,
+  not lost zeros (their state agrees only 5.42% of the time). State agreement 99.75% and 99.52%
+  overall, 99.62% and 99.31% on 9-digit values.
+- **Connecticut business registry, `billingpostalcode`** (1,059,887 values): 19.8% 9-digit, almost
+  all separated (209,791), found at 99.94%; state agreement 99.87% overall and 99.97% on 9-digit
+  values. `records_address_zip_code` has only 415 values.
+- **Los Angeles active businesses:** in `zip_code` (632,799 values) every value that normalises is
+  a separated ZIP+4 (589,232), found at 100%, and none is 5-digit: a real column with no 5-digit
+  values at all. 43,206 values are
+  `99999-` (a trailing separator, empty +4), which `normalise()` rejects, so the column normalises
+  at only 93.1%. `mailing_zip_code` (341,602) is 88.8% 9-digit, also separated.
+- **Chicago business licences, `zip_code`** (1,208,861 values): all 5-digit, 99.9% found; 128
+  `00000` and 139 text placeholders. State agreement 99.97%.
+- **San Francisco registered businesses:** `business_zip` (367,702 values) all 5-digit, 99.8% found,
+  93 `99999`, state agreement 99.94%. `mail_zipcode` (165,810) holds 5,711 `99999` values (3.4%),
+  apparently a placeholder (inference), which the draft's range rule already makes invalid.
+- **NYC dog licences, `zipcode`** (819,314 values): all 5-digit and found once 421 values shorter
+  than 5 digits are padded (92% of those padded values are then found).
+- **Chicago food inspections, `zip`** (317,069 values): all 5-digit and found; state agreement 100%.
+- **Washington electric vehicles, `zip_code`** (300,127 values): all 5-digit and found; state
+  agreement 100%.
+- **NYC restaurant inspections, `zipcode`** (293,678 values): all 5-digit and found.
+- **Seattle pet licences, `zip_code`** (38,291 values): all 5-digit and found.
+
+The portals supplied the run's only typed separated ZIP+4 columns at scale (Colorado, Connecticut,
+Los Angeles), and the only real column found with no 5-digit values (Los Angeles, separated). That
+matters for "mixed forms": it can only add evidence for bare 9-digit columns, never reject a
+column, because a real ZIP+4 column without 5-digit values exists.
+
 ## What the run concluded, with these files in it
 
 Over all 30 real columns in the run (portals, Rdatasets and these files), bare 9-digit values were
@@ -154,8 +230,10 @@ agreement separated real columns (99.31% to 100% on 9-digit values) from the Pet
 
 ## To fetch them again
 
-Run `messy_download_files.R` from the repository root, which fetches all nineteen, or fetch each
-path above with its URL pattern, then compare MD5s against these tables. A mismatch means the file
+Run `messy_download_files.R` from the repository root, which fetches the nineteen TidyTuesday and
+Rdatasets files, and `messy_download.R` for the ten portal tables; or fetch each path above with
+its URL pattern. Then compare MD5s against these tables. Portal tables will not match, because
+they change daily: re-measure them rather than comparing. A mismatch means the file
 changed upstream since 2026-10-17 (TidyTuesday's `main`, or an Rdatasets rebuild), and the
 measurement would need re-running rather than quoting. The Rdatasets files can also be read from
 the packages themselves, which is the provenance to cite either way.
