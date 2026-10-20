@@ -199,6 +199,24 @@ From #64's own "Not covered" list (2026-10-16):
       spaces, which probably avoids it. Uploading an `.xlsx` from a spaced folder through the app
       would settle it. (ODS files go through `readODS` and #64 does not touch them.)
 
+From the #23 (drop golem) review scripts (2026-10-09; the scripts were deleted 2026-10-20, so
+the method is given here in full):
+
+- [ ] **Nothing checks that the running app serves its static files.** No test, dev script or
+      CI step fetches them, so a broken resource path (the kind a move like dropping golem can
+      cause) would show only as a blank ERD in a browser. The #23 review checked it by hand and it
+      passed. Build it as a small tracked check, `dev/check_assets.R` or a step in `dev/check.R`:
+      `pkgload::load_all()`, set `options(shiny.maxRequestSize = NULL)`, build `app <- run_app()`,
+      start it with `shiny::runApp(app, port = <free port>, launch.browser = FALSE, host =
+      "127.0.0.1")`, and from a `later::later()` callback a few seconds in, fetch with
+      `curl::curl_fetch_memory()` the index page and `tableexplorer/styles.css`,
+      `tableexplorer/app.js`, `tableexplorer/erd.js`, `tableexplorer/vendor/elkjs/elk-api.js` and
+      `tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js`; every one must return 200, and a
+      made-up path such as `tableexplorer/vendor/nope.js` must not. In the same callback, check
+      `getOption("shiny.maxRequestSize")` is 104857600 (the 100 MB upload limit), then
+      `shiny::stopApp()`. Fail with a non-zero exit when any check fails. Take the file list from
+      `inst/app/www/` when building it, not from this note.
+
 ## Detection measurement on public datasets (2026-10-10)
 
 Harness: `dev/fixtures/public/fetch.R` then
