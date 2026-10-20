@@ -103,10 +103,19 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       99.83% to 100%. All 9-digit values are bare, with no separator.
 - [ ] **`campfin`** (a deliberately messy, made-up Vermont file, useful for the normaliser, not
       the threshold) would need installing and is not measured. **Amelia decides.**
-- [ ] **Scratch downloads**: about 173 MB of federal files in `_scratch/research/data/public/`
-      and the city, TidyTuesday and Rdatasets files in `.../public/messy/`. Keep or delete.
-      Also six public USPS and Census documentation files that web tools auto-saved into the
-      Claude session's own results folder. **Amelia decides.**
+- [ ] **Scratch downloads** (updated 2026-10-20). Deleted 2026-10-20, with Amelia's go-ahead:
+      the 13 TidyTuesday files and `tidytuesday_tree.json` from
+      `_scratch/research/data/public/messy/`. Everything pulled for the messy-data run
+      (TidyTuesday, Rdatasets and the ten portal tables) is now recorded in
+      `docs/research/zip-detection/messy-test-data.md`: what was pulled and why, URLs, sizes,
+      MD5s, columns used, terms, what each file showed, and how to fetch it again. Still on disk
+      (sizes from `du -sb`, 2026-10-20): the ten portal tables, ZIP and state columns only (about
+      145 MiB), with their `meta/` schemas; the six Rdatasets files in `messy/files/` (5.2 MiB);
+      the two scan indexes, `header_scan.csv` and `rdatasets_index.csv`; and the federal files
+      in `dol5500/`, `irs_eobmf/`, `nppes/` and `fec/` (172,703,059 bytes, about 165 MiB). Also
+      six public USPS and Census documentation files that web tools auto-saved into the earlier
+      Claude session's own results folder, outside the repository. Keep or delete the rest:
+      **Amelia decides.**
 
 ### Pull requests waiting on Amelia
 
