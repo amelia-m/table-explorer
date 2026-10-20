@@ -131,6 +131,16 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       detection chain lands: `R/utils_inference.R`, `tests/testthat/test-inference.R`,
       `tests/testthat/test-prose-parent.R`, `dev/fixtures/public/fetch.R`,
       `dev/fixtures/public/score_public.R`, `dev/fixtures/public/sweep_settings.R`.
+      How #61 proved its run changed nothing but formatting (the scripts were deleted
+      2026-10-20, so the method is here): for each file, take the parse tokens of the committed
+      and the formatted version with `utils::getParseData(parse(f, keep.source = TRUE))`,
+      terminal tokens ordered by line and column. Identical streams prove a pure reformat.
+      Where they differ, drop the `'{'` and `'}'` tokens from both and check the rest, the
+      `STR_CONST` sequence and the `COMMENT` sequence are identical: then only braces and
+      whitespace moved (Air adds braces when it breaks a single-statement body across lines, and
+      can drop a `;` when it splits statements). `git diff -w` is not enough, because it does not
+      ignore the line breaks Air inserts. Count the added braces per construct for the commit
+      message rather than estimating them.
 
 ### Assumptions recorded, not findings
 
@@ -216,6 +226,19 @@ the method is given here in full):
       `getOption("shiny.maxRequestSize")` is 104857600 (the 100 MB upload limit), then
       `shiny::stopApp()`. Fail with a non-zero exit when any check fails. Take the file list from
       `inst/app/www/` when building it, not from this note.
+
+From the #27 review (ERD chips off shared trunks, 2026-10-09; the script was deleted
+2026-10-20):
+
+- [ ] **The ERD chip geometry has no test.** A Node script checked `chipPoint()`,
+      `parallelSegments()` and `nearSegment()` by extracting the real functions from
+      `inst/app/www/erd.js` (so the check cannot drift from the shipped code), with `CHIP_R = 7`.
+      Its cases, with A the edge from (100,200) to (260,200): an edge B crossing A at right angles
+      (180,120 to 180,320) leaves A a chip; a B running along A end to end (100,201 to 260,201)
+      gives A no chip; a B covering A's first half (100,201 to 180,201) leaves a chip whose x is
+      past 180; perpendicular segments are not parallel; collinear ones are. It exited non-zero on
+      any failure, and all passed. Rebuild it as a tracked check, run by `dev/check.R`, which
+      already runs `node --check` on the JavaScript.
 
 ## Detection measurement on public datasets (2026-10-10)
 
