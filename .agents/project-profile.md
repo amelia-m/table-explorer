@@ -122,3 +122,26 @@ repository may carry the harness's attribution lines: a `Co-Authored-By:`
 trailer naming the agent, and the "Generated with Claude Code" footer on pull
 requests. This answers the global rule "AI attribution in git and pull
 requests is decided per project" for table-explorer only.
+
+## Describe Amelia's own data generically
+
+Amelia, 2026-10-21: "update that note to be more generic and implement a rule
+to keep notes like that generic", after a tracked contract described her own
+extract, and "take real column names out of todo and force scrub from
+history", after real column names from it were found in `TODO.md`, a contract,
+code comments and tests. This repository is public, and a commit is where text
+stops being removable.
+
+- **In anything tracked** (`TODO.md`, contracts, docs, code comments, tests,
+  commit messages, pull request text), refer to her own data only generically:
+  "her own data", "a real extract", "a count column wholly inside an unrelated
+  measurement column".
+- **Never write** its table or column names, its counts (tables, rows, links,
+  flagged columns), what domain it comes from, how particular columns are
+  stored, or quotes of her describing it. Those stay in chat.
+- **Test fixtures and examples use invented names** that do not mirror hers.
+  Public datasets (Chinook, FAERS, Lahman, fec16 and the like) may be named,
+  following "Public test data from R packages".
+- **Check before committing.** When a change came out of work on her data, read
+  the diff for anything that would identify it, and replace it in place before
+  the commit, never after.
