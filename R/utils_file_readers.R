@@ -171,24 +171,32 @@ excel_sheet_visibility <- function(path) {
     readLines(wb_xml, warn = FALSE, encoding = "UTF-8"),
     collapse = ""
   )
-  tags <- regmatches(xml, gregexpr("<sheet\\s[^>]*>", xml))[[1]]
+  parse_workbook_sheets(xml)
+}
+
+# The <sheet> entries of a workbook.xml string, as excel_sheet_visibility()
+# returns them, or NULL when there are none or one has no name. Regex, not an
+# XML parser, to avoid a dependency; so it accepts what writers are known to
+# vary: a namespace prefix on the element (`<x:sheet>`, from some .NET
+# writers), either quote style on attributes, and numeric character
+# references in names as well as the five named ones.
+parse_workbook_sheets <- function(xml) {
+  tags <- regmatches(
+    xml,
+    gregexpr("<(?:[A-Za-z_][\\w.-]*:)?sheet\\s[^>]*>", xml, perl = TRUE)
+  )[[1]]
   if (length(tags) == 0) {
     return(NULL)
   }
   attr_of <- function(tag, attr) {
-    m <- regmatches(tag, regexec(paste0("\\s", attr, "=\"([^\"]*)\""), tag))[[
-      1
-    ]]
-    if (length(m) == 2) m[2] else NA_character_
+    pat <- paste0("\\s", attr, "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')")
+    m <- regmatches(tag, regexec(pat, tag, perl = TRUE))[[1]]
+    if (length(m) < 3) {
+      return(NA_character_)
+    }
+    if (nzchar(m[2]) || !nzchar(m[3])) m[2] else m[3]
   }
-  unescape <- function(x) {
-    x <- gsub("&lt;", "<", x, fixed = TRUE)
-    x <- gsub("&gt;", ">", x, fixed = TRUE)
-    x <- gsub("&quot;", "\"", x, fixed = TRUE)
-    x <- gsub("&apos;", "'", x, fixed = TRUE)
-    gsub("&amp;", "&", x, fixed = TRUE)
-  }
-  nms <- unescape(vapply(
+  nms <- xml_unescape(vapply(
     tags,
     attr_of,
     character(1),
@@ -203,13 +211,42 @@ excel_sheet_visibility <- function(path) {
   stats::setNames(state, nms)
 }
 
-# The hidden sheets of a workbook, named by sheet with their state, or an
-# empty vector. Only trusted when its sheet names match readxl's list exactly,
-# so a sheet is never mistaken for another.
+# XML character references back to text: numeric (`&#38;`, `&#x26;`) first,
+# then the five named entities, `&amp;` last so `&amp;lt;` stays `&lt;`.
+xml_unescape <- function(x) {
+  m <- gregexpr("&#(x[0-9A-Fa-f]+|[0-9]+);", x, perl = TRUE)
+  regmatches(x, m) <- lapply(regmatches(x, m), function(ents) {
+    vapply(
+      ents,
+      function(e) {
+        code <- substr(e, 3, nchar(e) - 1)
+        n <- if (startsWith(code, "x")) {
+          strtoi(substring(code, 2), 16L)
+        } else {
+          strtoi(code, 10L)
+        }
+        intToUtf8(n)
+      },
+      character(1),
+      USE.NAMES = FALSE
+    )
+  })
+  x <- gsub("&lt;", "<", x, fixed = TRUE)
+  x <- gsub("&gt;", ">", x, fixed = TRUE)
+  x <- gsub("&quot;", "\"", x, fixed = TRUE)
+  x <- gsub("&apos;", "'", x, fixed = TRUE)
+  gsub("&amp;", "&", x, fixed = TRUE)
+}
+
+# The hidden sheets of a workbook, named by sheet with their state: an empty
+# vector when none are hidden, NULL when that cannot be told (an .xls file, an
+# unreadable sheet list, or names that do not match readxl's list exactly, so
+# a sheet is never mistaken for another). Callers say so on NULL rather than
+# treating it as "none hidden".
 excel_hidden_sheets <- function(path, sheets = readxl::excel_sheets(path)) {
   vis <- excel_sheet_visibility(path)
   if (is.null(vis) || !identical(names(vis), sheets)) {
-    return(character(0))
+    return(NULL)
   }
   vis[vis != "visible"]
 }
@@ -232,13 +269,21 @@ read_excel_file <- function(
   # include_hidden: TRUE loads every sheet, FALSE only visible ones, or a
   # character vector names the hidden sheets to load alongside the visible.
   if (!isTRUE(include_hidden)) {
-    hidden <- names(excel_hidden_sheets(path, sheets))
-    keep_hidden <- if (is.character(include_hidden)) {
-      include_hidden
+    hidden <- excel_hidden_sheets(path, sheets)
+    if (is.null(hidden)) {
+      notify_fn(paste0(
+        "Could not tell which sheets in '",
+        name,
+        "' are hidden, so every sheet was loaded."
+      ))
     } else {
-      character(0)
+      keep_hidden <- if (is.character(include_hidden)) {
+        include_hidden
+      } else {
+        character(0)
+      }
+      sheets <- setdiff(sheets, setdiff(names(hidden), keep_hidden))
     }
-    sheets <- setdiff(sheets, setdiff(hidden, keep_hidden))
   }
   base <- tools::file_path_sans_ext(name)
   tbls <- list()

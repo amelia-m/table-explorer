@@ -35,7 +35,8 @@ mod_upload_ui <- function(id) {
       style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
       "Applies to files added after you change it. A sheet longer than 1,000 ",
       "rows says so when it loads, and any value that did not fit its column's ",
-      "guessed type is reported as missing."
+      "guessed type is reported as missing. A workbook with hidden sheets ",
+      "asks which of them to load."
     ),
     fileInput(
       ns("schema_file"),
@@ -164,7 +165,19 @@ mod_upload_server <- function(
           excel_hidden_sheets(files$datapath[i]),
           error = function(e) character(0)
         )
-        if (length(h) > 0) {
+        if (is.null(h)) {
+          # Loading goes ahead with every sheet; say the check did not run,
+          # so nobody takes the absence of a popup as "none hidden"
+          showNotification(
+            paste0(
+              "Could not tell whether '",
+              files$name[i],
+              "' has hidden sheets, so every sheet will load."
+            ),
+            type = "warning",
+            duration = 8
+          )
+        } else if (length(h) > 0) {
           out[[as.character(i)]] <- h
         }
       }
@@ -198,7 +211,7 @@ mod_upload_server <- function(
           "These workbooks have sheets that Excel hides from its tab bar. ",
           "Hidden sheets often hold lookups, old copies or working data. ",
           "Ticked sheets are loaded as tables; unticked ones are skipped. ",
-          "Visible sheets always load."
+          "Visible sheets load as usual."
         ),
         pickers,
         footer = tagList(
@@ -261,7 +274,15 @@ mod_upload_server <- function(
                 fname,
                 notify_fn,
                 excel_types = excel_types,
-                include_hidden = hidden_choice[[as.character(i)]] %||% TRUE
+                # Not `%||%`: this package's version treats an empty vector
+                # as missing, which would turn "no hidden sheets" into "all"
+                include_hidden = if (
+                  as.character(i) %in% names(hidden_choice)
+                ) {
+                  hidden_choice[[as.character(i)]]
+                } else {
+                  TRUE
+                }
               )
               raw_tbls <- result$tables
               if (length(result$relationships) > 0) {

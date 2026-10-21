@@ -559,6 +559,39 @@ test_that("excel_sheet_visibility returns NULL for a file that is not a workbook
   expect_null(excel_sheet_visibility(path))
 })
 
+test_that("parse_workbook_sheets accepts prefixed tags, either quote and numeric entities", {
+  xml <- paste0(
+    "<x:workbook><x:sheets>",
+    "<x:sheet name=\"A&#38;B\" sheetId=\"1\" r:id=\"rId1\"/>",
+    "<x:sheet name='Old &#x2013; copy' state='hidden' sheetId='2'/>",
+    "<x:sheet name=\"&amp;lt;raw&amp;gt;\" state=\"veryHidden\"/>",
+    "</x:sheets></x:workbook>"
+  )
+  expect_identical(
+    parse_workbook_sheets(xml),
+    stats::setNames(
+      c("visible", "hidden", "veryHidden"),
+      c("A&B", "Old – copy", "&lt;raw&gt;")
+    )
+  )
+  # The <sheets> container is not mistaken for a sheet
+  expect_null(parse_workbook_sheets("<workbook><sheets></sheets></workbook>"))
+})
+
+test_that("include_hidden = FALSE says so when hidden sheets cannot be told apart", {
+  path <- hidden_sheets_xlsx()
+  local_mocked_bindings(excel_sheet_visibility = function(path) NULL)
+  msgs <- character(0)
+  res <- read_excel_file(
+    path,
+    "book.xlsx",
+    function(m) msgs <<- c(msgs, m),
+    include_hidden = FALSE
+  )
+  expect_length(res$tables, 3L)
+  expect_match(msgs, "Could not tell which sheets in 'book.xlsx' are hidden")
+})
+
 test_that("read_table_file loads hidden and very hidden sheets by default", {
   path <- hidden_sheets_xlsx()
   res <- read_table_file(path, "book.xlsx", function(m) NULL)
@@ -593,6 +626,45 @@ test_that("include_hidden as names loads the visible sheets and only those hidde
     vapply(res$tables, nrow, integer(1), USE.NAMES = FALSE),
     c(3L, 2L)
   )
+})
+
+# Runs mod_upload_server, adds `path` as book.xlsx, then `answer` (a call on
+# `session`), and returns the row counts of the tables that loaded.
+upload_hidden_and_answer <- function(path, answer) {
+  all_tables <- shiny::reactiveVal(list())
+  shiny::testServer(
+    mod_upload_server,
+    args = list(
+      all_tables_rv = all_tables,
+      rename_log_rv = shiny::reactiveVal(data.frame()),
+      schema_rels_rv = shiny::reactiveVal(list()),
+      table_meta_rv = shiny::reactiveVal(list()),
+      fk_cache = new.env()
+    ),
+    {
+      session$setInputs(
+        excel_types = "sample",
+        data_files = data.frame(
+          name = "book.xlsx",
+          size = file.size(path),
+          type = "",
+          datapath = path,
+          stringsAsFactors = FALSE
+        )
+      )
+      answer(session)
+    }
+  )
+  unname(vapply(shiny::isolate(all_tables()), nrow, integer(1)))
+}
+
+test_that("'Load visible sheets only' skips every hidden sheet", {
+  path <- hidden_sheets_xlsx()
+  counts <- upload_hidden_and_answer(
+    path,
+    function(session) session$setInputs(hidden_visible_only = 1)
+  )
+  expect_identical(counts, 3L)
 })
 
 test_that("upload waits for the hidden-sheet choice, then loads what was ticked", {
