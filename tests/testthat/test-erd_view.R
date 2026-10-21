@@ -568,3 +568,44 @@ test_that("erd_auto_detail counts columns, not only tables", {
   )
   expect_equal(erd_auto_detail(list()), "all")
 })
+
+test_that("the ERD settings and key collapse, and the actions stay outside them", {
+  # On a laptop screen the settings and the key took most of the height
+  # above the diagram. Both are disclosures whose state app.js remembers;
+  # Fit and the downloads sit outside the settings so they stay reachable
+  # with the settings folded away.
+  ui <- htmltools::renderTags(mod_erd_ui("erd"))$html
+  doc <- xml2::read_html(ui)
+  settings <- xml2::xml_find_first(
+    doc,
+    "//details[@data-remember='erd-settings']"
+  )
+  key <- xml2::xml_find_first(doc, "//details[@data-remember='erd-key']")
+  expect_false(inherits(settings, "xml_missing"))
+  expect_false(inherits(key, "xml_missing"))
+  # Open by default; a viewer's own choice is restored by app.js
+  expect_false(is.na(xml2::xml_attr(settings, "open")))
+  expect_false(is.na(xml2::xml_attr(key, "open")))
+  # Every setting is inside the collapsible block
+  for (id in c(
+    "erd-focus",
+    "erd-hops",
+    "erd-detail",
+    "erd-sources",
+    "erd-show_low"
+  )) {
+    expect_length(
+      xml2::xml_find_all(settings, sprintf(".//*[@id='%s']", id)),
+      1L
+    )
+  }
+  # The actions are not
+  expect_length(
+    xml2::xml_find_all(settings, ".//*[contains(@onclick, 'erdFit')]"),
+    0L
+  )
+  expect_length(
+    xml2::xml_find_all(doc, "//*[contains(@onclick, 'erdFit')]"),
+    1L
+  )
+})
