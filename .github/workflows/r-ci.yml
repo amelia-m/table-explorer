@@ -31,6 +31,11 @@ jobs:
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           needs: Imports
+          # The Excel reader's tests need readxl and openxlsx: readxl to read,
+          # openxlsx to write the fixture. Without them every Excel test skips
+          # here and CI reports green on code it never ran. This comment sits
+          # outside the block below on purpose: every line inside a `|` block,
+          # a `#` line included, is passed on as a package name.
           extra-packages: |
             any::devtools
             any::testthat
@@ -39,9 +44,6 @@ jobs:
             any::yaml
             any::RSQLite
             any::stringdist
-            # The Excel reader's tests need both: readxl to read, openxlsx to
-            # write the fixture. Without them every Excel test skips here and
-            # CI reports green on code it never ran.
             any::readxl
             any::openxlsx
 
