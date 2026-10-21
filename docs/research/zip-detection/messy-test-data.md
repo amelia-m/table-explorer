@@ -12,7 +12,7 @@ tables (with their `meta/` schemas and `header_scan.csv`) are still in
 
 ## What they were for
 
-The ZIP+4 detection draft (`_scratch/contracts/2026-10-16-zip-detection-draft.md`) proposes
+The ZIP+4 detection draft (`docs/contracts/2026-10-16-zip-detection-draft.md`) proposes
 confirming a column of 9-digit values as ZIP+4 when at least 90% of them have a first five digits
 in the USPS list, with state agreement and "mixed forms" (5- and 9-digit values in one column) as
 second signals. Those were first measured on federal files (IRS, FEC, CMS, DOL), which are probably

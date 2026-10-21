@@ -51,7 +51,7 @@ from her data are recorded here.
 In full wording. Research behind these lives in `_scratch/research/` (local only):
 `zip-repdigits.md`, `zip-validation-sources.md`, `zipcoder-contribution.md`,
 `zip4-threshold-measurement.md`, `state-agreement-results.csv`, `zip-messy-data.md`. The
-draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
+draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
 
 ### Decisions waiting on Amelia
 
@@ -178,7 +178,7 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
 ### Work items, no decision needed
 
 - [ ] **Build the ZIP detection itself** once the decisions above are made, from
-      `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
+      `docs/contracts/2026-10-16-zip-detection-draft.md`.
 - [ ] **Pair each ZIP column with its state column** (added 2026-10-20, as part of the ZIP
       detection build). The state-agreement signal needs to know which column holds the row's
       state, and the app has no step that finds it: every measurement so far named the state
@@ -191,8 +191,8 @@ draft build contract is `_scratch/contracts/2026-10-16-zip-detection-draft.md`.
       both). How often a state column exists: 20 of the 21 measured columns with bare 9-digit
       values had one, but only 15 of 30 text ZIP columns in the messy-data run did, and the
       federal files are address records, which carry a state by nature; whether
-      Amelia's own extracts usually have one: "I think so but uncertain" (Amelia, 2026-10-20),
-      so the step should not assume a state column is present. The step is also not
+      real extracts usually have one is uncertain (Amelia, 2026-10-20), so the step should not
+      assume a state column is present. The step is also not
       in the draft contract yet; add it there.
 - [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
       middle dots). They render today and would break the way the sidebar chevrons did (#62) if
@@ -371,11 +371,11 @@ Open items from this work:
 - [ ] **`detect_shared_columns()` has no `truncated` attribute**, so a
       shared-columns list cut short by a cap cannot be told from a complete
       one where it is shown. Assumed, not verified: the cap is reachable on
-      a wide schema. Checking `attributes()` of the return value on the
+      a wide schema. Checking `attributes()` of the return value on a
       real extract would settle it.
 - [ ] **The 1:1 relationship path draws from `pk_map` only**, so a pair whose
       parent is near-unique rather than strictly unique is never labelled
-      one-to-one. Not verified against the real extract; reading the
+      one-to-one. Not verified against a real extract; reading the
       cardinality column for a known near-unique parent would settle it.
 - [ ] **`dev/check.R` needs `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` in a fresh
       worktree** and does not set it itself, so the first run in a new
@@ -401,7 +401,7 @@ Open items from this work:
       (`docs/contracts/2026-10-10-detection-settings-and-sweep.md`, approved,
       waiting on containment because both change `R/utils_inference.R`); then
       Amelia reads the sweep, picks candidate presets, checks them against her
-      own real extract, and the preset UI contract
+      own data, and the preset UI contract
       (`docs/contracts/2026-10-10-detection-presets-draft.md`) is finished
       with that list and dispatched. Its one remaining open question is
       whether a chosen preset is remembered between sessions; proposed per
@@ -439,10 +439,10 @@ rereads those for open work. Decisions are marked **Amelia decides**.
       chance-overlap discount changes a figure only in the Chinook
       combinations where containment is switched off, so containment and the
       discount cover the same pairs. **This does not mean those three rules
-      are useless.** The case the chance discount was written for,
-      `episode.number_of_items` wholly inside `member.width_cm`, is
-      in Amelia's own data, which is not in this harness. **Amelia
-      decides**, ideally after one run against her extract.
+      are useless.** The case the chance discount was written for, a small
+      count column wholly contained in an unrelated measurement column, is in
+      Amelia's own data, which is not in this harness. **Amelia decides**,
+      ideally after one run against her own data.
 - [ ] **Whether to relax the parent-key requirement, which the measurement
       says no to.** `parent_key_requirement = "composite"` is the only route
       to the two FAERS `drug_seq` links, but it buys them at low confidence
@@ -668,7 +668,7 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       dark mode. Collapse them into one token, or give `--text-faint` a distinct
       value that still clears 4.5:1?
 - [ ] **Column semantic types**: task contract at
-      `_scratch/contracts/2026-10-09-column-semantic-types.md`, covering validated
+      `docs/contracts/2026-10-09-column-semantic-types.md`, covering validated
       type guesses (ZIP first), a type confirmation queue reusing the Data
       Dictionary review pattern, a privacy-respecting value preview, type-driven
       FK matching (veto mismatched confirmed types, boost matched ones), bulk
@@ -699,7 +699,7 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       column such as a `*_month_count` holding {0..12} overlaps any `tlk_*.id`
       holding a contiguous 1..N almost perfectly, so `overlap_high` (weight
       0.90) plus `format_match` (0.40, shape `int_code`) produces a 49% low
-      candidate. On the real schema this is a large share of the
+      candidate. On a real schema this was a large share of the
       low-confidence rows. The only guard today is
       `is_fk_candidate()` at `R/utils_inference.R:748`, which rejects a column
       only when `n_unique <= 2 && n > 10` and it is not key-named.
@@ -717,7 +717,7 @@ Decisions waiting on Amelia, in full wording so they can be answered later.
       and that has to be resolved first.
       Acceptance: `Rscript dev/fixtures/score_detection.R` still reports 157 of
       157 real links at medium+ with 0 false, and the low-confidence count on
-      Amelia's schema drops measurably (only she can measure that).
+      Amelia's own data drops measurably (only she can measure that).
 - [ ] **`limit = 0` semantics** (`db_load_table`, PR #25): currently 0 means zero
       rows, following `DBI::dbFetch()`. Useful only once a caller can use an
       empty frame for a schema-only probe: `mod_db_connect.R` drops frames with
