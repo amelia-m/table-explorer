@@ -519,6 +519,118 @@ test_that("read_table_file guesses from the first 1000 rows by default, and says
   expect_true(any(grepl("guessed from the first", msgs, fixed = TRUE)))
 })
 
+# ── Hidden Excel sheets ──────────────────────────────────────
+# readxl lists hidden and very hidden sheets with the visible ones, so a
+# workbook that shows one tab in Excel loaded as several tables with no
+# explanation. The reader still loads every sheet unless told otherwise
+# (Amelia, 2026-10-21: "don't skip hidden by default"); the upload module asks
+# which hidden sheets to load. These pin the reader's half of that.
+
+# One visible sheet, one hidden, one very hidden (settable only from VBA in
+# Excel). The hidden one's name needs XML escaping in workbook.xml.
+hidden_sheets_xlsx <- function() {
+  skip_if_not_installed("readxl")
+  skip_if_not_installed("openxlsx")
+  path <- tempfile(fileext = ".xlsx")
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb, "Shown")
+  openxlsx::addWorksheet(wb, "R&D <old>", visible = FALSE)
+  openxlsx::addWorksheet(wb, "Lookup", visible = "veryHidden")
+  openxlsx::writeData(wb, "Shown", data.frame(id = 1:3))
+  openxlsx::writeData(wb, "R&D <old>", data.frame(x = 1:2))
+  openxlsx::writeData(wb, "Lookup", data.frame(y = 1:4))
+  openxlsx::saveWorkbook(wb, path)
+  path
+}
+
+test_that("excel_sheet_visibility reads each sheet's state, unescaping names", {
+  path <- hidden_sheets_xlsx()
+  vis <- excel_sheet_visibility(path)
+  expect_identical(
+    vis,
+    c(Shown = "visible", `R&D <old>` = "hidden", Lookup = "veryHidden")
+  )
+  expect_identical(names(vis), readxl::excel_sheets(path))
+})
+
+test_that("excel_sheet_visibility returns NULL for a file that is not a workbook zip", {
+  path <- tempfile(fileext = ".xlsx")
+  writeLines("not a zip", path)
+  expect_null(excel_sheet_visibility(path))
+})
+
+test_that("read_table_file loads hidden and very hidden sheets by default", {
+  path <- hidden_sheets_xlsx()
+  res <- read_table_file(path, "book.xlsx", function(m) NULL)
+  expect_identical(
+    vapply(res$tables, nrow, integer(1), USE.NAMES = FALSE),
+    c(3L, 2L, 4L)
+  )
+})
+
+test_that("include_hidden = FALSE loads only the visible sheet, under the file's name", {
+  path <- hidden_sheets_xlsx()
+  res <- read_excel_file(
+    path,
+    "book.xlsx",
+    function(m) NULL,
+    include_hidden = FALSE
+  )
+  # One sheet read, so it is named as a one-sheet workbook is
+  expect_named(res$tables, "book")
+  expect_equal(res$tables[["book"]]$id, c(1, 2, 3))
+})
+
+test_that("include_hidden as names loads the visible sheets and only those hidden ones", {
+  path <- hidden_sheets_xlsx()
+  res <- read_excel_file(
+    path,
+    "book.xlsx",
+    function(m) NULL,
+    include_hidden = "R&D <old>"
+  )
+  expect_identical(
+    vapply(res$tables, nrow, integer(1), USE.NAMES = FALSE),
+    c(3L, 2L)
+  )
+})
+
+test_that("upload waits for the hidden-sheet choice, then loads what was ticked", {
+  path <- hidden_sheets_xlsx()
+  all_tables <- shiny::reactiveVal(list())
+  shiny::testServer(
+    mod_upload_server,
+    args = list(
+      all_tables_rv = all_tables,
+      rename_log_rv = shiny::reactiveVal(data.frame()),
+      schema_rels_rv = shiny::reactiveVal(list()),
+      table_meta_rv = shiny::reactiveVal(list()),
+      fk_cache = new.env()
+    ),
+    {
+      session$setInputs(
+        excel_types = "sample",
+        data_files = data.frame(
+          name = "book.xlsx",
+          size = file.size(path),
+          type = "",
+          datapath = path,
+          stringsAsFactors = FALSE
+        )
+      )
+      # Nothing is read until the user answers
+      expect_length(all_tables(), 0L)
+      expect_named(pending_upload_rv()$hidden[["1"]], c("R&D <old>", "Lookup"))
+      session$setInputs(hidden_pick_1 = "Lookup", hidden_confirm = 1)
+      expect_null(pending_upload_rv())
+      expect_identical(
+        unname(vapply(all_tables(), nrow, integer(1))),
+        c(3L, 4L)
+      )
+    }
+  )
+})
+
 test_that("an unknown Excel type setting is refused", {
   skip_if_not_installed("readxl")
   expect_error(
