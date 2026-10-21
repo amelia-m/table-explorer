@@ -15,6 +15,16 @@ test_that("app_ui renders both sidebar collapse controls", {
   expect_match(html, 'id="app-body"', fixed = TRUE)
 })
 
+test_that("the sidebar chevrons render as chevrons, not Windows-1252 mojibake", {
+  # Regression: a commit re-encoded R/app_ui.R through Windows-1252, so the
+  # collapse button showed the three characters "a-circumflex, euro sign,
+  # superscript one" where a single chevron should be.
+  html <- as.character(app_ui(NULL))
+  expect_match(html, "‹", fixed = TRUE)
+  expect_match(html, "›", fixed = TRUE)
+  expect_false(grepl("â€", html, fixed = TRUE))
+})
+
 test_that("app_build_stamp names the version, and the build when it can", {
   stamp <- app_build_stamp()
   expect_type(stamp, "character")
