@@ -175,12 +175,8 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       her own extracts usually have one: "I think so but uncertain" (Amelia, 2026-10-20), so the step should not
       assume a state column is present. The step is also not
       in the draft contract yet; add it there.
-- [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
-      middle dots). They render today and would break the way the sidebar chevrons did (#62) if
-      the file were ever re-encoded. Convert them to `\u` escapes.
-- [ ] **Other disclosures lack a visible marker.** #65 fixed the ERD settings and key with a
-      `te-disclosure` class; the dictionary's "Privacy and example settings", the Table Details
-      column lists and the unconnected-tables list still show no triangle. One class per element.
+- [ ] **Literal non-ASCII characters in `R/mod_erd.R`**: 15 of them on 12 lines on `main` (counted 2026-10-23: 7 middle dots, 2 right arrows, 2 down arrows, and one each of a square with a vertical line, a check mark, a multiplication X and an empty-set sign). They render today and would break the way the sidebar chevrons did (#62) if the file were ever re-encoded. Convert them to `\u` escapes.
+- [ ] **Other disclosures lack a visible marker.** #65 (still open) adds a `te-disclosure` class to the ERD settings and key; it is not on `main` yet. The dictionary's "Privacy and example settings", the Table Details column lists and the unconnected-tables list still show no triangle. Once #65 merges, give each of them the class.
 - [ ] **The six files left out of the Air reformat** (#61) still need formatting once the
       detection chain lands: `R/utils_inference.R`, `tests/testthat/test-inference.R`,
       `tests/testthat/test-prose-parent.R`, `dev/fixtures/public/fetch.R`,
@@ -869,7 +865,7 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
       plus SQLAlchemy in `requirements.txt`. Whether to port that depends
       on the framework research. Take two pieces separately:
       - its GitHub Actions R CI workflow (`.github/workflows/r-ci.yml`,
-        Ubuntu, `devtools::test()`). `main` has no CI.
+        Ubuntu, `devtools::test()`). No longer needed: `main` has had its own CI since #45 (2026-10-09, `.github/workflows/r-ci.yml`).
       - `URL`, `BugReports` and a real `person("Amelia", "Miramonti", ...)`
         in `DESCRIPTION`.
 
