@@ -101,8 +101,9 @@ Thirteen files, 376,266,995 bytes (about 359 MiB) in all.
 
 ## The Rdatasets files
 
-Rdatasets (https://vincentarelbundock.github.io/Rdatasets/) serves CSV copies of datasets bundled
-in CRAN packages, which let the run use package data without installing the packages.
+Rdatasets (https://vincentarelbundock.github.io/Rdatasets/) serves CSV copies of datasets bundled in CRAN packages, which let the 2026-10-17 run use package data without installing the packages (its contract said to install nothing).
+
+**Since 2026-10-23 these datasets are loaded from the packages themselves** (Amelia, 2026-10-23), with `utils::data()` in `zip_messy_measure.R --only=packages`, so the package is the provenance and no CSV copy is fetched. The section "Loaded from the packages" below gives the versions and how the results changed. The record of what was downloaded from Rdatasets stays here as it was.
 
 - Found by the same header scan, over all 3,648 Rdatasets CSVs, using its index
   (`data/public/messy/rdatasets_index.csv`).
@@ -133,19 +134,29 @@ What each one showed:
   9-digit (4,966: 608 bare, 4,358 separated), found at 99.66% (the bare ones at 100%). State
   agreement 99.76% overall and 99.56% on 9-digit values. 4.0% of the 9-digit values have a `0000`
   +4. A real mixed column, with both bare and separated ZIP+4s.
-- **Seattle pets via openintro, `zip_code`** (52,122 values): the same City of Seattle data as the
-  TidyTuesday copy, but the 397 literal `NA` values arrive as missing here, presumably because the
-  package stored them as `NA` (inference). 71 separated ZIP+4s, all found.
-- **Sacramento, `zip`** (932 values): every value is shaped `A99999`, a letter before five digits,
-  so none normalises and the column is never recognised as a ZIP. That it is a factor-level prefix
-  added by the package is an inference, not checked against the package source. A useful example
-  of a ZIP column the detection will miss by design.
+- **Seattle pets via openintro, `zip_code`** (52,122 values): probably the same City of Seattle data as the TidyTuesday copy (inference from the publisher and the counts; not compared value by value), but the 397 literal `NA` values arrive as missing here, presumably because the package stored them as `NA` (inference). 71 separated ZIP+4s, all found.
+- **Sacramento, `zip`** (932 values): every value is shaped `A99999`, a letter before five digits, so none normalises and the column is never recognised as a ZIP. The package itself stores it that way: loaded from `modeldata` 1.6.0 it is a factor with 68 levels, all 932 values shaped `A99999` (verified 2026-10-23, shape masks only), so the prefix is not an artefact of Rdatasets' CSV conversion. A useful example of a ZIP column the detection will miss by design.
 - **RailsTrails, `Zip`** (104 values): every value is 4 digits, Massachusetts ZIPs whose leading
   zero was lost before the package stored them, padded back and all found. Systematic loss, the
   case the "leading zeros lost" note is for.
 - **Michigan schools, `zipcode`** (229 values): all 5 digits and found. A clean small column.
 - **`openintro::nyc`:** no ZIP column. Downloaded only because the header scan could not read its
   first line. Not used.
+
+### Loaded from the packages (2026-10-23)
+
+Measured with `zip_messy_measure.R --only=packages` (local, in `_scratch/research/`), which loads each dataset with `utils::data()` from the installed package and measures the column as the package stores it. The packages were installed from CRAN into the user library on 2026-10-23.
+
+| Package and dataset | Version | ZIP column as stored | Values | Compared with the Rdatasets CSV |
+|---|---|---|---|---|
+| `collegeScorecard::school` | 0.3.0 | character | 11,465 | A different edition: 11,465 values against 11,300, and 9-digit values 666 bare and 4,405 separated against 608 and 4,358. The USPS hit rate of the 9-digit values (99.66%) and their state agreement (99.56%) are unchanged. |
+| `modeldata::Sacramento` | 1.6.0 | factor | 932 | Same: all shaped `A99999`, none normalises. |
+| `openintro::seattlepets` | 2.5.1 | character | 52,122 | Same counts, the same 71 separated ZIP+4s. |
+| `wooldridge::meapsingle` | 1.4.7 | integer | 229 | Same: all 5 digits and found. Stored as integer, where the CSV held text. |
+| `Stat2Data::RailsTrails` | not installed | | | Not measured from the package. `Stat2Data` was removed from CRAN on 2026-10-12 ("issues were not corrected despite reminders", its CRAN page, read 2026-10-23). Its maintainer's repository, named in its DESCRIPTION, still holds version 2.0.0 with `RailsTrails`. Whether to install from there, keep the Rdatasets figures, or drop it is open in `TODO.md`. |
+| `openintro::nyc` | | | | Not measured: no ZIP column. |
+
+No conclusion in this record changes. The College Scorecard edition differs, and its rates are the same to two decimals.
 
 ## The open-data portal tables
 
@@ -231,9 +242,7 @@ agreement separated real columns (99.31% to 100% on 9-digit values) from the Pet
 
 ## To fetch them again
 
-Run `messy_download_files.R` from the repository root, which fetches the nineteen TidyTuesday and
-Rdatasets files, and `messy_download.R` for the ten portal tables; or fetch each path above with
-its URL pattern. Then compare MD5s against these tables. Portal tables will not match, because
+Run `messy_download_files.R` from the repository root, which fetches the thirteen TidyTuesday files, and `messy_download.R` for the ten portal tables; or fetch each path above with its URL pattern. The package datasets need no download: install the packages and run `zip_messy_measure.R --only=packages`. All three scripts are local, in `_scratch/research/`. Then compare MD5s against these tables. Portal tables will not match, because
 they change daily: re-measure them rather than comparing. A mismatch means the file
 changed upstream since 2026-10-17 (TidyTuesday's `main`, or an Rdatasets rebuild), and the
 measurement would need re-running rather than quoting. The Rdatasets files can also be read from
