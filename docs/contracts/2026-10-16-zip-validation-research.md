@@ -61,7 +61,7 @@ against, offline, under a licence the package can ship.
 - The package is MIT-licensed R and runs offline on Amelia's machine. A data source is only useful
   if it can be bundled with the package or fetched once by a `dev/` script, and its licence allows
   that.
-- Data the app is pointed at includes records above low risk. **Any check that sends values off the
+- Data the app is pointed at can include records above low risk. **Any check that sends values off the
   machine is ruled out for that data**, however convenient. Say plainly which sources are offline
   and which are not.
 

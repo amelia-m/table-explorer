@@ -1,19 +1,11 @@
 # Task contract: ZIP and ZIP+4 detection, validation and documentation
 
 Date: 2026-10-16  Dispatch: one agent
-Request as given: "00000 zip code (which is not valid and should be flagged) ... many but not all
-zips ... are 9 digit (so are likely zip+4). I'd like to auto-flag this and note in
-documentation ... app should be able to handle/detect any of: int, num/double, string (with or
-without either a hyphen or a plus)"
+Request, paraphrased: flag invalid ZIPs such as `00000`, recognise and auto-flag ZIP+4 and note it in the documentation, and handle ZIPs stored as integer, double or text, with or without a hyphen or plus.
 
 ## Intent and scope
 
-Today a column is "US ZIP code" when 80% of a 200-value sample matches `^\d{5}(-\d{4})?$`
-(`R/utils_inference.R:68`, `format_fingerprint()`). That pattern accepts `00000`, rejects a
-9-digit ZIP+4 with no hyphen or with a plus sign, and never sees a ZIP stored as a number,
-because numeric columns are labelled before the patterns run (`dict_format()`,
-`R/utils_export.R`). An extract can hold ZIP+4 stored both ways, as text and as integers, with
-no separator.
+Today a column is "US ZIP code" when 80% of a 200-value sample matches `^\d{5}(-\d{4})?$` (`R/utils_inference.R:68`, `format_fingerprint()`). That pattern accepts `00000`, rejects a 9-digit ZIP+4 with no hyphen or with a plus sign, and never sees a ZIP stored as a number, because numeric columns are labelled before the patterns run (`dict_format()`, `R/utils_export.R`). ZIP+4 may arrive as text or as integers, with or without a separator.
 
 In scope:
 
@@ -97,7 +89,7 @@ The audience is a reviewer documenting an extract that ships no schema.
     "not in the reference list", never "invalid", because the lists are known to be incomplete.
   - **found**: present in the reference list.
 - **Reference list**: `docs/ref/usps-zip-locale.csv`, the derived USPS ZIP Locale Detail list
-  tracked in the repository (PR #66; Amelia, 2026-10-16). 41,486 distinct ZIPs, 00501 to 99950,
+  tracked on branch `ci/usps-zip-locale-check` (PR #66, not yet merged; Amelia, 2026-10-16). 41,486 distinct ZIPs, 00501 to 99950,
   with USPS class codes (blank standard, P PO-box-only, U unique, M military). Read once per
   session; its edition comes from `docs/ref/zip-locale-source.yml` (`file_updated`). About 68
   assigned ZIPs are missing against USPS's own count of 41,554 and nothing names them, which is
@@ -129,7 +121,7 @@ The audience is a reviewer documenting an extract that ships no schema.
 
 ## Edge cases
 
-- **Mixed column, mostly ZIP and some ZIP+4** (Amelia's data): one label, "US ZIP or ZIP+4",
+- **Mixed column, mostly ZIP and some ZIP+4**: one label, "US ZIP or ZIP+4",
   with counts of each form.
 - **A ZIP stored as an integer with its leading zero lost** (`2134`): recognised, padded, and the
   dictionary notes "stored as a number, leading zeros lost" so the reviewer knows the data needs
@@ -187,8 +179,8 @@ The audience is a reviewer documenting an extract that ships no schema.
   2021 list as a hit raises identifier rates more than real ones, so it is not counted.
   **What 0.90 cannot stop**: an identifier column concentrated in one prefix. An SSN column
   drawn from a single SSA area reaches 99% in some areas (eight areas are at or above 90%), and
-  EINs from one 2-digit prefix reach 98%. Nebraska's own areas do not: 505 75.8%, 506 70.7%,
-  507 5.1%, 508 28.3%, pooled 44.9% (computed exactly from the USPS list). Whether a second
+  EINs from one 2-digit prefix reach 98%. Many single-state groups of areas do not, and how
+  far they reach varies by state (computed exactly from the USPS list). Whether a second
   signal is required as well is open below.
 - **Open: a second signal for bare 9-digit columns.** The first five digits alone cannot tell a
   ZIP+4 column from an identifier column concentrated in one prefix. Candidates: agreement with a
