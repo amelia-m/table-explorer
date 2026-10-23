@@ -179,8 +179,8 @@ The audience is a reviewer documenting an extract that ships no schema.
   2021 list as a hit raises identifier rates more than real ones, so it is not counted.
   **What 0.90 cannot stop**: an identifier column concentrated in one prefix. An SSN column
   drawn from a single SSA area reaches 99% in some areas (eight areas are at or above 90%), and
-  EINs from one 2-digit prefix reach 98%. Many single-state groups of areas do not, and how
-  far they reach varies by state (computed exactly from the USPS list). Whether a second
+  EINs from one 2-digit prefix reach 98%. A single state's group of areas need not reach it,
+  and how far it reaches varies by state (computed exactly from the USPS list). Whether a second
   signal is required as well is open below.
 - **Open: a second signal for bare 9-digit columns.** The first five digits alone cannot tell a
   ZIP+4 column from an identifier column concentrated in one prefix. Candidates: agreement with a
