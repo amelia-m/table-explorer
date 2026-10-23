@@ -125,23 +125,14 @@ requests is decided per project" for table-explorer only.
 
 ## Describe Amelia's own data generically
 
-Amelia, 2026-10-21: "update that note to be more generic and implement a rule
-to keep notes like that generic", after a tracked contract described her own
-extract, and "take real column names out of todo and force scrub from
-history", after real column names from it were found in `TODO.md`, a contract,
-code comments and tests. This repository is public, and a commit is where text
-stops being removable.
+Amelia, 2026-10-21: "update that note to be more generic and implement a rule to keep notes like that generic", after a tracked contract described her own extract, and "take real column names out of todo and force scrub from history", after real column names from it were found in `TODO.md`, a contract, code comments and tests. This repository is public, and a commit is where text stops being removable.
 
-- **In anything tracked** (`TODO.md`, contracts, docs, code comments, tests,
-  commit messages, pull request text), refer to her own data only generically:
-  "her own data", "a real extract", "a count column wholly inside an unrelated
-  measurement column".
-- **Never write** its table or column names, its counts (tables, rows, links,
-  flagged columns), what domain it comes from, how particular columns are
-  stored, or quotes of her describing it. Those stay in chat.
-- **Test fixtures and examples use invented names** that do not mirror hers.
-  Public datasets (Chinook, FAERS, Lahman, fec16 and the like) may be named,
-  following "Public test data from R packages".
-- **Check before committing.** When a change came out of work on her data, read
-  the diff for anything that would identify it, and replace it in place before
-  the commit, never after.
+- **In anything tracked** (`TODO.md`, contracts, docs, code comments, tests, commit messages, pull request text), refer to her own data only generically: "her own data", "a real extract", "a count column wholly inside an unrelated measurement column".
+- **Never write** its table or column names, its counts (tables, rows, links, flagged columns), what domain it comes from, how particular columns are stored, or quotes of her describing it. Those stay in chat.
+- **Test fixtures and examples use invented names** that do not mirror hers. Public datasets (Chinook, FAERS, Lahman, fec16 and the like) may be named, following "Public test data from R packages".
+- **Check before committing.** When a change came out of work on her data, read the diff for anything that would identify it, and replace it in place before the commit, never after.
+
+**History was scrubbed once, out of caution** (2026-10-21). Real names, counts and descriptions were replaced with invented ones in every file and commit message on every branch, and 49 of 58 branches were force-pushed; commits from 2026-09-24 on have new ids, and the 46 earlier ones kept theirs. In Amelia's words the names "aren't confidential or proprietary", so it was caution, not a breach. The old commits stay reachable on GitHub through the refs and timelines of the pull requests opened before the rewrite, and she decided not to ask GitHub Support to purge them: "nothing is that important ... no need to get support involved" (2026-10-21). Two consequences for agents:
+
+- **A pull or merge that wants to merge old history into new** (a conflicted `git pull` on a branch that predates 2026-10-21) would bring the names back. Abort it with `git merge --abort` and re-sync the branch to its `origin` tip instead.
+- **Never base new work on a pre-rewrite commit id**, including ids quoted in older pull request bodies, contracts or notes; read the current tip with `git ls-remote origin refs/heads/<branch>`.
