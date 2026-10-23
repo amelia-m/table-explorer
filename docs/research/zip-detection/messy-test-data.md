@@ -136,9 +136,7 @@ What each one showed:
   +4. A real mixed column, with both bare and separated ZIP+4s.
 - **Seattle pets via openintro, `zip_code`** (52,122 values): probably the same City of Seattle data as the TidyTuesday copy (inference from the publisher and the counts; not compared value by value), but the 397 literal `NA` values arrive as missing here, presumably because the package stored them as `NA` (inference). 71 separated ZIP+4s, all found.
 - **Sacramento, `zip`** (932 values): every value is shaped `A99999`, a letter before five digits, so none normalises and the column is never recognised as a ZIP. The package itself stores it that way: loaded from `modeldata` 1.6.0 it is a factor with 68 levels, all 932 values shaped `A99999` (verified 2026-10-23, shape masks only), so the prefix is not an artefact of Rdatasets' CSV conversion. A useful example of a ZIP column the detection will miss by design.
-- **RailsTrails, `Zip`** (104 values): every value is 4 digits, Massachusetts ZIPs whose leading
-  zero was lost before the package stored them, padded back and all found. Systematic loss, the
-  case the "leading zeros lost" note is for.
+- **RailsTrails, `Zip`** (104 values): every value is 4 digits, Massachusetts ZIPs whose leading zero is gone because the package stores the column as an integer (verified 2026-10-23 by loading it from the package), padded back and all found. Systematic loss, the case the "leading zeros lost" note is for.
 - **Michigan schools, `zipcode`** (229 values): all 5 digits and found. A clean small column.
 - **`openintro::nyc`:** no ZIP column. Downloaded only because the header scan could not read its
   first line. Not used.
@@ -153,7 +151,7 @@ Measured with `zip_messy_measure.R --only=packages` (local, in `_scratch/researc
 | `modeldata::Sacramento` | 1.6.0 | factor | 932 | Same: all shaped `A99999`, none normalises. |
 | `openintro::seattlepets` | 2.5.1 | character | 52,122 | Same counts, the same 71 separated ZIP+4s. |
 | `wooldridge::meapsingle` | 1.4.7 | integer | 229 | Same: all 5 digits and found. Stored as integer, where the CSV held text. |
-| `Stat2Data::RailsTrails` | not installed | | | Not measured from the package. `Stat2Data` was removed from CRAN on 2026-10-12 ("issues were not corrected despite reminders", its CRAN page, read 2026-10-23). Its maintainer's repository, named in its DESCRIPTION, still holds version 2.0.0 with `RailsTrails`. Whether to install from there, keep the Rdatasets figures, or drop it is open in `TODO.md`. |
+| `Stat2Data::RailsTrails` | 2.0.0, from GitHub `statmanrobin/Stat2Data@3fe987c` | integer | 104 | Same: all 104 padded from 4 digits and found. Stored as integer, which is why the leading zero is gone. `Stat2Data` was removed from CRAN on 2026-10-12, over NOTEs only (a missing `Authors@R` field, base packages imported but only suggested, one Rd typo; CRAN's archived check results, read 2026-10-23), none affecting its data. It was installed from its maintainer's repository, named in its DESCRIPTION, pinned to the last code commit (Amelia, 2026-10-23). |
 | `openintro::nyc` | | | | Not measured: no ZIP column. |
 
 No conclusion in this record changes. The College Scorecard edition differs, and its rates are the same to two decimals.
