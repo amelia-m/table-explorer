@@ -1,5 +1,22 @@
 # TODO
 
+## Review findings on #68 not yet applied (2026-10-23)
+
+From the local review of #68 (this branch, `docs/open-items-zip`) on 2026-10-23. Already done: the stale lines, the Seattle and Sacramento labels, package provenance, and the pre-rewrite build id. Amelia decided to keep "Several thousand", "two columns lost values" and the quoted "I think so but uncertain". The rest wait for her go-ahead; none needs a decision.
+
+- [ ] **A duplicate item.** "The six files left out of the Air reformat" appears in the ZIP block's work items and in the 2026-10-14 block. Keep the ZIP-block item, which carries the token-comparison method, and fold anything only the other says into it.
+- [ ] **An unsettled claim.** `docs/research/zip-detection/messy-test-data.md`, end of the portal section, says "mixed forms" can "never reject". It rests on a separated Los Angeles column, while the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" below lists the bare-only case as open. Label it an inference and point to that item.
+- [ ] **Two generic rewordings** (approved 2026-10-23). In the state-column item, "whether real extracts usually have one is uncertain" becomes "whether a typical extract has one is uncertain". In `messy-test-data.md`, "What they were for", "cleaner than a research extract" becomes "cleaner than typical extracts".
+- [ ] **Say where named files live.** `docs/contracts/2026-10-16-zip-detection-draft.md` "arrives with #70". `state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R` and `normalise()` are local, in `_scratch/research/`. `dev/fixtures/public/sweep_settings.R` and `tests/testthat/test-prose-parent.R` are on `feat/detection-settings-sweep` and `feat/prose-parent-guard`.
+- [ ] **A second duplicate.** The fread-versus-`read.csv()` type-guess assumption appears twice, in the ZIP block's assumptions and in the recovered items, with different checks. Merge them, keeping the column-by-column comparison. Note that the planned `read_csv()` switch may make it moot.
+- [ ] **The pointer item** in the recovered section says "one note" without how many items it holds, and its backticked path is split across two lines. Give the count and put the path on one line.
+- [ ] **NYC dogs** in `messy-test-data.md` reads "all found" next to "92% of those padded values are then found". Reword so the two agree.
+- [ ] **A decider and a path.** The containment item "Decide with the preset work" names no decider: add **Amelia decides**. Also write `app_server.R` as `R/app_server.R`.
+- [ ] **The PR list gives bare labels.** In "Pull requests waiting on Amelia", say what each needs from her: a visual check, a real-data check, or a merge.
+- [ ] **Cross-reference** the two ambiguity-demotion items: "Ambiguity-demoted links are returned with the rest" (recovered) and "Whether `resolve_fk_parents()`' ambiguity rule should be revisited" (2026-10-14 block).
+- [ ] **The profile's pointer-rule section** (`.agents/project-profile.md`): the global rules now carry the same rule, including this repository's 2026-10-19 example, so shrink the section to a one-line pointer to the global rule. Its heading says "the same day" while its body says "the same work block".
+- [ ] **Optional, Amelia's call:** unwrap the new prose in the three files, as its own commit; and merge three older duplicates: Pagila, Lahman in the user library, and `dev/check.R` not running the public harness.
+
 ## Lost session on real data (2026-10-20)
 
 Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16` (a pre-rewrite id; that commit is now 3200db8's ancestor ca7ad1c), run from Positron with `shiny::runApp()`. Several thousand readxl warnings followed, then the Positron console showed "R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links she had confirmed and privacy decisions she had made were gone. Figures about her data here are rounded, and no values or names from it are recorded (Amelia, 2026-10-21: rounded counts, sizes and file types are fine).
