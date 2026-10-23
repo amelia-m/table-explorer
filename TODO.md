@@ -2,7 +2,7 @@
 
 ## Lost session on real data (2026-10-20)
 
-Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16`, run from Positron with `shiny::runApp()`. Several thousand readxl warnings followed, then the Positron console showed "R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links she had confirmed and privacy decisions she had made were gone. Figures about her data here are rounded, and no values or names from it are recorded (Amelia, 2026-10-21: rounded counts, sizes and file types are fine).
+Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16` (a pre-rewrite id; that commit is now 3200db8's ancestor ca7ad1c), run from Positron with `shiny::runApp()`. Several thousand readxl warnings followed, then the Positron console showed "R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links she had confirmed and privacy decisions she had made were gone. Figures about her data here are rounded, and no values or names from it are recorded (Amelia, 2026-10-21: rounded counts, sizes and file types are fine).
 
 - [ ] **Why Positron lost the R kernel.** Observed: after the event, Positron's R kernel
       (`ark`) was still running and still listening on 127.0.0.1:5640 with an established
@@ -25,7 +25,7 @@ Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableex
 - [x] **Readxl warnings flood the console and mean silently dropped values.** Before #64, `read_excel_file()` (`R/utils_file_readers.R`) called `readxl::read_excel()` with its default 1,000-row type guess and no warning handler. A column that is blank for the first 1,000 rows is guessed logical, and every later value is set to NA with one warning each. In this event the `.xlsx` (Amelia, 2026-10-21, naming the three file types) lost values in 2 columns of a ~200k-row, ~110-column sheet, so anything reviewed on those columns was reviewed on missing data. Fixed by #64, **merged 2026-10-21** (its merge commit on `main` was renamed by the 2026-10-21 history scrub; `main` is now 3200db8): it counts the warnings, muffles them, reports how many values were set to missing per sheet, says on load that types were guessed from the first 1,000 rows, and offers "Guess from every row". Still for Amelia: re-review anything decided on the affected columns after reloading on current `main`.
 - [ ] **The build string's "+" counts untracked files.** `R/utils_helpers.R` marks the build
       dirty when `git status --porcelain` prints anything, so the untracked `docs/ref/`
-      folder alone produced `4b6f5e2+` although the code was exactly `main`. Proposed: use
+      folder alone produced `4b6f5e2+` (the pre-rewrite id of ca7ad1c) although the code was exactly `main`. Proposed: use
       `git status --porcelain --untracked-files=no`, so "+" means changed tracked code.
       Work item, no decision needed.
 
