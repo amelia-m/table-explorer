@@ -366,11 +366,7 @@ Open items from this work:
       than failing, so a CI run that silently stops measuring Lahman is
       possible. Either add Lahman to the renv lockfile, or make the harness
       exit non-zero when a dataset named on the command line is unavailable.
-- [ ] **`dev/check.R` runs only the synthetic scorer, not the public
-      harness.** The public figures are therefore measured by hand and can
-      drift from the branch they are quoted against. Decide whether
-      `dev/check.R` (and CI) should run Chinook and Lahman, which take about
-      a minute together, or whether the public harness stays a manual step.
+- [ ] **Run the public harness (Chinook and Lahman) in `dev/check.R` and CI** (decided 2026-10-23, Amelia: yes). Until now `dev/check.R` ran only the synthetic scorer, so the public figures were measured by hand and could drift from the branch they are quoted against; the two datasets take about a minute together. To settle when building it, **Amelia decides**: what fails the check (any change in found or hit against a recorded baseline, or only a fall in recall or precision), where the baseline lives, and how CI gets the data (Chinook is a download the harness caches; Lahman needs the CRAN package, see the item above). FAERS stays manual: it takes about half a minute and a 380 MB download.
 - [ ] **Rule 4 (two-signal floor) from the detection work is still not
       done**: a single content signal cannot raise a candidate when the
       child column's distinct count is below a threshold (start at 5); it
@@ -573,10 +569,7 @@ rereads those for open work. Decisions are marked **Amelia decides**.
       a CI run that silently stops measuring Lahman is possible. Either add
       Lahman to the renv lockfile, or make the harness exit non-zero when a
       dataset named on the command line is unavailable.
-- [ ] **`dev/check.R` runs only the synthetic scorer, not the public
-      harness**, so the public figures are measured by hand and can drift from
-      the branch they are quoted against. Chinook and Lahman together take
-      about a minute. Decide whether `dev/check.R` and CI should run them.
+- [ ] **`dev/check.R` and the public harness:** decided 2026-10-23, merged into the item "Run the public harness (Chinook and Lahman) in `dev/check.R` and CI" in the 2026-10-10 block above.
 - [ ] **`dev/check.R` cannot disable the renv autoloader for its own
       session.** It sets the variable, but `.Rprofile` has already run by
       then, so the setting only reaches the scorer it launches as a child
