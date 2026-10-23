@@ -88,7 +88,7 @@ What each one showed:
 
 ### Loaded from the packages (2026-10-23)
 
-Measured with `zip_messy_measure.R --only=packages` (local, in `_scratch/research/`), which loads each dataset with `utils::data()` from the installed package and measures the column as the package stores it. The packages were installed from CRAN into the user library on 2026-10-23.
+Measured with `zip_messy_measure.R --only=packages` (local, in `_scratch/research/`), which loads each dataset with `utils::data()` from the installed package and measures the column as the package stores it. The packages were installed into the user library on 2026-10-23, from CRAN except `Stat2Data`, which came from GitHub at the commit given in the table.
 
 | Package and dataset | Version | ZIP column as stored | Values | Compared with the Rdatasets CSV |
 |---|---|---|---|---|

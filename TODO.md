@@ -15,7 +15,7 @@
 
 ## Review findings on #68 (2026-10-23), applied the same day
 
-From the local review of #68 (this branch, `docs/open-items-zip`) on 2026-10-23. Already done: the stale lines, the Seattle and Sacramento labels, package provenance, and the pre-rewrite build id. Amelia decided to keep "Several thousand", "two columns lost values" and the quoted "I think so but uncertain". The rest wait for her go-ahead; none needs a decision.
+From the local review of #68 (this branch, `docs/open-items-zip`) on 2026-10-23. Already done: the stale lines, the Seattle and Sacramento labels, package provenance, and the pre-rewrite build id. Amelia decided to keep "Several thousand", "two columns lost values" and the quoted "I think so but uncertain". She approved the rest the same day, and all of them are applied.
 
 - [x] **A duplicate item.** "The six files left out of the Air reformat" appears in the ZIP block's work items and in the 2026-10-14 block. Keep the ZIP-block item, which carries the token-comparison method, and fold anything only the other says into it.
 - [x] **An unsettled claim.** `docs/research/zip-detection/messy-test-data.md`, end of the portal section, says "mixed forms" can "never reject". It rests on a separated Los Angeles column, while the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" below lists the bare-only case as open. Label it an inference and point to that item.
@@ -36,7 +36,8 @@ Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableex
 
 - [ ] **Why Positron lost the R kernel.** Observed: after the event, Positron's R kernel (`ark`) was still running and still listening on 127.0.0.1:5640 with an established browser connection (`Get-NetTCPConnection -LocalPort 5640`, 2026-10-20), so R did not crash; Positron's console lost its link to the kernel. Hypothesis, not tested: the flood of readxl warnings to the console (many lines) overwhelmed Positron's console channel while R was busy reading. A second, weaker hypothesis is memory (the kernel held ~0.9 GB afterwards). The check that would settle it: load the same files on current `main` (#64, merged 2026-10-21, muffles those warnings), and see whether the disconnect recurs. Whether to also report it to Positron is **Amelia's call**.
 - [ ] **The app keeps no state between Shiny sessions, so a dropped session loses all review work.** Confirmed links, false positives, privacy decisions and dictionary edits live only in the session; the only way back is a manual "Save Session" / "Restore Session" on the Export tab (`R/mod_export.R`). Proposed: autosave review decisions (not the data) on every change, and offer to restore them when the same tables are loaded again. Where to keep them is a privacy question, because the decisions name columns and the saved session holds the data: **Amelia decides** whether autosave is wanted and where it may write.
-- [x] **Readxl warnings flood the console and mean silently dropped values.** Before #64, `read_excel_file()` (`R/utils_file_readers.R`) called `readxl::read_excel()` with its default 1,000-row type guess and no warning handler. A column that is blank for the first 1,000 rows is guessed logical, and every later value is set to NA with one warning each. In this event the `.xlsx` (Amelia, 2026-10-21, naming the three file types) lost values in 2 columns of a ~200k-row, ~110-column sheet, so anything reviewed on those columns was reviewed on missing data. Fixed by #64, **merged 2026-10-21** (its merge commit on `main` was renamed by the 2026-10-21 history scrub; `main` is now 3200db8): it counts the warnings, muffles them, reports how many values were set to missing per sheet, says on load that types were guessed from the first 1,000 rows, and offers "Guess from every row". Still for Amelia: re-review anything decided on the affected columns after reloading on current `main`.
+- [x] **Readxl warnings flood the console and mean silently dropped values.** Before #64, `read_excel_file()` (`R/utils_file_readers.R`) called `readxl::read_excel()` with its default 1,000-row type guess and no warning handler. A column that is blank for the first 1,000 rows is guessed logical, and every later value is set to NA with one warning each. In this event the `.xlsx` (Amelia, 2026-10-21, naming the three file types) lost values in 2 columns of a ~200k-row, ~110-column sheet, so anything reviewed on those columns was reviewed on missing data. Fixed by #64, **merged 2026-10-21** (its merge commit on `main` was renamed by the 2026-10-21 history scrub; `main` is now 3200db8): it counts the warnings, muffles them, reports how many values were set to missing per sheet, says on load that types were guessed from the first 1,000 rows, and offers "Guess from every row".
+- [ ] **Re-review the columns that lost values** (Amelia). Anything decided on the two affected `.xlsx` columns in the 2026-10-20 session was decided on missing data. Reload the file on current `main` and review those columns again.
 - [ ] **The build string's "+" counts untracked files.** `R/utils_helpers.R` marks the build dirty when `git status --porcelain` prints anything, so the untracked `docs/ref/` folder alone produced `4b6f5e2+` (the pre-rewrite id of ca7ad1c) although the code was exactly `main`. Proposed: use `git status --porcelain --untracked-files=no`, so "+" means changed tracked code. Work item, no decision needed.
 
 ## Open items from the ZIP, Excel and privacy work (2026-10-16 to 2026-10-17)
@@ -145,7 +146,7 @@ Read these with their limits in mind:
 
 Open items from this work:
 
-- [ ] **Pagila:** merged 2026-10-23 into the item "Pagila." in the 2026-10-14 block below, which carries the decision. Chinook already covers the conventionally named, declared-constraint case, so nothing is blocked meanwhile.
+- [x] **Pagila:** merged 2026-10-23 into the item "Pagila." in the 2026-10-14 block below, which carries the decision. Chinook already covers the conventionally named, declared-constraint case, so nothing is blocked meanwhile.
 - [ ] **The Lahman package lives in the user library, not the project renv
       library.** It was installed with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
       so that worktrees can see it. A clone on another machine, and CI, will
@@ -286,7 +287,7 @@ rereads those for open work. Decisions are marked **Amelia decides**.
 
 ### Work items, no decision needed
 
-- [ ] **The six excluded files:** merged 2026-10-23 into the item "The six files left out of the Air reformat" in the ZIP block's work items above.
+- [x] **The six excluded files:** merged 2026-10-23 into the item "The six files left out of the Air reformat" in the ZIP block's work items above.
 - [ ] **FAERS was measured at 8 of the 70 settings combinations**, and the
       two combinations handed over from the Chinook and Lahman frontiers both
       deduplicated onto rows already in its base set, so the frontier handoff
@@ -344,8 +345,8 @@ rereads those for open work. Decisions are marked **Amelia decides**.
       without one. A review is needed before a pull request is opened, if one
       ever is: the measurement's verdict was "do not relax", so the branch may
       exist only as evidence.
-- [ ] **Lahman in the user library:** merged 2026-10-23 into the item "The Lahman package lives in the user library, not the project renv library" in the 2026-10-10 block above.
-- [ ] **`dev/check.R` and the public harness:** decided 2026-10-23, merged into the item "Run the public harness (Chinook and Lahman) in `dev/check.R` and CI" in the 2026-10-10 block above.
+- [x] **Lahman in the user library:** merged 2026-10-23 into the item "The Lahman package lives in the user library, not the project renv library" in the 2026-10-10 block above.
+- [x] **`dev/check.R` and the public harness:** decided 2026-10-23, merged into the item "Run the public harness (Chinook and Lahman) in `dev/check.R` and CI" in the 2026-10-10 block above.
 - [ ] **`dev/check.R` cannot disable the renv autoloader for its own
       session.** It sets the variable, but `.Rprofile` has already run by
       then, so the setting only reaches the scorer it launches as a child
@@ -612,7 +613,9 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
          "pkgload", "RSQLite"))` for contributors;
       3. move the test essentials into a separate setup step.
 
-      Recommendation: 2, until there is CI.
+      Recommendation: 2. CI (`.github/workflows/r-ci.yml`) now installs
+      testthat itself from DESCRIPTION and does not use `renv.lock`, so this
+      only affects contributors restoring locally.
 - [ ] **`.Rbuildignore` is still minimal** (backlog I6). renv created it
       with `^renv$`, `^renv\.lock$` and `^requirements\.txt$` only. A
       package release also needs `app.R`, `app.py`, `dev/`, `docs/`,
