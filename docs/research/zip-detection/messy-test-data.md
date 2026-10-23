@@ -12,11 +12,11 @@ tables (with their `meta/` schemas and `header_scan.csv`) are still in
 
 ## What they were for
 
-The ZIP+4 detection draft (`docs/contracts/2026-10-16-zip-detection-draft.md`) proposes
+The ZIP+4 detection draft (`docs/contracts/2026-10-16-zip-detection-draft.md`, arriving with #70) proposes
 confirming a column of 9-digit values as ZIP+4 when at least 90% of them have a first five digits
 in the USPS list, with state agreement and "mixed forms" (5- and 9-digit values in one column) as
 second signals. Those were first measured on federal files (IRS, FEC, CMS, DOL), which are probably
-cleaner than a research extract. The messy-data run of 2026-10-17 tested them on ZIP columns typed
+cleaner than typical extracts. The messy-data run of 2026-10-17 tested them on ZIP columns typed
 by people or merged from several systems: city and state open-data portals, Rdatasets and these
 TidyTuesday files.
 
@@ -210,15 +210,14 @@ What each one showed:
 - **Los Angeles active businesses:** in `zip_code` (632,799 values) every value that normalises is
   a separated ZIP+4 (589,232), found at 100%, and none is 5-digit: a real column with no 5-digit
   values at all. 43,206 values are
-  `99999-` (a trailing separator, empty +4), which `normalise()` rejects, so the column normalises
+  `99999-` (a trailing separator, empty +4), which `normalise()` (in the local `_scratch/research/zip_messy_measure.R`) rejects, so the column normalises
   at only 93.1%. `mailing_zip_code` (341,602) is 88.8% 9-digit, also separated.
 - **Chicago business licences, `zip_code`** (1,208,861 values): all 5-digit, 99.9% found; 128
   `00000` and 139 text placeholders. State agreement 99.97%.
 - **San Francisco registered businesses:** `business_zip` (367,702 values) all 5-digit, 99.8% found,
   93 `99999`, state agreement 99.94%. `mail_zipcode` (165,810) holds 5,711 `99999` values (3.4%),
   apparently a placeholder (inference), which the draft's range rule already makes invalid.
-- **NYC dog licences, `zipcode`** (819,314 values): all 5-digit and found once 421 values shorter
-  than 5 digits are padded (92% of those padded values are then found).
+- **NYC dog licences, `zipcode`** (819,314 values): all 5-digit once 421 values shorter than 5 digits are padded, and 100.0% found to one decimal place. Of those 421 padded values, 92.16% are found, so about 33 are not: too few to move the rounded column figure.
 - **Chicago food inspections, `zip`** (317,069 values): all 5-digit and found; state agreement 100%.
 - **Washington electric vehicles, `zip_code`** (300,127 values): all 5-digit and found; state
   agreement 100%.
@@ -226,9 +225,7 @@ What each one showed:
 - **Seattle pet licences, `zip_code`** (38,291 values): all 5-digit and found.
 
 The portals supplied the run's only typed separated ZIP+4 columns at scale (Colorado, Connecticut,
-Los Angeles), and the only real column found with no 5-digit values (Los Angeles, separated). That
-matters for "mixed forms": it can only add evidence for bare 9-digit columns, never reject a
-column, because a real ZIP+4 column without 5-digit values exists.
+Los Angeles), and the only real column found with no 5-digit values (Los Angeles, separated). That bears on "mixed forms", by inference rather than measurement: a real ZIP+4 column with no 5-digit values exists, so if the same can happen with bare 9-digit values, "mixed forms" should only add evidence and never reject a column. No real bare 9-digit column without 5-digit values has been found, so whether it should ever reject is still open; see the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" in `TODO.md`.
 
 ## What the run concluded, with these files in it
 

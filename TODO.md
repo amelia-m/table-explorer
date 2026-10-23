@@ -13,22 +13,22 @@
   Measured 2026-10-23 on public files: guessing from every row took 2.7 s against `read.csv()`'s 2.2 s on a 3.1M-row all-text portal table, and 2.1 s against 2.7 s on a 203,805-row IRS file with number columns. On the IRS file `read.csv()` made 17 columns integers where `read_csv()` kept more as text; which columns, and why, is unchecked, and a per-column comparison would settle it. Its own PR from `main`, after the blank-values PR; merging waits for Amelia, since it changes what users see on upload.
 - [ ] **`fix/blank-is-missing`** (Amelia, 2026-10-23): blank and whitespace-only text is treated as missing wherever values are profiled. It is committed locally (812a19b). Its local review came back "with fixes": 9 findings, 1 critical, plus two questions for Amelia (whether DBML `not null` and YAML `required` follow the rule, and whether a non-breaking space counts as blank). They are listed in full, with status, in the local note `_scratch/blank-eval/review-812a19b.md`. Fix them, then push and open the PR. Merging waits for Amelia, since dictionary and Table Details counts change.
 
-## Review findings on #68 not yet applied (2026-10-23)
+## Review findings on #68 (2026-10-23), applied the same day
 
 From the local review of #68 (this branch, `docs/open-items-zip`) on 2026-10-23. Already done: the stale lines, the Seattle and Sacramento labels, package provenance, and the pre-rewrite build id. Amelia decided to keep "Several thousand", "two columns lost values" and the quoted "I think so but uncertain". The rest wait for her go-ahead; none needs a decision.
 
-- [ ] **A duplicate item.** "The six files left out of the Air reformat" appears in the ZIP block's work items and in the 2026-10-14 block. Keep the ZIP-block item, which carries the token-comparison method, and fold anything only the other says into it.
-- [ ] **An unsettled claim.** `docs/research/zip-detection/messy-test-data.md`, end of the portal section, says "mixed forms" can "never reject". It rests on a separated Los Angeles column, while the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" below lists the bare-only case as open. Label it an inference and point to that item.
-- [ ] **Two generic rewordings** (approved 2026-10-23). In the state-column item, "whether real extracts usually have one is uncertain" becomes "whether a typical extract has one is uncertain". In `messy-test-data.md`, "What they were for", "cleaner than a research extract" becomes "cleaner than typical extracts".
-- [ ] **Say where named files live.** `docs/contracts/2026-10-16-zip-detection-draft.md` "arrives with #70". `state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R` and `normalise()` are local, in `_scratch/research/`. `dev/fixtures/public/sweep_settings.R` and `tests/testthat/test-prose-parent.R` are on `feat/detection-settings-sweep` and `feat/prose-parent-guard`.
-- [ ] **A second duplicate.** The fread-versus-`read.csv()` type-guess assumption appears twice, in the ZIP block's assumptions and in the recovered items, with different checks. Merge them, keeping the column-by-column comparison. Note that the planned `read_csv()` switch may make it moot.
-- [ ] **The pointer item** in the recovered section says "one note" without how many items it holds, and its backticked path is split across two lines. Give the count and put the path on one line.
-- [ ] **NYC dogs** in `messy-test-data.md` reads "all found" next to "92% of those padded values are then found". Reword so the two agree.
-- [ ] **A decider and a path.** The containment item "Decide with the preset work" names no decider: add **Amelia decides**. Also write `app_server.R` as `R/app_server.R`.
-- [ ] **The PR list gives bare labels.** In "Pull requests waiting on Amelia", say what each needs from her: a visual check, a real-data check, or a merge.
-- [ ] **Cross-reference** the two ambiguity-demotion items: "Ambiguity-demoted links are returned with the rest" (recovered) and "Whether `resolve_fk_parents()`' ambiguity rule should be revisited" (2026-10-14 block).
-- [ ] **The profile's pointer-rule section** (`.agents/project-profile.md`): the global rules now carry the same rule, including this repository's 2026-10-19 example, so shrink the section to a one-line pointer to the global rule. Its heading says "the same day" while its body says "the same work block".
-- [ ] **Optional, Amelia's call:** unwrap the new prose in the three files, as its own commit; and merge three older duplicates: Pagila, Lahman in the user library, and `dev/check.R` not running the public harness.
+- [x] **A duplicate item.** "The six files left out of the Air reformat" appears in the ZIP block's work items and in the 2026-10-14 block. Keep the ZIP-block item, which carries the token-comparison method, and fold anything only the other says into it.
+- [x] **An unsettled claim.** `docs/research/zip-detection/messy-test-data.md`, end of the portal section, says "mixed forms" can "never reject". It rests on a separated Los Angeles column, while the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" below lists the bare-only case as open. Label it an inference and point to that item.
+- [x] **Two generic rewordings** (approved 2026-10-23). In the state-column item, "whether real extracts usually have one is uncertain" becomes "whether a typical extract has one is uncertain". In `messy-test-data.md`, "What they were for", "cleaner than a research extract" becomes "cleaner than typical extracts".
+- [x] **Say where named files live.** `docs/contracts/2026-10-16-zip-detection-draft.md` "arrives with #70". `state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R` and `normalise()` are local, in `_scratch/research/`. `dev/fixtures/public/sweep_settings.R` and `tests/testthat/test-prose-parent.R` are on `feat/detection-settings-sweep` and `feat/prose-parent-guard`.
+- [x] **A second duplicate.** The fread-versus-`read.csv()` type-guess assumption appears twice, in the ZIP block's assumptions and in the recovered items, with different checks. Merge them, keeping the column-by-column comparison. Note that the planned `read_csv()` switch may make it moot.
+- [x] **The pointer item** in the recovered section says "one note" without how many items it holds, and its backticked path is split across two lines. Give the count and put the path on one line.
+- [x] **NYC dogs** in `messy-test-data.md` reads "all found" next to "92% of those padded values are then found". Reword so the two agree.
+- [x] **A decider and a path.** The containment item "Decide with the preset work" names no decider: add **Amelia decides**. Also write `app_server.R` as `R/app_server.R`.
+- [x] **The PR list gives bare labels.** In "Pull requests waiting on Amelia", say what each needs from her: a visual check, a real-data check, or a merge.
+- [x] **Cross-reference** the two ambiguity-demotion items: "Ambiguity-demoted links are returned with the rest" (recovered) and "Whether `resolve_fk_parents()`' ambiguity rule should be revisited" (2026-10-14 block).
+- [x] **The profile's pointer-rule section** (`.agents/project-profile.md`): the global rules now carry the same rule, including this repository's 2026-10-19 example, so shrink the section to a one-line pointer to the global rule. Its heading says "the same day" while its body says "the same work block".
+- [x] **Optional, Amelia's call:** unwrap the new prose in the three files, as its own commit; and merge three older duplicates: Pagila, Lahman in the user library, and `dev/check.R` not running the public harness.
 
 ## Lost session on real data (2026-10-20)
 
@@ -64,7 +64,7 @@ Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableex
 In full wording. Research behind these lives in `_scratch/research/` (local only):
 `zip-repdigits.md`, `zip-validation-sources.md`, `zipcoder-contribution.md`,
 `zip4-threshold-measurement.md`, `state-agreement-results.csv`, `zip-messy-data.md`. The
-draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
+draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md` (arrives with #70).
 
 ### Decisions waiting on Amelia
 
@@ -78,8 +78,8 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       values also held 5-digit values; no identifier column did). Proposed rule: label ZIP+4 when
       the hit rate is at least 0.90 and either state agreement is at least 0.90 or 5- and
       9-digit forms are mixed; otherwise "probable ZIP+4", awaiting confirmation. **Amelia
-      decides** whether to adopt it. Synthetic test 2026-10-19 (`_scratch/research/
-      zip4-second-signal-synth.md`, one note): a ZIP+4-only column with no state column is
+      decides** whether to adopt it. Synthetic test 2026-10-19 (local note
+      `_scratch/research/zip4-second-signal-synth.md`, which holds 3 unverified items and 2 assumptions built into its script): a ZIP+4-only column with no state column is
       never rejected, it lands on "probable ZIP+4" in 100% of samples; with a state column it is
       ZIP+4 in 100%, but a state column 10% wrong splits 60/40 at the 0.90 cut. An identifier
       built in the densest ZIP block (770, 98.1% hit) passes state agreement when its rows are
@@ -110,8 +110,8 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       pads numeric columns); (iii) whether to commission new downloads to find more text
       columns with lost zeros and firm up the 83.3% margin; (iv) the invalid reason's wording,
       placeholder "4 digits; a ZIP has 5", which belongs in the ZIP detection draft.
-      Unverified there: that the app guesses column types as `fread` does (reading the app's
-      file-reading code would settle it); NYC Dog's "lost zeros" label, which no state confirms;
+      Unverified there: that the app guesses column types as `fread` does (merged into the
+      assumption "The messy-data 'read as number' rows" below); NYC Dog's "lost zeros" label, which no state confirms;
       that the TidyTuesday and Rdatasets Seattle pets columns are the same data. **Amelia
       decides** which to adopt.
 - [ ] **What "invalid" means.** Proposed: unreadable values, `00000`, and anything outside the
@@ -180,21 +180,27 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
 
 ### Pull requests waiting on Amelia
 
-- [ ] **#63** example values in the privacy review window, on request (interaction on real data).
+Each says what it needs from Amelia (open PRs listed by `gh pr list`, 2026-10-23).
+
+- [ ] **#63** example values in the privacy review window, on request. **Needs:** a real-data check, trying the examples toggle in the review window on her own extract, then a merge.
 - [x] **#64** Excel column types: fast 1,000-row guess by default, a notice on longer sheets. Merged 2026-10-21, after moving a YAML comment that broke CI out of the workflow's `extra-packages` block.
-- [ ] **#65** ERD settings and key collapsible, settings on one row (visual).
-- [ ] **#66** USPS ZIP list as a derived CSV plus the weekly update check. After merging, one
-      manual run from the Actions tab shows whether USPS lets GitHub's runners in.
-- [ ] **#67** privacy name additions (SSN spellings, tax ids, `bday`, `cell`).
+- [ ] **#65** ERD settings and key collapsible, settings on one row. **Needs:** a visual check in the app, then a merge.
+- [ ] **#66** USPS ZIP list as a derived CSV plus the weekly update check. **Needs:** a merge (CI was fixed on 2026-10-23 by merging `main`), then one manual run from the Actions tab, to see whether USPS lets GitHub's runners in.
+- [ ] **#67** privacy name additions (SSN spellings, tax ids, `bday`, `cell`). **Needs:** a merge, ideally after a look at which of her own columns the new name words flag, since a new word can catch an unrelated column.
+- [ ] **#68** this list and the profile additions. **Needs:** a merge after its local review fixes; before #70, whose profile section points to a section #68 adds.
+- [ ] **#69** asking which hidden Excel sheets to load (the other session's work). **Needs:** see its PR body; not reviewed from this session.
+- [ ] **#70** the four ZIP contracts and the rule on describing her own data. **Needs:** a merge, after #68.
+- [ ] **#54** and the Dependabot PRs #48 to #51 are covered elsewhere in this file: #54 waits on which of its three rules stay on; the Dependabot ones need only a merge once their CI is green (not checked on 2026-10-23).
 
 ### Work items, no decision needed
 
 - [ ] **Build the ZIP detection itself** once the decisions above are made, from
-      `docs/contracts/2026-10-16-zip-detection-draft.md`.
+      `docs/contracts/2026-10-16-zip-detection-draft.md` (arrives with #70).
 - [ ] **Pair each ZIP column with its state column** (added 2026-10-20, as part of the ZIP
       detection build). The state-agreement signal needs to know which column holds the row's
       state, and the app has no step that finds it: every measurement so far named the state
-      column by hand (`state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R`). Cases the
+      column by hand (`state_agreement.R`, `fec16_measure.R`, `zip_messy_measure.R`, all local
+      scripts in `_scratch/research/`). Cases the
       step has to handle, from the measured files: names that share a prefix with the ZIP
       column (`CMTE_ZIP` and `CMTE_ST`, `SF_SPONS_US_ZIP` and `SF_SPONS_US_STATE`, `mailingzipcode`
       and `mailingstate`); one table with several address blocks, where each ZIP must pair with
@@ -203,15 +209,19 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       both). How often a state column exists: 20 of the 21 measured columns with bare 9-digit
       values had one, but only 15 of 30 text ZIP columns in the messy-data run did, and the
       federal files are address records, which carry a state by nature; whether
-      her own extracts usually have one: "I think so but uncertain" (Amelia, 2026-10-20), so the step should not
+      a typical extract has one is uncertain (Amelia, 2026-10-20), so the step should not
       assume a state column is present. The step is also not
       in the draft contract yet; add it there.
 - [ ] **Literal non-ASCII characters in `R/mod_erd.R`**: 15 of them on 12 lines on `main` (counted 2026-10-23: 7 middle dots, 2 right arrows, 2 down arrows, and one each of a square with a vertical line, a check mark, a multiplication X and an empty-set sign). They render today and would break the way the sidebar chevrons did (#62) if the file were ever re-encoded. Convert them to `\u` escapes.
 - [ ] **Other disclosures lack a visible marker.** #65 (still open) adds a `te-disclosure` class to the ERD settings and key; it is not on `main` yet. The dictionary's "Privacy and example settings", the Table Details column lists and the unconnected-tables list still show no triangle. Once #65 merges, give each of them the class.
 - [ ] **The six files left out of the Air reformat** (#61) still need formatting once the
       detection chain lands: `R/utils_inference.R`, `tests/testthat/test-inference.R`,
-      `tests/testthat/test-prose-parent.R`, `dev/fixtures/public/fetch.R`,
-      `dev/fixtures/public/score_public.R`, `dev/fixtures/public/sweep_settings.R`.
+      `tests/testthat/test-prose-parent.R` (on `feat/prose-parent-guard`, not yet on `main`),
+      `dev/fixtures/public/fetch.R`, `dev/fixtures/public/score_public.R`,
+      `dev/fixtures/public/sweep_settings.R` (on `feat/detection-settings-sweep`, not yet on
+      `main`). They were left out because open branches edit them, and reformatting would mean
+      resolving the same conflict on each branch. Format them in their own formatter-only
+      commit once the chain has landed.
       How #61 proved its run changed nothing but formatting (the scripts were deleted
       2026-10-20, so the method is here): for each file, take the parse tokens of the committed
       and the formatted version with `utils::getParseData(parse(f, keep.source = TRUE))`,
@@ -233,6 +243,9 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       such a column would settle whether it should ever reject.
 - [ ] **The messy-data "read as number" rows** used `data.table::fread`'s type guess as a stand-in
       for the app's `read.csv()`; a column-by-column comparison would settle whether they match.
+      Reading the app's code does not settle it, since the app uses `read.csv()` (`R/utils_file_readers.R`),
+      not `fread`. The planned switch to `read_csv()` (decided 2026-10-23, at the top of this file)
+      changes the reader again, so compare against `read_csv()` once it lands, or drop this item.
 
 ## Recovered from older scratch notes (2026-10-19)
 
@@ -250,7 +263,9 @@ From the containment-signal hand-back (2026-10-10, branch `feat/containment-sign
       `customer.supportrepid -> employee.employeeid` came back at low (0.486) among eight junk
       siblings. **Amelia decides** between: `detect_fks()` dropping ambiguity-demoted links whose
       only value evidence is containment; or the Relationships tab hiding demoted links by
-      default, so the returned set and the reviewed set stop being the same list.
+      default, so the returned set and the reviewed set stop being the same list. Related: the
+      item "Whether `resolve_fk_parents()`' ambiguity rule should be revisited" (2026-10-14
+      block) is about the same demotion rule; decide the two together.
 - [ ] **Self-references cannot be found on values.** `detect_fks()` skips `t2 == t1` in the
       content path, so only `self_ref_match()`'s naming path can find a self-reference, and it
       misses Chinook's `employee.reportsto -> employee.employeeid`. Containment adds eight junk
@@ -258,9 +273,10 @@ From the containment-signal hand-back (2026-10-10, branch `feat/containment-sign
       decides** whether the content path should also run a table against its own `pk_map[[t1]]`.
 - [ ] **Containment has no switch of its own.** It is gated behind
       `enable_flags[["value_overlap"]]` (still so on `feat/tentative-presets`, checked
-      2026-10-19), because `app_server.R` passes an explicit flag list and a new key would read as
+      2026-10-19), because `R/app_server.R` passes an explicit flag list and a new key would read as
       `FALSE` there. If presets should switch containment on its own, the flag goes into
-      `R/utils_inference.R` and both callers in the same change. Decide with the preset work.
+      `R/utils_inference.R` and both callers in the same change. **Amelia decides**, as part of
+      the preset work.
 - [ ] **The "nearly contained" tier can never carry a link by itself.** A child needs 100
       distinct values before one can be the missing 1%, and from 25 distinct values the chance
       discount stops applying, so `containment_near` (0.99) always arrives with `overlap_high`
@@ -352,13 +368,7 @@ Read these with their limits in mind:
 
 Open items from this work:
 
-- [ ] **Pagila is deferred** (Amelia, 2026-10-10). It needs a running Postgres
-      instance, the only one of the four datasets that is not a file or a CRAN
-      package. Chinook already covers the conventionally named,
-      declared-constraint case, so nothing is blocked. Left open rather than
-      closed because the harness still names Pagila in its dataset list and
-      `score_public.R pagila` prints a SKIP line: either leave it as a known
-      gap or say so in the harness README.
+- [ ] **Pagila:** merged 2026-10-23 into the item "Pagila." in the 2026-10-14 block below, which carries the decision. Chinook already covers the conventionally named, declared-constraint case, so nothing is blocked meanwhile.
 - [ ] **The Lahman package lives in the user library, not the project renv
       library.** It was installed with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE`
       so that worktrees can see it. A clone on another machine, and CI, will
@@ -366,7 +376,7 @@ Open items from this work:
       than failing, so a CI run that silently stops measuring Lahman is
       possible. Either add Lahman to the renv lockfile, or make the harness
       exit non-zero when a dataset named on the command line is unavailable.
-- [ ] **Run the public harness (Chinook and Lahman) in `dev/check.R` and CI** (decided 2026-10-23, Amelia: yes). Until now `dev/check.R` ran only the synthetic scorer, so the public figures were measured by hand and could drift from the branch they are quoted against; the two datasets take about a minute together. To settle when building it, **Amelia decides**: what fails the check (any change in found or hit against a recorded baseline, or only a fall in recall or precision), where the baseline lives, and how CI gets the data (Chinook is a download the harness caches; Lahman needs the CRAN package, see the item above). FAERS stays manual: its detection run takes about half a minute (32 to 37 s on 2026-10-23), and its text files come to about 380 MB once unzipped.
+- [ ] **Run the public harness (Chinook and Lahman) in `dev/check.R` and CI** (decided 2026-10-23, Amelia: yes). Until now `dev/check.R` ran only the synthetic scorer, so the public figures were measured by hand and could drift from the branch they are quoted against; the two datasets take about a minute together. To settle when building it, **Amelia decides**: what fails the check (any change in found or hit against a recorded baseline, or only a fall in recall or precision), where the baseline lives, and how CI gets the data (Chinook is a download the harness caches; Lahman needs the CRAN package, see the item above). Also **Amelia decides: FAERS in CI or not.** For: it is the schema most like a real extract (large, barely named), so it catches content-signal regressions the other two miss. Against: its detection run takes 32 to 37 s (2026-10-23, locally) on about 380 MB of text once unzipped, CI would download the FDA zip each run or cache it (zip size unchecked), and its truth file is hand-written, so a change can be a truth-file problem. Proposed middle: Chinook and Lahman on every push; FAERS as a separate job, weekly or when `R/utils_inference.R` changes.
 - [ ] **Rule 4 (two-signal floor) from the detection work is still not
       done**: a single content signal cannot raise a candidate when the
       child column's distinct count is below a threshold (start at 5); it
@@ -466,7 +476,9 @@ rereads those for open work. Decisions are marked **Amelia decides**.
       requirement demotes five of six real FAERS `primaryid` links from high
       to low, which is a larger loss than the two links it buys. The two
       changes interact, and measuring either alone understates the other.
-      **Amelia decides** whether that is its own piece of work.
+      **Amelia decides** whether that is its own piece of work. Related: "Ambiguity-demoted
+      links are returned with the rest" (recovered items) is about the same rule; decide the two
+      together.
 - [ ] **Pagila.** Identified as a fourth public dataset and deferred
       (Amelia, 2026-10-10): it needs a running PostgreSQL instance. Until it
       is in, the harness covers three schemas, two of them small and
@@ -497,14 +509,7 @@ rereads those for open work. Decisions are marked **Amelia decides**.
 
 ### Work items, no decision needed
 
-- [ ] **The six excluded files still need formatting.** The partial Air
-      reformat deliberately leaves `R/utils_inference.R`,
-      `tests/testthat/test-inference.R`, `tests/testthat/test-prose-parent.R`,
-      `dev/fixtures/public/fetch.R`, `dev/fixtures/public/score_public.R` and
-      `dev/fixtures/public/sweep_settings.R` unformatted, because open
-      branches edit them and reformatting would mean resolving the same
-      conflict six times. Format them in their own formatter-only commit once
-      the detection chain has landed.
+- [ ] **The six excluded files:** merged 2026-10-23 into the item "The six files left out of the Air reformat" in the ZIP block's work items above.
 - [ ] **FAERS was measured at 8 of the 70 settings combinations**, and the
       two combinations handed over from the Chinook and Lahman frontiers both
       deduplicated onto rows already in its base set, so the frontier handoff
@@ -562,13 +567,7 @@ rereads those for open work. Decisions are marked **Amelia decides**.
       without one. A review is needed before a pull request is opened, if one
       ever is: the measurement's verdict was "do not relax", so the branch may
       exist only as evidence.
-- [ ] **Lahman comes from the CRAN package in the user library**, installed
-      with `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE` so that worktrees can see
-      it. A clone on another machine, and CI, will not have it:
-      `score_public.R lahman` prints a SKIP line there rather than failing, so
-      a CI run that silently stops measuring Lahman is possible. Either add
-      Lahman to the renv lockfile, or make the harness exit non-zero when a
-      dataset named on the command line is unavailable.
+- [ ] **Lahman in the user library:** merged 2026-10-23 into the item "The Lahman package lives in the user library, not the project renv library" in the 2026-10-10 block above.
 - [ ] **`dev/check.R` and the public harness:** decided 2026-10-23, merged into the item "Run the public harness (Chinook and Lahman) in `dev/check.R` and CI" in the 2026-10-10 block above.
 - [ ] **`dev/check.R` cannot disable the renv autoloader for its own
       session.** It sets the variable, but `.Rprofile` has already run by

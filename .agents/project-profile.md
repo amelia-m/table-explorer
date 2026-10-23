@@ -84,27 +84,11 @@ package as provenance) but don't commit copies of its data."
   work data. So do not raise EM 42 classification as a question about a
   public dataset. Her own data stays under the global rule.
 
-## Open items written elsewhere get a pointer the same day
+## Open items written elsewhere
 
-Amelia, 2026-10-19. Eight open items sat in notes under `_scratch/` and
-never reached `TODO.md`. Each note was written outside it for a good reason
-at the time (a contract's file scope, a checkout in use, a pull request
-body), and "move it later" relied on memory.
+The rule now lives in the global rules, under "Keep open items alive": when open items have to be written somewhere other than `TODO.md` (a contract's file scope, a checkout in use, a pull request body, a subagent's hand-back), a one-line pointer goes into `TODO.md` in the same work block, naming the note's path and how many items it holds; a note under `_scratch/` with no pointer counts as not written; and a dispatching session carries every deferred item, not only the ones it acts on. It came from this repository (Amelia, 2026-10-19: eight open items found in three notes under `_scratch/`).
 
-- **When open items have to be written somewhere other than `TODO.md`**
-  (a contract's file scope, a checkout in use, a pull request body, a
-  subagent's hand-back), put a one-line pointer in `TODO.md` in the same
-  work block, naming the note's path and how many items it holds. If even
-  that is impossible, say so in the final report, with the path.
-- **A note under `_scratch/` with no pointer counts as not written.** Git
-  ignores the folder, so nothing shows it as unfinished.
-- **A dispatching session carries every deferred item from a hand-back**,
-  not only the ones it acts on.
-- **At the end of a work block, check `_scratch/` for open-item notes** and
-  move or retire each one.
-
-If the global rules adopt the same rule, this section shrinks to a pointer
-to it.
+One addition kept here: **at the end of a work block, check `_scratch/` for open-item notes** and move or retire each one. That includes review reports a subagent hands back: their unapplied findings go into `TODO.md`, or a pointer to a saved copy, before replying to Amelia (2026-10-23, after a review's findings sat in the session unrecorded).
 
 ## Review, push and merge
 
