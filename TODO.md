@@ -2,12 +2,7 @@
 
 ## Lost session on real data (2026-10-20)
 
-Amelia loaded a few large files into build
-`tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16`, run from Positron with `shiny::runApp()`.
-Several thousand readxl warnings followed, then the Positron console showed
-"R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links
-she had confirmed and privacy decisions she had made were gone. No values or column names
-from her data are recorded here.
+Amelia loaded three files (one CSV, one `.xlsx`, one `.sav`) into build `tableexplorer 0.2.0 · 4b6f5e2+ · 2026-10-16`, run from Positron with `shiny::runApp()`. Several thousand readxl warnings followed, then the Positron console showed "R 4.6.1 offline. Waiting to reconnect.", and the app in the browser came back empty: links she had confirmed and privacy decisions she had made were gone. Figures about her data here are rounded, and no values or names from it are recorded (Amelia, 2026-10-21: rounded counts, sizes and file types are fine).
 
 - [ ] **Why Positron lost the R kernel.** Observed: after the event, Positron's R kernel
       (`ark`) was still running and still listening on 127.0.0.1:5640 with an established
@@ -15,8 +10,8 @@ from her data are recorded here.
       crash; Positron's console lost its link to the kernel. Hypothesis, not tested: the
       flood of readxl warnings to the console (many lines) overwhelmed
       Positron's console channel while R was busy reading. A second, weaker hypothesis is
-      memory (the kernel's memory stayed high afterwards). The check that would settle it: load the
-      same files on `main` at 525b9d2 or later (#64, merged 2026-10-21, muffles those
+      memory (the kernel held ~0.9 GB afterwards). The check that would settle it: load the
+      same files on current `main` (#64, merged 2026-10-21, muffles those
       warnings), and see whether the
       disconnect recurs. Whether to also report it to Positron is **Amelia's call**.
 - [ ] **The app keeps no state between Shiny sessions, so a dropped session loses all
@@ -27,19 +22,7 @@ from her data are recorded here.
       tables are loaded again. Where to keep them is a privacy question, because the
       decisions name columns and the saved session holds the data: **Amelia decides**
       whether autosave is wanted and where it may write.
-- [ ] **Readxl warnings flood the console and mean silently dropped values.** On `main`,
-      `read_excel_file()` (`R/utils_file_readers.R`) calls `readxl::read_excel()` with its
-      default 1,000-row type guess and no warning handler. A column that is blank for the
-      first 1,000 rows is guessed logical, and every later value is set to NA with one
-      warning each. In this event two columns lost values across a large
-      sheet, so anything reviewed on those columns was reviewed on missing data. Fixed by #64,
-      **merged 2026-10-21** (merge commit 525b9d2 on `main`, both CI checks green after a
-      workflow fix on the branch): it counts the warnings, muffles them, reports how many
-      values were set to missing per sheet, says on load that types were guessed from the
-      first 1,000 rows, and offers "Guess from every row". Re-review anything decided on the
-      affected columns after reloading on 525b9d2 or later. Open: readxl warnings come only from an Excel file, and
-      the files were described only roughly; which file produced them is
-      **Amelia's to say**, without sharing its contents.
+- [x] **Readxl warnings flood the console and mean silently dropped values.** Before #64, `read_excel_file()` (`R/utils_file_readers.R`) called `readxl::read_excel()` with its default 1,000-row type guess and no warning handler. A column that is blank for the first 1,000 rows is guessed logical, and every later value is set to NA with one warning each. In this event the `.xlsx` (Amelia, 2026-10-21, naming the three file types) lost values in 2 columns of a ~200k-row, ~110-column sheet, so anything reviewed on those columns was reviewed on missing data. Fixed by #64, **merged 2026-10-21** (its merge commit on `main` was renamed by the 2026-10-21 history scrub; `main` is now 3200db8): it counts the warnings, muffles them, reports how many values were set to missing per sheet, says on load that types were guessed from the first 1,000 rows, and offers "Guess from every row". Still for Amelia: re-review anything decided on the affected columns after reloading on current `main`.
 - [ ] **The build string's "+" counts untracked files.** `R/utils_helpers.R` marks the build
       dirty when `git status --porcelain` prints anything, so the untracked `docs/ref/`
       folder alone produced `4b6f5e2+` although the code was exactly `main`. Proposed: use
@@ -167,9 +150,7 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
 ### Pull requests waiting on Amelia
 
 - [ ] **#63** example values in the privacy review window, on request (interaction on real data).
-- [x] **#64** Excel column types: fast 1,000-row guess by default, a notice on longer sheets.
-      Merged 2026-10-21 as 525b9d2, after moving a YAML comment that broke CI out of the
-      workflow's `extra-packages` block.
+- [x] **#64** Excel column types: fast 1,000-row guess by default, a notice on longer sheets. Merged 2026-10-21, after moving a YAML comment that broke CI out of the workflow's `extra-packages` block.
 - [ ] **#65** ERD settings and key collapsible, settings on one row (visual).
 - [ ] **#66** USPS ZIP list as a derived CSV plus the weekly update check. After merging, one
       manual run from the Actions tab shows whether USPS lets GitHub's runners in.
@@ -191,7 +172,7 @@ draft build contract is `docs/contracts/2026-10-16-zip-detection-draft.md`.
       both). How often a state column exists: 20 of the 21 measured columns with bare 9-digit
       values had one, but only 15 of 30 text ZIP columns in the messy-data run did, and the
       federal files are address records, which carry a state by nature; whether
-      real extracts usually have one is uncertain (Amelia, 2026-10-20), so the step should not
+      her own extracts usually have one: "I think so but uncertain" (Amelia, 2026-10-20), so the step should not
       assume a state column is present. The step is also not
       in the draft contract yet; add it there.
 - [ ] **Literal non-ASCII characters in `R/mod_erd.R`** (nine of them: arrows, a download glyph,
