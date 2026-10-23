@@ -1,5 +1,18 @@
 # TODO
 
+## Decided 2026-10-23, not yet built
+
+- [ ] **Read CSV with `readr::read_csv()` instead of `read.csv()`** (Amelia, 2026-10-23: "let's switch to read_csv"). Agreed design:
+  - CSV always guesses column types from every row (`guess_max = Inf`), with no 1,000-row option.
+  - An optional "read every column as text" choice is added to the upload control.
+  - Blank text is read as missing, consistent with `fix/blank-is-missing`.
+  - Files are read as UTF-8, `readr`'s default, so a Latin-1 file shows garbled accents rather than failing. Detecting the encoding is left for later.
+  - `readr` goes into Imports and `renv.lock`.
+  - The `mdb-export` call that reads Access relationships keeps `read.csv()`.
+
+  Measured 2026-10-23 on public files: guessing from every row took 2.7 s against `read.csv()`'s 2.2 s on a 3.1M-row all-text portal table, and 2.1 s against 2.7 s on a 203,805-row IRS file with number columns. On the IRS file `read.csv()` made 17 columns integers where `read_csv()` kept more as text; which columns, and why, is unchecked, and a per-column comparison would settle it. Its own PR from `main`, after the blank-values PR; merging waits for Amelia, since it changes what users see on upload.
+- [ ] **`fix/blank-is-missing`** (Amelia, 2026-10-23): blank and whitespace-only text is treated as missing wherever values are profiled. It is committed locally and under local review; pushing and a PR follow. Merging waits for Amelia, since dictionary and Table Details counts change.
+
 ## Review findings on #68 not yet applied (2026-10-23)
 
 From the local review of #68 (this branch, `docs/open-items-zip`) on 2026-10-23. Already done: the stale lines, the Seattle and Sacramento labels, package provenance, and the pre-rewrite build id. Amelia decided to keep "Several thousand", "two columns lost values" and the quoted "I think so but uncertain". The rest wait for her go-ahead; none needs a decision.
