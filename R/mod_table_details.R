@@ -41,10 +41,14 @@ mod_table_details_server <- function(
           function(x) paste(class(x), collapse = "/"),
           character(1)
         ),
-        non_null = vapply(df, function(x) sum(!is.na(x)), integer(1)),
+        non_null = vapply(
+          df,
+          function(x) sum(!is.na(blank_as_na(x))),
+          integer(1)
+        ),
         unique_vals = vapply(
           df,
-          function(x) length(unique(na.omit(x))),
+          function(x) length(unique(na.omit(blank_as_na(x)))),
           integer(1)
         ),
         is_pk = names(df) %in% pk_v,
@@ -184,10 +188,14 @@ mod_table_details_server <- function(
                   function(x) paste(class(x), collapse = "/"),
                   character(1)
                 ),
-                `Non-null` = vapply(df, function(x) sum(!is.na(x)), integer(1)),
+                `Non-null` = vapply(
+                  df,
+                  function(x) sum(!is.na(blank_as_na(x))),
+                  integer(1)
+                ),
                 `Unique` = vapply(
                   df,
-                  function(x) length(unique(na.omit(x))),
+                  function(x) length(unique(na.omit(blank_as_na(x)))),
                   integer(1)
                 ),
                 `PK` = pk_marker,

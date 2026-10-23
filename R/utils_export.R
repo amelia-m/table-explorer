@@ -897,6 +897,7 @@ dict_entry_empty <- function(e) {
 
 # A readable format: the value fingerprint for text, else from the type
 dict_format <- function(v) {
+  v <- blank_as_na(v)
   if (inherits(v, "POSIXt")) {
     return("datetime")
   }
@@ -1010,7 +1011,7 @@ build_data_dictionary <- function(
     out_rels <- Filter(function(r) r$from_table == t$name, model$rels)
     lapply(seq_len(nrow(cols)), function(i) {
       cn <- cols$name[i]
-      v <- df[[cn]]
+      v <- blank_as_na(df[[cn]])
       if (is.factor(v)) {
         v <- as.character(v)
       }
@@ -1406,7 +1407,7 @@ generate_data_dict_yaml <- function(
       drop = FALSE
     ]
     cn <- t$columns$name[i]
-    v <- tables[[t$name]][[cn]]
+    v <- blank_as_na(tables[[t$name]][[cn]])
     if (is.factor(v)) {
       v <- as.character(v)
     }

@@ -295,6 +295,7 @@ is_lookup_name <- function(tname) {
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {
+  df <- blanks_as_na(df)
   # The answer depends on column names and on which columns are unique, so
   # key on the content, not just the shape (small tables are cheap to hash;
   # larger ones fail the size test and never reach it)
@@ -364,7 +365,7 @@ jaro_winkler_sim <- function(s1, s2) {
 # ── Format fingerprint ───────────────────────────────────────
 
 format_fingerprint <- function(col, sample_size = 200) {
-  vals <- na.omit(col)
+  vals <- na.omit(blank_as_na(col))
   if (length(vals) == 0) {
     return(NULL)
   }
@@ -386,6 +387,7 @@ format_fingerprint <- function(col, sample_size = 200) {
 # column rather than once per candidate pair.
 
 column_profile <- function(v, sample_cap = 5000) {
+  v <- blank_as_na(v)
   vals <- as.character(v[!is.na(v)])
   uniq <- unique(vals)
   uniq_sample <- uniq
@@ -462,8 +464,8 @@ null_pattern_correlation <- function(df1, col1, df2, col2) {
   if (nrow(df1) != nrow(df2) || nrow(df1) < 2) {
     return(0.0)
   }
-  mask1 <- as.numeric(is.na(df1[[col1]]))
-  mask2 <- as.numeric(is.na(df2[[col2]]))
+  mask1 <- as.numeric(is.na(blank_as_na(df1[[col1]])))
+  mask2 <- as.numeric(is.na(blank_as_na(df2[[col2]])))
   if (sd(mask1) == 0 || sd(mask2) == 0) {
     return(0.0)
   }
@@ -476,6 +478,7 @@ null_pattern_correlation <- function(df1, col1, df2, col2) {
 # ── Primary key detection ────────────────────────────────────
 
 detect_pks <- function(df, table_name, method = "both") {
+  df <- blanks_as_na(df)
   cols <- names(df)
   candidates <- character(0)
   n <- nrow(df)
@@ -871,6 +874,7 @@ detect_composite_pks <- function(
   if (n < 2L) {
     return(list())
   }
+  df <- blanks_as_na(df)
 
   unique_cols <- detect_pks(df, table_name, method = "uniqueness")
 
@@ -976,6 +980,8 @@ detect_fks <- function(
   if (method == "manual" || length(tables) < 2) {
     return(list())
   }
+  # Once per scan, so every signal below sees blank text as missing
+  tables <- lapply(tables, blanks_as_na)
 
   conf_rank <- c(low = 0L, medium = 1L, high = 2L)
   min_rank <- conf_rank[[min_confidence]]
@@ -1541,6 +1547,7 @@ detect_shared_columns <- function(
   if (length(tnames) < 2) {
     return(list())
   }
+  tables <- lapply(tables, blanks_as_na)
   unique_cols <- lapply(tables, function(df) {
     n <- nrow(df)
     if (n == 0) {

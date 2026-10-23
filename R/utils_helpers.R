@@ -15,6 +15,47 @@
   }
 }
 
+# ── Blank values ─────────────────────────────────────────────
+# A blank text value, "" or whitespace only, is an absent value, not a
+# value: treat it as missing, the same as NA, wherever values are profiled
+# (FK and key detection, the data dictionary, privacy checks). Kept as ""
+# it counted as a real, shared value, so two text columns that both held
+# blanks overlapped on it, and a dictionary undercounted missing text.
+# Only character and factor columns are touched; other types pass through.
+
+#' @noRd
+blank_as_na <- function(x) {
+  if (is.factor(x)) {
+    lv <- levels(x)
+    blank_lv <- lv[grepl("^[[:space:]]*$", lv)]
+    if (length(blank_lv)) {
+      x[x %in% blank_lv] <- NA
+    }
+    return(x)
+  }
+  if (!is.character(x)) {
+    return(x)
+  }
+  b <- !is.na(x) & grepl("^[[:space:]]*$", x)
+  if (any(b)) {
+    x[b] <- NA_character_
+  }
+  x
+}
+
+#' @noRd
+blanks_as_na <- function(df) {
+  if (!is.data.frame(df)) {
+    return(df)
+  }
+  for (j in seq_along(df)) {
+    if (is.character(df[[j]]) || is.factor(df[[j]])) {
+      df[[j]] <- blank_as_na(df[[j]])
+    }
+  }
+  df
+}
+
 #' Stable key for a relationship, used for suppress/confirm decisions
 #' @noRd
 rel_key <- function(r) {
