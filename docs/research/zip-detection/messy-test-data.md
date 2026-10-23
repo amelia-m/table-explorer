@@ -1,51 +1,25 @@
 # Public data used in the messy-data ZIP measurement
 
-Written 2026-10-20 from `zip-messy-data.md`, `messy_download_files.R`, `messy_download.R` and
-their logs. Those, the other scripts named below and the downloads live in the
-git-ignored `_scratch/research/` folder (paths such as `data/public/messy/` are relative to it), so
-this file is the durable record of what was pulled, why, and what each file showed. None of the
-data is committed, following the project profile's rule on public test data: counts, rates and
-checksums only. TidyTuesday comes first, then the Rdatasets files, then the open-data portal
-tables. The TidyTuesday and Rdatasets files were deleted locally on 2026-10-20; only the portal
-tables (with their `meta/` schemas and `header_scan.csv`) are still in
-`_scratch/research/data/public/messy/`.
+Written 2026-10-20 from `zip-messy-data.md`, `messy_download_files.R`, `messy_download.R` and their logs. Those, the other scripts named below and the downloads live in the git-ignored `_scratch/research/` folder (paths such as `data/public/messy/` are relative to it), so this file is the durable record of what was pulled, why, and what each file showed. None of the data is committed, following the project profile's rule on public test data: counts, rates and checksums only. TidyTuesday comes first, then the Rdatasets files, then the open-data portal tables. The TidyTuesday and Rdatasets files were deleted locally on 2026-10-20; only the portal tables (with their `meta/` schemas and `header_scan.csv`) are still in `_scratch/research/data/public/messy/`.
 
 ## What they were for
 
-The ZIP+4 detection draft (`docs/contracts/2026-10-16-zip-detection-draft.md`, arriving with #70) proposes
-confirming a column of 9-digit values as ZIP+4 when at least 90% of them have a first five digits
-in the USPS list, with state agreement and "mixed forms" (5- and 9-digit values in one column) as
-second signals. Those were first measured on federal files (IRS, FEC, CMS, DOL), which are probably
-cleaner than typical extracts. The messy-data run of 2026-10-17 tested them on ZIP columns typed
-by people or merged from several systems: city and state open-data portals, Rdatasets and these
-TidyTuesday files.
+The ZIP+4 detection draft (`docs/contracts/2026-10-16-zip-detection-draft.md`, arriving with #70) proposes confirming a column of 9-digit values as ZIP+4 when at least 90% of them have a first five digits in the USPS list, with state agreement and "mixed forms" (5- and 9-digit values in one column) as second signals. Those were first measured on federal files (IRS, FEC, CMS, DOL), which are probably cleaner than typical extracts. The messy-data run of 2026-10-17 tested them on ZIP columns typed by people or merged from several systems: city and state open-data portals, Rdatasets and these TidyTuesday files.
 
-The TidyTuesday files supplied most of the run's **bare 9-digit** columns, the case that needs
-confirming (EADA sports, NYC elevators, NSF terminations), its one **identifier control** (Petfinder
-`id`), and several examples of literal `NA` text and lost leading zeros.
+The TidyTuesday files supplied most of the run's **bare 9-digit** columns, the case that needs confirming (EADA sports, NYC elevators, NSF terminations), its one **identifier control** (Petfinder `id`), and several examples of literal `NA` text and lost leading zeros.
 
 ## How they were fetched
 
-- Found by `messy_header_scan.R`, which read only the header line of 1,189 TidyTuesday CSV and TSV
-  files (HTTP Range request) and listed ZIP-like column names (`data/public/messy/header_scan.csv`;
-  the repository tree it scanned is `data/public/messy/tidytuesday_tree.json`).
-- Downloaded by `messy_download_files.R` on 2026-10-17 at 23:28 UTC from
-  `https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/<path>`, saved as
-  `data/public/messy/files/tt_<name>.csv`. **Whole files, every column**, unlike the portal tables,
-  of which only the ZIP and state columns were downloaded.
+- Found by `messy_header_scan.R`, which read only the header line of 1,189 TidyTuesday CSV and TSV files (HTTP Range request) and listed ZIP-like column names (`data/public/messy/header_scan.csv`; the repository tree it scanned is `data/public/messy/tidytuesday_tree.json`).
+- Downloaded by `messy_download_files.R` on 2026-10-17 at 23:28 UTC from `https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/<path>`, saved as `data/public/messy/files/tt_<name>.csv`. **Whole files, every column**, unlike the portal tables, of which only the ZIP and state columns were downloaded.
 - Only the ZIP, state and identifier columns were read. No row was printed, saved or reported.
-- The TidyTuesday commit was not recorded, so a fetch from a later `main` could differ. The MD5s
-  below pin what was measured.
-- Licence: the TidyTuesday repository is CC0 1.0 (its `LICENSE` file, corroborated by WebFetch).
-  The original publishers' own terms were **not read**. Publishers below are taken from folder and
-  file names, not from each week's README (corroborated at best).
-- Some files contain names (restaurant names, Petfinder animal names). They are public, and none
-  of those columns was read.
+- The TidyTuesday commit was not recorded, so a fetch from a later `main` could differ. The MD5s below pin what was measured.
+- Licence: the TidyTuesday repository is CC0 1.0 (its `LICENSE` file, corroborated by WebFetch). The original publishers' own terms were **not read**. Publishers below are taken from folder and file names, not from each week's README (corroborated at best).
+- Some files contain names (restaurant names, Petfinder animal names). They are public, and none of those columns was read.
 
 ## The files
 
-Sizes in bytes. "n" is non-missing, non-blank ZIP values. "Found" is the share whose first five
-digits are in the USPS list.
+Sizes in bytes. "n" is non-missing, non-blank ZIP values. "Found" is the share whose first five digits are in the USPS list.
 
 | Saved as | TidyTuesday path | Publisher | Size | MD5 | Columns used |
 |---|---|---|---|---|---|
@@ -67,37 +41,19 @@ Thirteen files, 376,266,995 bytes (about 359 MiB) in all.
 
 ## What each one showed
 
-- **NYC restaurants, `zipcode`** (295,386 values): every value 5 digits and found. A clean
-  5-digit baseline.
-- **Philadelphia parking tickets, `zip_code`** (1,260,891 values as text): 173,588 (13.77%) are the
-  literal text `NA`; every other value is 5 digits and found. The app's `read.csv()` turns `NA`
-  into missing by default, so the app would see them as missing rather than as failures.
-- **Petfinder dog descriptions:** `contact_zip` (58,180 values) 99.8% found, and its USPS state
-  matches `contact_state` 100% of the time. **`id` is the run's identifier control:** every value
-  is 9 bare digits, only 29.45% have a first five digits in the USPS list, and state agrees on
-  0.95%. So both the 0.90 threshold and state agreement reject it.
+- **NYC restaurants, `zipcode`** (295,386 values): every value 5 digits and found. A clean 5-digit baseline.
+- **Philadelphia parking tickets, `zip_code`** (1,260,891 values as text): 173,588 (13.77%) are the literal text `NA`; every other value is 5 digits and found. The app's `read.csv()` turns `NA` into missing by default, so the app would see them as missing rather than as failures.
+- **Petfinder dog descriptions:** `contact_zip` (58,180 values) 99.8% found, and its USPS state matches `contact_state` 100% of the time. **`id` is the run's identifier control:** every value is 9 bare digits, only 29.45% have a first five digits in the USPS list, and state agrees on 0.95%. So both the 0.90 threshold and state agreement reject it.
 - **SF building permits, `zipcode`** (86,103 values): all 5 digits and found; 26 literal `NA`.
-- **EADA sports, `zip_text`** (132,327 values): 9.3% bare 9-digit (12,371), found at 99.96%, mixed
-  with 5-digit values. State agreement 99.90% overall and 99.84% on the 9-digit values. 45 literal
-  `NA`. A typical real bare ZIP+4 column.
-- **Alternative fuel stations, `ZIP`** (59,927 values): 99.9% found, state agreement 99.90%, one
-  `00000`. Its `PLUS4` column holds no non-blank value, so no ZIP+4 could be built from it.
-- **NYC elevators, `ZIP_CODE`** (76,081 values): 82.2% bare 9-digit (62,521), all found, and every
-  one ends in `0000` (a ZIP with `0000` appended, or a zero-filled +4; inference). That supports
-  the draft's choice not to treat a `0000` +4 as invalid. 8,389 values are a lone `0`, which
-  becomes `00000` and is invalid either way.
-- **NSF terminations, `org_zip`** (1,041 values): 95.8% bare 9-digit (997), all found, and only
-  4.2% 5-digit. The thinnest "mixed forms" case measured.
-- **Seattle pets, `zip_code`** (52,519 values): 99.1% 5-digit; 71 separated ZIP+4s, all found; 397
-  literal `NA`.
-- **Broadband by ZIP, `POSTAL CODE`** (32,735 values): 2,406 values had lost their leading zero
-  and are padded back correctly; 99.9% found; state agreement 99.92%.
-- **NYC squirrels, `zip_codes`** (3,023 values): 3,014 are the literal `NA`; the other 9 are
-  probably a Socrata region code, not ZIPs (inference). Reported, not used in any conclusion.
-- **Barstool pizza, `zip`** (463 values): 64 four-digit values (leading zero already lost in the
-  file), padded back and found.
-- **Saferparks:** no ZIP column. Downloaded only because the header scan could not read its first
-  line. Not used.
+- **EADA sports, `zip_text`** (132,327 values): 9.3% bare 9-digit (12,371), found at 99.96%, mixed with 5-digit values. State agreement 99.90% overall and 99.84% on the 9-digit values. 45 literal `NA`. A typical real bare ZIP+4 column.
+- **Alternative fuel stations, `ZIP`** (59,927 values): 99.9% found, state agreement 99.90%, one `00000`. Its `PLUS4` column holds no non-blank value, so no ZIP+4 could be built from it.
+- **NYC elevators, `ZIP_CODE`** (76,081 values): 82.2% bare 9-digit (62,521), all found, and every one ends in `0000` (a ZIP with `0000` appended, or a zero-filled +4; inference). That supports the draft's choice not to treat a `0000` +4 as invalid. 8,389 values are a lone `0`, which becomes `00000` and is invalid either way.
+- **NSF terminations, `org_zip`** (1,041 values): 95.8% bare 9-digit (997), all found, and only 4.2% 5-digit. The thinnest "mixed forms" case measured.
+- **Seattle pets, `zip_code`** (52,519 values): 99.1% 5-digit; 71 separated ZIP+4s, all found; 397 literal `NA`.
+- **Broadband by ZIP, `POSTAL CODE`** (32,735 values): 2,406 values had lost their leading zero and are padded back correctly; 99.9% found; state agreement 99.92%.
+- **NYC squirrels, `zip_codes`** (3,023 values): 3,014 are the literal `NA`; the other 9 are probably a Socrata region code, not ZIPs (inference). Reported, not used in any conclusion.
+- **Barstool pizza, `zip`** (463 values): 64 four-digit values (leading zero already lost in the file), padded back and found.
+- **Saferparks:** no ZIP column. Downloaded only because the header scan could not read its first line. Not used.
 
 ## The Rdatasets files
 
@@ -105,16 +61,9 @@ Rdatasets (https://vincentarelbundock.github.io/Rdatasets/) serves CSV copies of
 
 **Since 2026-10-23 these datasets are loaded from the packages themselves** (Amelia, 2026-10-23), with `utils::data()` in `zip_messy_measure.R --only=packages`, so the package is the provenance and no CSV copy is fetched. The section "Loaded from the packages" below gives the versions and how the results changed. The record of what was downloaded from Rdatasets stays here as it was.
 
-- Found by the same header scan, over all 3,648 Rdatasets CSVs, using its index
-  (`data/public/messy/rdatasets_index.csv`).
-- Downloaded by `messy_download_files.R` on 2026-10-17 at 23:28 UTC from
-  `https://vincentarelbundock.github.io/Rdatasets/csv/<package>/<item>.csv`, saved as
-  `data/public/messy/files/rd_<package>_<item>.csv`. Whole files, every column. Only the ZIP and
-  state columns were read.
-- Licence: Rdatasets says its code is GPL-3 and that it found no definitive licence for the
-  datasets, which it believes are free to redistribute (corroborated, WebFetch of the site's front
-  page). The packages' own licences were **not read**. Each file's provenance is its package, which
-  is the citation to use in docs.
+- Found by the same header scan, over all 3,648 Rdatasets CSVs, using its index (`data/public/messy/rdatasets_index.csv`).
+- Downloaded by `messy_download_files.R` on 2026-10-17 at 23:28 UTC from `https://vincentarelbundock.github.io/Rdatasets/csv/<package>/<item>.csv`, saved as `data/public/messy/files/rd_<package>_<item>.csv`. Whole files, every column. Only the ZIP and state columns were read.
+- Licence: Rdatasets says its code is GPL-3 and that it found no definitive licence for the datasets, which it believes are free to redistribute (corroborated, WebFetch of the site's front page). The packages' own licences were **not read**. Each file's provenance is its package, which is the citation to use in docs.
 - Rdatasets does not state an edition for these files, so the MD5s are the only pin.
 
 | Saved as | Package and dataset | Original source (corroborated) | Size | MD5 | Columns used |
@@ -130,16 +79,12 @@ Six files, 5,470,381 bytes (about 5.2 MiB) in all.
 
 What each one showed:
 
-- **College Scorecard, `zip`** (11,300 values): the richest of the six. 56.0% 5-digit and 43.9%
-  9-digit (4,966: 608 bare, 4,358 separated), found at 99.66% (the bare ones at 100%). State
-  agreement 99.76% overall and 99.56% on 9-digit values. 4.0% of the 9-digit values have a `0000`
-  +4. A real mixed column, with both bare and separated ZIP+4s.
+- **College Scorecard, `zip`** (11,300 values): the richest of the six. 56.0% 5-digit and 43.9% 9-digit (4,966: 608 bare, 4,358 separated), found at 99.66% (the bare ones at 100%). State agreement 99.76% overall and 99.56% on 9-digit values. 4.0% of the 9-digit values have a `0000` +4. A real mixed column, with both bare and separated ZIP+4s.
 - **Seattle pets via openintro, `zip_code`** (52,122 values): probably the same City of Seattle data as the TidyTuesday copy (inference from the publisher and the counts; not compared value by value), but the 397 literal `NA` values arrive as missing here, presumably because the package stored them as `NA` (inference). 71 separated ZIP+4s, all found.
 - **Sacramento, `zip`** (932 values): every value is shaped `A99999`, a letter before five digits, so none normalises and the column is never recognised as a ZIP. The package itself stores it that way: loaded from `modeldata` 1.6.0 it is a factor with 68 levels, all 932 values shaped `A99999` (verified 2026-10-23, shape masks only), so the prefix is not an artefact of Rdatasets' CSV conversion. A useful example of a ZIP column the detection will miss by design.
 - **RailsTrails, `Zip`** (104 values): every value is 4 digits, Massachusetts ZIPs whose leading zero is gone because the package stores the column as an integer (verified 2026-10-23 by loading it from the package), padded back and all found. Systematic loss, the case the "leading zeros lost" note is for.
 - **Michigan schools, `zipcode`** (229 values): all 5 digits and found. A clean small column.
-- **`openintro::nyc`:** no ZIP column. Downloaded only because the header scan could not read its
-  first line. Not used.
+- **`openintro::nyc`:** no ZIP column. Downloaded only because the header scan could not read its first line. Not used.
 
 ### Loaded from the packages (2026-10-23)
 
@@ -158,23 +103,12 @@ No conclusion in this record changes. The College Scorecard edition differs, and
 
 ## The open-data portal tables
 
-Ten tables from city and state Socrata portals, chosen because their ZIPs were typed by people
-(licences, inspections, business filings) and several hold ZIP+4 or a state column.
+Ten tables from city and state Socrata portals, chosen because their ZIPs were typed by people (licences, inspections, business filings) and several hold ZIP+4 or a state column.
 
-- Found by reading each portal's catalogue and each table's own schema, licence and update date
-  (`messy_socrata_meta.R`; the schemas are saved in `data/public/messy/meta/<domain>_<id>.json`).
-- Downloaded by `messy_download.R` from
-  `https://<domain>/resource/<id>.csv?$select=<columns>&$order=:id&$limit=200000&$offset=<k>`
-  (dataset page `https://<domain>/d/<id>`), saved as `data/public/messy/<domain>_<id>.csv`.
-  **Only the ZIP and state columns were downloaded**, over the whole table, so no other field
-  (names, addresses, licence numbers) ever reached this machine.
-- Every table arrived complete: rows received equal the publisher's `count(*)` at download time
-  (verified, `messy_download.log` and `messy_download2.log`). The first four were downloaded on
-  2026-10-17 at about 00:31 UTC, the other six about 23 hours later.
-- "Updated" is Socrata's `rowsUpdatedAt` (UTC), read on 2026-10-17 at about 00:30 UTC. The later
-  six downloads may hold rows newer than that. Portal tables change daily, so a fresh download
-  will not reproduce these counts; the MD5s pin what was measured. They were computed on
-  2026-10-20 from the saved files, whose sizes match the download log byte for byte.
+- Found by reading each portal's catalogue and each table's own schema, licence and update date (`messy_socrata_meta.R`; the schemas are saved in `data/public/messy/meta/<domain>_<id>.json`).
+- Downloaded by `messy_download.R` from `https://<domain>/resource/<id>.csv?$select=<columns>&$order=:id&$limit=200000&$offset=<k>` (dataset page `https://<domain>/d/<id>`), saved as `data/public/messy/<domain>_<id>.csv`. **Only the ZIP and state columns were downloaded**, over the whole table, so no other field (names, addresses, licence numbers) ever reached this machine.
+- Every table arrived complete: rows received equal the publisher's `count(*)` at download time (verified, `messy_download.log` and `messy_download2.log`). The first four were downloaded on 2026-10-17 at about 00:31 UTC, the other six about 23 hours later.
+- "Updated" is Socrata's `rowsUpdatedAt` (UTC), read on 2026-10-17 at about 00:30 UTC. The later six downloads may hold rows newer than that. Portal tables change daily, so a fresh download will not reproduce these counts; the MD5s pin what was measured. They were computed on 2026-10-20 from the saved files, whose sizes match the download log byte for byte.
 
 | Saved as | Publisher, dataset | Updated | Rows | Size | MD5 | Columns downloaded | Terms, as the publisher states them |
 |---|---|---|---|---|---|---|---|
@@ -189,56 +123,27 @@ Ten tables from city and state Socrata portals, chosen because their ZIPs were t
 | `data.cityofnewyork.us_43nn-pn8j.csv` | NYC DOHMH, Restaurant Inspection Results | 2026-10-16 | 296,819 | 2,655,677 | `b19b32526f70bc0f4cad850b38a443c2` | `zipcode` | As for Dog Licensing |
 | `data.seattle.gov_jguv-t9rb.csv` | City of Seattle, Seattle Pet Licenses | 2026-10-06 | 38,413 | 345,116 | `f2826fca2b2bb30a4d5c7d3ad15b543c` | `zip_code` | Public Domain (metadata, verified) |
 
-Ten tables, 152,455,160 bytes (about 145 MiB), plus ten small schema files in `meta/`. The
-Washington table is under the ODbL. This file publishes only counts and rates from it; whether
-the ODbL's share-alike terms reach summary figures like these was not checked.
+Ten tables, 152,455,160 bytes (about 145 MiB), plus ten small schema files in `meta/`. The Washington table is under the ODbL. This file publishes only counts and rates from it; whether the ODbL's share-alike terms reach summary figures like these was not checked.
 
 What each one showed:
 
-- **Colorado business entities** (3,031,769 principal ZIPs, 897,214 mailing): the largest and
-  messiest. 2.9% and 4.3% 9-digit, mostly separated (85,392 and 37,547) with a few thousand bare.
-  Found at 97.99% and 97.35%. Held 6 to 8 digit typos that front-padding turns into fake ZIP+4s
-  (1,648 and 963 of them, found at 1.46% and 1.25%), which is why proposal 2 says not to pad 6 to
-  8 digit text values. Counted with those, the bare 9-digit subset falls to 31.84% and 34.62%;
-  without them, exactly-9-digit bare values are found at 99.86% and 99.80%. Also 1,075 `00000`,
-  Canadian and UK postcodes, `99999-` and `99999-____` shapes, and 4-digit values that are typos,
-  not lost zeros (their state agrees only 5.42% of the time). State agreement 99.75% and 99.52%
-  overall, 99.62% and 99.31% on 9-digit values.
-- **Connecticut business registry, `billingpostalcode`** (1,059,887 values): 19.8% 9-digit, almost
-  all separated (209,791), found at 99.94%; state agreement 99.87% overall and 99.97% on 9-digit
-  values. `records_address_zip_code` has only 415 values.
-- **Los Angeles active businesses:** in `zip_code` (632,799 values) every value that normalises is
-  a separated ZIP+4 (589,232), found at 100%, and none is 5-digit: a real column with no 5-digit
-  values at all. 43,206 values are
-  `99999-` (a trailing separator, empty +4), which `normalise()` (in the local `_scratch/research/zip_messy_measure.R`) rejects, so the column normalises
-  at only 93.1%. `mailing_zip_code` (341,602) is 88.8% 9-digit, also separated.
-- **Chicago business licences, `zip_code`** (1,208,861 values): all 5-digit, 99.9% found; 128
-  `00000` and 139 text placeholders. State agreement 99.97%.
-- **San Francisco registered businesses:** `business_zip` (367,702 values) all 5-digit, 99.8% found,
-  93 `99999`, state agreement 99.94%. `mail_zipcode` (165,810) holds 5,711 `99999` values (3.4%),
-  apparently a placeholder (inference), which the draft's range rule already makes invalid.
+- **Colorado business entities** (3,031,769 principal ZIPs, 897,214 mailing): the largest and messiest. 2.9% and 4.3% 9-digit, mostly separated (85,392 and 37,547) with a few thousand bare. Found at 97.99% and 97.35%. Held 6 to 8 digit typos that front-padding turns into fake ZIP+4s (1,648 and 963 of them, found at 1.46% and 1.25%), which is why proposal 2 says not to pad 6 to 8 digit text values. Counted with those, the bare 9-digit subset falls to 31.84% and 34.62%; without them, exactly-9-digit bare values are found at 99.86% and 99.80%. Also 1,075 `00000`, Canadian and UK postcodes, `99999-` and `99999-____` shapes, and 4-digit values that are typos, not lost zeros (their state agrees only 5.42% of the time). State agreement 99.75% and 99.52% overall, 99.62% and 99.31% on 9-digit values.
+- **Connecticut business registry, `billingpostalcode`** (1,059,887 values): 19.8% 9-digit, almost all separated (209,791), found at 99.94%; state agreement 99.87% overall and 99.97% on 9-digit values. `records_address_zip_code` has only 415 values.
+- **Los Angeles active businesses:** in `zip_code` (632,799 values) every value that normalises is a separated ZIP+4 (589,232), found at 100%, and none is 5-digit: a real column with no 5-digit values at all. 43,206 values are `99999-` (a trailing separator, empty +4), which `normalise()` (in the local `_scratch/research/zip_messy_measure.R`) rejects, so the column normalises at only 93.1%. `mailing_zip_code` (341,602) is 88.8% 9-digit, also separated.
+- **Chicago business licences, `zip_code`** (1,208,861 values): all 5-digit, 99.9% found; 128 `00000` and 139 text placeholders. State agreement 99.97%.
+- **San Francisco registered businesses:** `business_zip` (367,702 values) all 5-digit, 99.8% found, 93 `99999`, state agreement 99.94%. `mail_zipcode` (165,810) holds 5,711 `99999` values (3.4%), apparently a placeholder (inference), which the draft's range rule already makes invalid.
 - **NYC dog licences, `zipcode`** (819,314 values): all 5-digit once 421 values shorter than 5 digits are padded, and 100.0% found to one decimal place. Of those 421 padded values, 92.16% are found, so about 33 are not: too few to move the rounded column figure.
 - **Chicago food inspections, `zip`** (317,069 values): all 5-digit and found; state agreement 100%.
-- **Washington electric vehicles, `zip_code`** (300,127 values): all 5-digit and found; state
-  agreement 100%.
+- **Washington electric vehicles, `zip_code`** (300,127 values): all 5-digit and found; state agreement 100%.
 - **NYC restaurant inspections, `zipcode`** (293,678 values): all 5-digit and found.
 - **Seattle pet licences, `zip_code`** (38,291 values): all 5-digit and found.
 
-The portals supplied the run's only typed separated ZIP+4 columns at scale (Colorado, Connecticut,
-Los Angeles), and the only real column found with no 5-digit values (Los Angeles, separated). That bears on "mixed forms", by inference rather than measurement: a real ZIP+4 column with no 5-digit values exists, so if the same can happen with bare 9-digit values, "mixed forms" should only add evidence and never reject a column. No real bare 9-digit column without 5-digit values has been found, so whether it should ever reject is still open; see the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" in `TODO.md`.
+The portals supplied the run's only typed separated ZIP+4 columns at scale (Colorado, Connecticut, Los Angeles), and the only real column found with no 5-digit values (Los Angeles, separated). That bears on "mixed forms", by inference rather than measurement: a real ZIP+4 column with no 5-digit values exists, so if the same can happen with bare 9-digit values, "mixed forms" should only add evidence and never reject a column. No real bare 9-digit column without 5-digit values has been found, so whether it should ever reject is still open; see the assumption "No real bare 9-digit ZIP+4 column without 5-digit values was found" in `TODO.md`.
 
 ## What the run concluded, with these files in it
 
-Over all 30 real columns in the run (portals, Rdatasets and these files), bare 9-digit values were
-found at 99.80% or better on every column with at least 100 of them, so 0.90 keeps a margin of
-about 10 points. Every real column with bare 9-digit values also held 5-digit values. State
-agreement separated real columns (99.31% to 100% on 9-digit values) from the Petfinder identifier
-(0.95%). The full tables are in `zip-messy-data.md`; the numbers here are copied from it.
+Over all 30 real columns in the run (portals, Rdatasets and these files), bare 9-digit values were found at 99.80% or better on every column with at least 100 of them, so 0.90 keeps a margin of about 10 points. Every real column with bare 9-digit values also held 5-digit values. State agreement separated real columns (99.31% to 100% on 9-digit values) from the Petfinder identifier (0.95%). The full tables are in `zip-messy-data.md`; the numbers here are copied from it.
 
 ## To fetch them again
 
-Run `messy_download_files.R` from the repository root, which fetches the thirteen TidyTuesday files, and `messy_download.R` for the ten portal tables; or fetch each path above with its URL pattern. The package datasets need no download: install the packages and run `zip_messy_measure.R --only=packages`. All three scripts are local, in `_scratch/research/`. Then compare MD5s against these tables. Portal tables will not match, because
-they change daily: re-measure them rather than comparing. A mismatch means the file
-changed upstream since 2026-10-17 (TidyTuesday's `main`, or an Rdatasets rebuild), and the
-measurement would need re-running rather than quoting. The Rdatasets files can also be read from
-the packages themselves, which is the provenance to cite either way.
+Run `messy_download_files.R` from the repository root, which fetches the thirteen TidyTuesday files, and `messy_download.R` for the ten portal tables; or fetch each path above with its URL pattern. The package datasets need no download: install the packages and run `zip_messy_measure.R --only=packages`. All three scripts are local, in `_scratch/research/`. Then compare MD5s against these tables. Portal tables will not match, because they change daily: re-measure them rather than comparing. A mismatch means the file changed upstream since 2026-10-17 (TidyTuesday's `main`, or an Rdatasets rebuild), and the measurement would need re-running rather than quoting. The Rdatasets files can also be read from the packages themselves, which is the provenance to cite either way.

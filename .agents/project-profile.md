@@ -64,25 +64,12 @@ requests here are merged on GitHub and nothing pulls afterwards, so the local
 
 ## Public test data from R packages
 
-Amelia, 2026-10-17, on the CRAN `fec16` package (Federal Election
-Commission data, 2015-2016 cycle, which includes individual contributors'
-ZIP codes): "we can use it to test and refer to it in docs (with the fec16
-package as provenance) but don't commit copies of its data."
+Amelia, 2026-10-17, on the CRAN `fec16` package (Federal Election Commission data, 2015-2016 cycle, which includes individual contributors' ZIP codes): "we can use it to test and refer to it in docs (with the fec16 package as provenance) but don't commit copies of its data."
 
-- **Use it, cite it, do not copy it.** Tests and measurements load it from
-  the installed package (`utils::data(..., package = "fec16")`) and skip when
-  it is not installed. Docs name the package and version as the source.
-- **Nothing from it is committed**: no fixtures, extracts, CSVs, snapshots or
-  printed rows. Counts and rates measured on it may be committed.
-- Other R-package datasets follow the same rule until Amelia says otherwise
-  for a given package.
-- **EM 42 does not classify these datasets.** Amelia, 2026-10-17: "em 42
-  applies to work data". What decides it is where the data came from, not
-  which project uses it: public data used in a work project is still not
-  classified under EM 42; anything obtained through work counts as work
-  data, even if it looks public; a public file joined to work data becomes
-  work data. So do not raise EM 42 classification as a question about a
-  public dataset. Her own data stays under the global rule.
+- **Use it, cite it, do not copy it.** Tests and measurements load it from the installed package (`utils::data(..., package = "fec16")`) and skip when it is not installed. Docs name the package and version as the source.
+- **Nothing from it is committed**: no fixtures, extracts, CSVs, snapshots or printed rows. Counts and rates measured on it may be committed.
+- Other R-package datasets follow the same rule until Amelia says otherwise for a given package.
+- **EM 42 does not classify these datasets.** Amelia, 2026-10-17: "em 42 applies to work data". What decides it is where the data came from, not which project uses it: public data used in a work project is still not classified under EM 42; anything obtained through work counts as work data, even if it looks public; a public file joined to work data becomes work data. So do not raise EM 42 classification as a question about a public dataset. Her own data stays under the global rule.
 
 ## Open items written elsewhere
 
