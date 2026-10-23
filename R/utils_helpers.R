@@ -23,24 +23,38 @@
 # blanks overlapped on it, and a dictionary undercounted missing text.
 # Only character and factor columns are touched; other types pass through.
 
+blank_re <- "^[[:space:]]*$"
+
 #' @noRd
 blank_as_na <- function(x) {
   if (is.factor(x)) {
-    lv <- levels(x)
-    blank_lv <- lv[grepl("^[[:space:]]*$", lv)]
-    if (length(blank_lv)) {
-      x[x %in% blank_lv] <- NA
+    # Setting a level to NA drops it and turns its values missing
+    blank_lv <- grepl(blank_re, levels(x))
+    if (any(blank_lv)) {
+      levels(x)[blank_lv] <- NA
     }
     return(x)
   }
   if (!is.character(x)) {
     return(x)
   }
-  b <- !is.na(x) & grepl("^[[:space:]]*$", x)
+  b <- !is.na(x) & grepl(blank_re, x)
   if (any(b)) {
     x[b] <- NA_character_
   }
   x
+}
+
+# TRUE when a text or factor column holds a blank value. Cheaper than
+# blank_as_na() where only the answer is needed: key tests call it on the
+# few columns that already pass "no NA, all distinct".
+#' @noRd
+has_blank <- function(x) {
+  if (is.factor(x)) {
+    lv <- levels(x)[grepl(blank_re, levels(x))]
+    return(length(lv) > 0 && any(x %in% lv))
+  }
+  is.character(x) && any(grepl(blank_re, x[!is.na(x)]))
 }
 
 #' @noRd

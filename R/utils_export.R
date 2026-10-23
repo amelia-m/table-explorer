@@ -1011,15 +1011,20 @@ build_data_dictionary <- function(
     out_rels <- Filter(function(r) r$from_table == t$name, model$rels)
     lapply(seq_len(nrow(cols)), function(i) {
       cn <- cols$name[i]
-      v <- blank_as_na(df[[cn]])
-      if (is.factor(v)) {
-        v <- as.character(v)
+      raw <- df[[cn]]
+      if (is.factor(raw)) {
+        raw <- as.character(raw)
       }
+      # Blank text counts as missing for everything profiled here, but
+      # privacy decisions were stamped with a hash of the raw values, so
+      # the privacy checks read raw (a decision must not go stale because
+      # of this rule)
+      v <- blank_as_na(raw)
       n <- length(v)
       present <- v[!is.na(v)]
       refs <- Filter(function(r) r$from_col == cn, out_rels)
       e <- dict_entry(dictionary, t$name, cn)
-      p <- dict_privacy(dictionary, t$name, cn, v)
+      p <- dict_privacy(dictionary, t$name, cn, raw)
 
       # Text lengths never identify anyone; a numeric or date range can
       # (ages, birth dates), so it is left out for private columns
@@ -1048,7 +1053,7 @@ build_data_dictionary <- function(
       } else if (isTRUE(e$hide_examples)) {
         "hidden by you"
       } else if (
-        !examples_on && !dict_examples_forced(dictionary, t$name, cn, v)
+        !examples_on && !dict_examples_forced(dictionary, t$name, cn, raw)
       ) {
         "examples off"
       } else {

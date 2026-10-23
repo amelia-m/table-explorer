@@ -57,6 +57,45 @@ test_that("a shared column with enough real values still shows next to blanks", 
   expect_equal(out[[1]]$n_distinct_from, 3)
 })
 
+test_that("blank strings no longer make a foreign key between two code columns", {
+  # Shaped like FAERS demo.to_mfr and drug.rechal: a mostly blank flag column
+  # was contained in an unrelated code column through "" and one letter
+  tables <- list(
+    demo = data.frame(
+      id = 1:8,
+      to_mfr = c(rep("", 7), "Y"),
+      stringsAsFactors = FALSE
+    ),
+    drug = data.frame(
+      rechal = c("", "Y", "N", "D"),
+      k = 1:4,
+      stringsAsFactors = FALSE
+    )
+  )
+  rels <- detect_fks(tables, method = "both", min_confidence = "low")
+  pairs <- vapply(
+    rels,
+    function(r) paste(r$from_col, r$to_col %||% r$from_col),
+    ""
+  )
+  expect_false("to_mfr rechal" %in% pairs)
+})
+
+test_that("a column holding a blank is not a primary key", {
+  drug <- data.frame(
+    rechal = c("", "Y", "N", "D"),
+    k = 1:4,
+    stringsAsFactors = FALSE
+  )
+  expect_identical(detect_pks(drug, "drug", method = "uniqueness"), "k")
+  # Survival: the same column without the blank is still unique, so a key
+  drug$rechal[1] <- "R"
+  expect_setequal(
+    detect_pks(drug, "drug", method = "uniqueness"),
+    c("rechal", "k")
+  )
+})
+
 test_that("the data dictionary counts blank text as missing", {
   tables <- list(
     x = data.frame(
@@ -68,6 +107,33 @@ test_that("the data dictionary counts blank text as missing", {
   dd <- build_data_dictionary(tables, list(), list(x = "id"))
   expect_equal(dd$pct_missing[dd$column == "note"], 75)
   expect_equal(dd$n_unique[dd$column == "note"], 1L)
+})
+
+test_that("a privacy decision on a column holding a blank does not go stale", {
+  # Decisions are stamped with a hash of the raw values (write_flag,
+  # privacy_review_set); the dictionary must check them against raw values
+  # too, not against the blank-as-missing version
+  tables <- list(
+    x = data.frame(
+      id = 1:3,
+      email = c("a@example.org", "", "b@example.org"),
+      stringsAsFactors = FALSE
+    )
+  )
+  dictionary <- list()
+  dictionary[[dict_key("x", "email")]] <- list(
+    private = FALSE,
+    public_for = privacy_data_hash(tables$x$email)
+  )
+  dd <- build_data_dictionary(
+    tables,
+    list(),
+    list(x = "id"),
+    dictionary = dictionary
+  )
+  row <- dd[dd$column == "email", ]
+  expect_equal(row$privacy_status, "user_public")
+  expect_false(row$private)
 })
 
 test_that("the privacy review queue counts only non-blank values", {

@@ -295,7 +295,6 @@ is_lookup_name <- function(tname) {
 .lookup_cache <- new.env(parent = emptyenv())
 
 is_lookup_table <- function(tname, df) {
-  df <- blanks_as_na(df)
   # The answer depends on column names and on which columns are unique, so
   # key on the content, not just the shape (small tables are cheap to hash;
   # larger ones fail the size test and never reach it)
@@ -319,7 +318,8 @@ is_lookup_table <- function(tname, df) {
           cc <- clean_name(cn)
           (cc %in% generic_key_names || is_key_name(cc)) &&
             !anyNA(df[[cn]]) &&
-            length(unique(df[[cn]])) == nrow(df)
+            length(unique(df[[cn]])) == nrow(df) &&
+            !has_blank(df[[cn]])
         },
         logical(1)
       )))
@@ -387,6 +387,8 @@ format_fingerprint <- function(col, sample_size = 200) {
 # column rather than once per candidate pair.
 
 column_profile <- function(v, sample_cap = 5000) {
+  # detect_fks() and detect_shared_columns() pass columns already normalised;
+  # this repeat is one cheap pass per column and covers direct callers
   v <- blank_as_na(v)
   vals <- as.character(v[!is.na(v)])
   uniq <- unique(vals)
@@ -434,7 +436,9 @@ distribution_from_profiles <- function(p1, p2) {
   }
 
   # Use only shared vocabulary for cosine - much cheaper than full union.
-  # match(), not c1[shared]: indexing by the name "" (blank strings) gives NA
+  # match(), not c1[shared]: indexing by the name "" gives NA. Profiles now
+  # drop blank text (blank_as_na), so "" no longer reaches here from
+  # column_profile(), but the guard keeps hand-built counts safe
   shared <- intersect(names(c1), names(c2))
   if (length(shared) == 0) {
     return(0.0)
@@ -464,8 +468,10 @@ null_pattern_correlation <- function(df1, col1, df2, col2) {
   if (nrow(df1) != nrow(df2) || nrow(df1) < 2) {
     return(0.0)
   }
-  mask1 <- as.numeric(is.na(blank_as_na(df1[[col1]])))
-  mask2 <- as.numeric(is.na(blank_as_na(df2[[col2]])))
+  # detect_fks() has already turned blank text into NA; this runs per
+  # candidate pair, so it does not normalise again
+  mask1 <- as.numeric(is.na(df1[[col1]]))
+  mask2 <- as.numeric(is.na(df2[[col2]]))
   if (sd(mask1) == 0 || sd(mask2) == 0) {
     return(0.0)
   }
@@ -478,7 +484,6 @@ null_pattern_correlation <- function(df1, col1, df2, col2) {
 # ── Primary key detection ────────────────────────────────────
 
 detect_pks <- function(df, table_name, method = "both") {
-  df <- blanks_as_na(df)
   cols <- names(df)
   candidates <- character(0)
   n <- nrow(df)
@@ -500,7 +505,9 @@ detect_pks <- function(df, table_name, method = "both") {
       cols,
       function(c) {
         v <- df[[c]]
-        !anyNA(v) && length(unique(v)) == n
+        # A blank is a missing value, so a key cannot hold one; checked last,
+        # on the few columns that pass the cheap tests
+        !anyNA(v) && length(unique(v)) == n && !has_blank(v)
       },
       logical(1)
     )]

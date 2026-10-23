@@ -641,8 +641,13 @@ test_that("detect_fks name-matches key columns of empty tables", {
   expect_equal(rels[[1]]$to_table, "tbl_clients")
 })
 
-test_that("distribution_similarity handles blank strings", {
-  sim <- distribution_similarity(c("", "a", "b", ""), c("", "a", "c"))
+test_that("distribution_from_profiles handles a count named by a blank string", {
+  # Profiles drop blank text now, so this reaches the match() guard directly
+  p1 <- list(counts = c("x" = 2, "a" = 1))
+  p2 <- list(counts = c("x" = 1, "a" = 1, "c" = 1))
+  names(p1$counts)[1] <- ""
+  names(p2$counts)[1] <- ""
+  sim <- distribution_from_profiles(p1, p2)
   expect_false(is.na(sim))
   expect_gt(sim, 0)
 })
