@@ -393,10 +393,7 @@ mod_dictionary_server <- function(
           tags$td(tags$code(q$column[i])),
           tags$td(q$reason[i]),
           tags$td(dict_format(v)),
-          tags$td({
-            b <- blank_as_na(v)
-            length(unique(b[!is.na(b)]))
-          }),
+          tags$td(n_distinct_present(v)),
           tags$td(radioButtons(
             ns(paste0("rv_", i)),
             NULL,

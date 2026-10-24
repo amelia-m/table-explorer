@@ -332,11 +332,14 @@ blank_values_note <- function(n) {
   if (is.na(n) || n == 0) {
     return("")
   }
+  if (n == 1) {
+    return(
+      "1 blank value counted as missing; a database would store it as an empty string."
+    )
+  }
   sprintf(
-    "%s blank value%s counted as missing; a database would store %s as empty strings.",
-    format(n, big.mark = ","),
-    if (n == 1) "" else "s",
-    if (n == 1) "it" else "them"
+    "%s blank values counted as missing; a database would store them as empty strings.",
+    format(n, big.mark = ",")
   )
 }
 
@@ -372,10 +375,14 @@ generate_dbml <- function(
     single_pk <- sum(cols$pk) == 1
     for (i in seq_len(nrow(cols))) {
       c_desc <- dict_entry(dictionary, t$name, cols$name[i])$description
-      c_note <- paste(
-        Filter(nzchar, c(c_desc, blank_values_note(cols$n_blank[i]))),
-        collapse = " "
-      )
+      # A description without closing punctuation gets a full stop before
+      # the blank-values note
+      b_note <- blank_values_note(cols$n_blank[i])
+      c_note <- if (nzchar(c_desc) && nzchar(b_note)) {
+        paste0(c_desc, if (!grepl("[.!?]$", c_desc)) ".", " ", b_note)
+      } else {
+        paste0(c_desc, b_note)
+      }
       settings <- c(
         if (cols$pk[i] && single_pk) "pk",
         if (cols$uk[i]) "unique",

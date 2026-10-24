@@ -1,5 +1,7 @@
-# Blank text values ("" or whitespace only) are missing values, wherever the
-# app profiles values: detection, the data dictionary and the privacy queue.
+# Blank text values ("" or whitespace only, Unicode spaces included) are
+# missing values, wherever the app profiles values: detection, the data
+# dictionary, the privacy queue, the ERD model and its exports, and the load
+# notice for values blank only through non-standard spaces.
 
 test_that("blank_as_na turns empty and whitespace-only text into NA", {
   x <- c("a", "", " ", "\t", "  \n", NA, " b ")
@@ -136,6 +138,32 @@ test_that("a privacy decision on a column holding a blank does not go stale", {
   expect_false(row$private)
 })
 
+test_that("examples turned on for a column holding a blank stay on", {
+  # The stamp is a hash of the raw values (examples_for), so the dictionary
+  # must check it against raw values, not the blank-as-missing version
+  tables <- list(
+    x = data.frame(
+      id = 1:3,
+      colour = c("red", "", "blue"),
+      stringsAsFactors = FALSE
+    )
+  )
+  dictionary <- list(.settings = list(examples = "off"))
+  dictionary[[dict_key("x", "colour")]] <- list(
+    hide_examples = FALSE,
+    examples_for = privacy_data_hash(tables$x$colour)
+  )
+  dd <- build_data_dictionary(
+    tables,
+    list(),
+    list(x = "id"),
+    dictionary = dictionary
+  )
+  row <- dd[dd$column == "colour", ]
+  expect_equal(row$examples_note, "")
+  expect_match(row$examples, "red", fixed = TRUE)
+})
+
 test_that("the privacy review queue counts only non-blank values", {
   tables <- list(
     p = data.frame(
@@ -152,9 +180,27 @@ test_that("the privacy review queue counts only non-blank values", {
 test_that("Unicode spaces are blank, zero-width characters and bad UTF-8 are not", {
   x <- c("\u00a0", " \u3000 ", "\u200b", "\ufeff", "a\u00a0")
   expect_identical(is_blank_text(x), c(TRUE, TRUE, FALSE, FALSE, FALSE))
+  expect_identical(
+    blank_as_na(x),
+    c(NA, NA, "​", "﻿", "a ")
+  )
   bad <- "ab\xff"
   expect_no_warning(out <- is_blank_text(c(bad, "")))
   expect_identical(out, c(FALSE, TRUE))
+  # A Latin-1 marked non-breaking space is blank too
+  lat <- "\xa0"
+  Encoding(lat) <- "latin1"
+  expect_true(is_blank_text(lat))
+})
+
+test_that("a cached blank count does not go stale when the column changes", {
+  x <- rep(c("a", "b"), 6000)
+  df <- data.frame(x = x, stringsAsFactors = FALSE)
+  unusual_blank_counts(df, store = TRUE)
+  expect_equal(n_blank(df$x), 0L)
+  df$x[1] <- ""
+  expect_equal(n_blank(df$x), 1L)
+  expect_true(is.na(blank_as_na(df$x)[1]))
 })
 
 test_that("the ERD model counts blank text as missing", {
@@ -200,8 +246,23 @@ test_that("DBML and YAML drop not null and required on a column with blanks, and
       id = 1:4,
       middle_name = c("Ann", "", "", "Lee"),
       city = c("X", "Y", "Z", "W"),
+      nick = c("Bo", "Al", " ", "Cy"),
       stringsAsFactors = FALSE
     )
+  )
+  dictionary <- list()
+  dictionary[[dict_key("customers", "nick")]] <- list(
+    description = "Short name"
+  )
+  expect_match(
+    generate_dbml(
+      tables,
+      list(),
+      list(customers = "id"),
+      dictionary = dictionary
+    ),
+    "nick string [note: 'Short name. 1 blank value counted as missing; a database would store it as an empty string.']",
+    fixed = TRUE
   )
   pks <- list(customers = "id")
   dbml <- generate_dbml(tables, list(), pks)

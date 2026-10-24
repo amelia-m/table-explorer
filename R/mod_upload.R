@@ -294,6 +294,20 @@ mod_upload_server <- function(
       }
     })
 
+    # ---- Helper: warn about values blank only through odd spaces ----
+    # Counting fills the blank-count cache, so detection and the ERD reuse
+    # it; on a large table this pass takes seconds, hence the progress bar
+    .notify_odd_spaces <- function(tables) {
+      msg <- withProgress(
+        message = "Checking for blank values...",
+        value = 0.5,
+        unusual_blank_notice(tables)
+      )
+      if (!is.null(msg)) {
+        showNotification(msg, type = "warning", duration = 12)
+      }
+    }
+
     # ---- Helper: apply new file entries to shared state ----
     .apply_new_files <- function(file_map, existing, existing_meta, new_names) {
       merged <- existing
@@ -343,10 +357,7 @@ mod_upload_server <- function(
         type = "message",
         duration = 4
       )
-      odd_spaces <- unusual_blank_notice(lapply(file_map, `[[`, "clean"))
-      if (!is.null(odd_spaces)) {
-        showNotification(odd_spaces, type = "warning", duration = 12)
-      }
+      .notify_odd_spaces(lapply(file_map, `[[`, "clean"))
     }
 
     # ---- Conflict resolution modal ----
@@ -506,6 +517,7 @@ mod_upload_server <- function(
           type = "message",
           duration = 3
         )
+        .notify_odd_spaces(stats::setNames(list(rc$clean), nm))
       } else if (action == "keep_both") {
         new_nm <- nm
         suffix <- 2
@@ -549,6 +561,7 @@ mod_upload_server <- function(
           type = "message",
           duration = 3
         )
+        .notify_odd_spaces(stats::setNames(list(rc$clean), new_nm))
       } else {
         showNotification(
           paste0("'", nm, "' incoming file discarded."),

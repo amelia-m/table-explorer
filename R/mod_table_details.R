@@ -43,12 +43,12 @@ mod_table_details_server <- function(
         ),
         non_null = vapply(
           df,
-          function(x) sum(!is.na(blank_as_na(x))),
+          n_present,
           integer(1)
         ),
         unique_vals = vapply(
           df,
-          function(x) length(unique(na.omit(blank_as_na(x)))),
+          n_distinct_present,
           integer(1)
         ),
         is_pk = names(df) %in% pk_v,
@@ -183,19 +183,22 @@ mod_table_details_server <- function(
 
               # Blank text counted as missing, with the values that are blank
               # only through non-standard spaces called out
-              odd <- unusual_blank_counts(df)
               blank_cell <- vapply(
                 names(df),
                 function(col) {
-                  nb <- n_blank(df[[col]])
-                  if (nb == 0) {
+                  bc <- blank_counts(df[[col]])
+                  if (bc[[1]] == 0) {
                     return("")
                   }
-                  no <- if (col %in% names(odd)) odd[[col]] else 0L
-                  if (no > 0) {
-                    sprintf("%d (%d non-standard spaces)", nb, no)
+                  if (bc[[2]] > 0) {
+                    sprintf(
+                      "%d (%d non-standard space%s)",
+                      bc[[1]],
+                      bc[[2]],
+                      if (bc[[2]] == 1) "" else "s"
+                    )
                   } else {
-                    as.character(nb)
+                    as.character(bc[[1]])
                   }
                 },
                 character(1L)
@@ -210,12 +213,12 @@ mod_table_details_server <- function(
                 ),
                 `Non-null` = vapply(
                   df,
-                  function(x) sum(!is.na(blank_as_na(x))),
+                  n_present,
                   integer(1)
                 ),
                 `Unique` = vapply(
                   df,
-                  function(x) length(unique(na.omit(blank_as_na(x)))),
+                  n_distinct_present,
                   integer(1)
                 ),
                 `Blank` = blank_cell,
