@@ -272,6 +272,19 @@ mod_db_connect_server <- function(
         type = "message",
         duration = 5
       )
+      # Cleaned one at a time, as in the loop above
+      loaded <- vapply(
+        input$db_selected_tables,
+        janitor::make_clean_names,
+        character(1)
+      )
+      odd_spaces <- unusual_blank_notice(existing[intersect(
+        loaded,
+        names(existing)
+      )])
+      if (!is.null(odd_spaces)) {
+        showNotification(odd_spaces, type = "warning", duration = 12)
+      }
     })
 
     invisible(NULL)

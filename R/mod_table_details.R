@@ -181,6 +181,26 @@ mod_table_details_server <- function(
                 character(1L)
               )
 
+              # Blank text counted as missing, with the values that are blank
+              # only through non-standard spaces called out
+              odd <- unusual_blank_counts(df)
+              blank_cell <- vapply(
+                names(df),
+                function(col) {
+                  nb <- n_blank(df[[col]])
+                  if (nb == 0) {
+                    return("")
+                  }
+                  no <- if (col %in% names(odd)) odd[[col]] else 0L
+                  if (no > 0) {
+                    sprintf("%d (%d non-standard spaces)", nb, no)
+                  } else {
+                    as.character(nb)
+                  }
+                },
+                character(1L)
+              )
+
               smry <- data.frame(
                 Column = names(df),
                 Type = vapply(
@@ -198,6 +218,7 @@ mod_table_details_server <- function(
                   function(x) length(unique(na.omit(blank_as_na(x)))),
                   integer(1)
                 ),
+                `Blank` = blank_cell,
                 `PK` = pk_marker,
                 `FK` = ifelse(names(df) %in% fk_cols, "\u2713", ""),
                 check.names = FALSE,
@@ -212,7 +233,7 @@ mod_table_details_server <- function(
                   scrollX = TRUE,
                   columnDefs = list(list(
                     className = "dt-center",
-                    targets = c(2, 3, 4, 5)
+                    targets = c(2, 3, 4, 5, 6)
                   ))
                 ),
                 rownames = FALSE,

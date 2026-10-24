@@ -343,6 +343,10 @@ mod_upload_server <- function(
         type = "message",
         duration = 4
       )
+      odd_spaces <- unusual_blank_notice(lapply(file_map, `[[`, "clean"))
+      if (!is.null(odd_spaces)) {
+        showNotification(odd_spaces, type = "warning", duration = 12)
+      }
     }
 
     # ---- Conflict resolution modal ----

@@ -22,14 +22,29 @@
 # it counted as a real, shared value, so two text columns that both held
 # blanks overlapped on it, and a dictionary undercounted missing text.
 # Only character and factor columns are touched; other types pass through.
+#
+# Whitespace is Unicode whitespace ((*UCP) with PCRE), so a non-breaking
+# space (U+00A0) or an ideographic space counts, as Amelia decided on
+# 2026-10-23. Zero-width characters (U+200B, U+FEFF) are not whitespace and
+# do not count. Strings that are not valid UTF-8 are never blank: the regex
+# engines only warn on them.
 
-blank_re <- "^[[:space:]]*$"
+blank_re <- "(*UCP)^[[:space:]]*$"
+ascii_blank_re <- "^[ \t\n\r\f\v]*$"
+
+# TRUE for each element that is blank text; FALSE for NA and invalid UTF-8
+is_blank_text <- function(x) {
+  out <- logical(length(x))
+  ok <- !is.na(x) & validUTF8(x)
+  out[ok] <- grepl(blank_re, x[ok], perl = TRUE)
+  out
+}
 
 #' @noRd
 blank_as_na <- function(x) {
   if (is.factor(x)) {
     # Setting a level to NA drops it and turns its values missing
-    blank_lv <- grepl(blank_re, levels(x))
+    blank_lv <- is_blank_text(levels(x))
     if (any(blank_lv)) {
       levels(x)[blank_lv] <- NA
     }
@@ -38,23 +53,78 @@ blank_as_na <- function(x) {
   if (!is.character(x)) {
     return(x)
   }
-  b <- !is.na(x) & grepl(blank_re, x)
+  b <- is_blank_text(x)
   if (any(b)) {
     x[b] <- NA_character_
   }
   x
 }
 
-# TRUE when a text or factor column holds a blank value. Cheaper than
-# blank_as_na() where only the answer is needed: key tests call it on the
-# few columns that already pass "no NA, all distinct".
+# How many values of a text or factor column are blank; 0 for other types
 #' @noRd
-has_blank <- function(x) {
+n_blank <- function(x) {
   if (is.factor(x)) {
-    lv <- levels(x)[grepl(blank_re, levels(x))]
-    return(length(lv) > 0 && any(x %in% lv))
+    lv <- levels(x)[is_blank_text(levels(x))]
+    return(if (length(lv)) sum(x %in% lv) else 0L)
   }
-  is.character(x) && any(grepl(blank_re, x[!is.na(x)]))
+  if (!is.character(x)) {
+    return(0L)
+  }
+  sum(is_blank_text(x))
+}
+
+# TRUE when a text or factor column holds a blank value. Key tests call it
+# on the few columns that already pass "no NA, all distinct".
+#' @noRd
+has_blank <- function(x) n_blank(x) > 0
+
+# Per column, how many values are blank only because of whitespace beyond
+# ASCII (a non-breaking space, say). Such a value looks like text in most
+# tools, so the load notice names the columns. Only columns with any.
+#' @noRd
+unusual_blank_counts <- function(df) {
+  counts <- vapply(
+    df,
+    function(x) {
+      if (is.factor(x)) {
+        x <- as.character(x)
+      }
+      if (!is.character(x)) {
+        return(0L)
+      }
+      b <- is_blank_text(x)
+      if (!any(b)) {
+        return(0L)
+      }
+      sum(!grepl(ascii_blank_re, x[b]))
+    },
+    integer(1)
+  )
+  counts[counts > 0]
+}
+
+# The load notice for unusual_blank_counts(): one message for a named list
+# of tables, or NULL when no column has such values
+#' @noRd
+unusual_blank_notice <- function(tables, max_cols = 5) {
+  found <- unlist(lapply(names(tables), function(t) {
+    cnt <- unusual_blank_counts(tables[[t]])
+    if (length(cnt)) stats::setNames(cnt, paste0(t, ".", names(cnt)))
+  }))
+  if (length(found) == 0) {
+    return(NULL)
+  }
+  shown <- names(found)[seq_len(min(max_cols, length(found)))]
+  more <- length(found) - length(shown)
+  sprintf(
+    "%s value%s in %d column%s (%s%s) hold only non-standard spaces, such as a non-breaking space. They are treated as missing, like blank values.",
+    format(sum(found), big.mark = ","),
+    if (sum(found) == 1) "" else "s",
+    length(found),
+    if (length(found) == 1) "" else "s",
+    paste(shown, collapse = ", "),
+    if (more > 0) sprintf(" and %d more", more) else ""
+  )
 }
 
 #' @noRd

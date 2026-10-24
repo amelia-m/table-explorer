@@ -326,6 +326,20 @@ generate_mermaid_erd <- function(
 # Keeps what Mermaid can't: not null, notes, composite PK indexes, subject
 # area TableGroups and header colours, muted colour for inferred refs.
 
+# The note an export adds to a column holding blank text, which the app
+# counts as missing; "" when there is none
+blank_values_note <- function(n) {
+  if (is.na(n) || n == 0) {
+    return("")
+  }
+  sprintf(
+    "%s blank value%s counted as missing; a database would store %s as empty strings.",
+    format(n, big.mark = ","),
+    if (n == 1) "" else "s",
+    if (n == 1) "it" else "them"
+  )
+}
+
 generate_dbml <- function(
   tables,
   rels,
@@ -358,11 +372,15 @@ generate_dbml <- function(
     single_pk <- sum(cols$pk) == 1
     for (i in seq_len(nrow(cols))) {
       c_desc <- dict_entry(dictionary, t$name, cols$name[i])$description
+      c_note <- paste(
+        Filter(nzchar, c(c_desc, blank_values_note(cols$n_blank[i]))),
+        collapse = " "
+      )
       settings <- c(
         if (cols$pk[i] && single_pk) "pk",
         if (cols$uk[i]) "unique",
         if (isFALSE(cols$nullable[i])) "not null",
-        if (nzchar(c_desc)) sprintf("note: '%s'", dq(c_desc))
+        if (nzchar(c_note)) sprintf("note: '%s'", dq(c_note))
       )
       lines <- c(
         lines,
@@ -1465,6 +1483,13 @@ generate_data_dict_yaml <- function(
         collapse = "\n\n"
       )
       units <- ""
+    }
+    b_note <- blank_values_note(t$columns$n_blank[i])
+    if (nzchar(b_note)) {
+      details <- paste(
+        c(if (nzchar(details)) details, b_note),
+        collapse = "\n\n"
+      )
     }
 
     constraints <- c(

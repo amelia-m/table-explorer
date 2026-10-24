@@ -148,3 +148,99 @@ test_that("the privacy review queue counts only non-blank values", {
   expect_equal(q$n_values[q$column == "first_name"], 1)
   expect_equal(q$n_values[q$column == "last_name"], 0)
 })
+
+test_that("Unicode spaces are blank, zero-width characters and bad UTF-8 are not", {
+  x <- c("\u00a0", " \u3000 ", "\u200b", "\ufeff", "a\u00a0")
+  expect_identical(is_blank_text(x), c(TRUE, TRUE, FALSE, FALSE, FALSE))
+  bad <- "ab\xff"
+  expect_no_warning(out <- is_blank_text(c(bad, "")))
+  expect_identical(out, c(FALSE, TRUE))
+})
+
+test_that("the ERD model counts blank text as missing", {
+  tables <- list(
+    customer = data.frame(id = c("a", "b", "c"), stringsAsFactors = FALSE),
+    orders = data.frame(
+      order_id = 1:4,
+      customer_id = c("a", "b", "", "c"),
+      note = c("x", " ", "y", "z"),
+      stringsAsFactors = FALSE
+    )
+  )
+  rels <- list(list(
+    from_table = "orders",
+    from_col = "customer_id",
+    to_table = "customer",
+    to_col = "id"
+  ))
+  m <- erd_model(tables, rels, list(customer = "id", orders = "order_id"))
+  cols <- m$tables$orders$columns
+  expect_true(cols$nullable[cols$name == "note"])
+  expect_equal(cols$n_blank[cols$name == "note"], 1L)
+  expect_false(cols$unique[cols$name == "note"])
+  expect_false(cols$nullable[cols$name == "order_id"])
+  # The blank customer_id is a missing parent, so the parent is optional,
+  # and the remaining distinct values no longer make the link 1:1
+  expect_equal(m$rels[[1]]$parent_min, "zero")
+  expect_equal(m$rels[[1]]$child_max, "many")
+})
+
+test_that("a declared key holding '' is still the key", {
+  # A database can store '' in a key column; that is its value, not a
+  # contradiction of the declaration
+  tables <- list(t = data.frame(code = c("", "A", "B"), n = 1:3))
+  pk <- structure("code", declared = TRUE)
+  m <- erd_model(tables, list(), list(t = pk))
+  expect_true(m$tables$t$columns$pk[m$tables$t$columns$name == "code"])
+})
+
+test_that("DBML and YAML drop not null and required on a column with blanks, and say why", {
+  tables <- list(
+    customers = data.frame(
+      id = 1:4,
+      middle_name = c("Ann", "", "", "Lee"),
+      city = c("X", "Y", "Z", "W"),
+      stringsAsFactors = FALSE
+    )
+  )
+  pks <- list(customers = "id")
+  dbml <- generate_dbml(tables, list(), pks)
+  expect_match(
+    dbml,
+    "middle_name string [note: '2 blank values counted as missing; a database would store them as empty strings.']",
+    fixed = TRUE
+  )
+  # Survival: a column without blanks keeps not null
+  expect_match(dbml, "city string [not null]", fixed = TRUE)
+  y <- strsplit(generate_data_dict_yaml(tables, list(), pks), "\n")[[1]]
+  block <- function(col) {
+    i <- grep(paste0("- name: ", col, "$"), y)
+    j <- grep("^ *- name: ", y)
+    end <- min(c(j[j > i], length(y) + 1)) - 1
+    y[i:end]
+  }
+  mid <- paste(block("middle_name"), collapse = "\n")
+  expect_false(grepl("- required", mid, fixed = TRUE))
+  expect_match(mid, "2 blank values counted as missing", fixed = TRUE)
+  expect_match(
+    paste(block("city"), collapse = "\n"),
+    "- required",
+    fixed = TRUE
+  )
+})
+
+test_that("the load notice names columns blank only through non-standard spaces", {
+  tables <- list(
+    a = data.frame(
+      p = c("\u00a0", "x", "\u00a0 "),
+      q = c("", " ", "y"),
+      stringsAsFactors = FALSE
+    ),
+    b = data.frame(r = c("z", "\u3000"), stringsAsFactors = FALSE)
+  )
+  expect_identical(unusual_blank_counts(tables$a), c(p = 2L))
+  msg <- unusual_blank_notice(tables)
+  expect_match(msg, "3 values in 2 columns (a.p, b.r)", fixed = TRUE)
+  # Ordinary blanks alone give no notice
+  expect_null(unusual_blank_notice(list(a = tables$a["q"])))
+})
