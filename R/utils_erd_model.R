@@ -13,6 +13,8 @@
 #              otherwise "many"
 #   parent_min "zero" when the FK column has NULLs (optional parent),
 #              otherwise "one"
+# Blank text ("" or whitespace only) counts as missing throughout, the same
+# as NA (see blank_as_na()); a declared key is the one exception, below.
 #   child_min  always "zero": a snapshot can't prove every parent has a child
 # Empty (0-row) child tables give "unknown".
 #
@@ -113,7 +115,9 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     df <- tables[[t]]
     # A key a schema or database states (apply_declared_pks) is used
     # whatever its type, as long as the loaded data doesn't contradict it
-    # (a stale declaration for data loaded later under the same name)
+    # (a stale declaration for data loaded later under the same name).
+    # Checked on raw values: a database can hold '' in a key column, so a
+    # blank there is the database's value, not a contradiction
     if (isTRUE(attr(pk_map[[t]], "declared"))) {
       declared <- intersect(as.character(pk_map[[t]]), names(df))
       holds <- nrow(df) == 0 ||
@@ -132,7 +136,9 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     if (nrow(df) > 0) {
       cands <- cands[vapply(
         cands,
-        function(cn) !anyNA(df[[cn]]) && !anyDuplicated(df[[cn]]),
+        function(cn) {
+          !anyNA(df[[cn]]) && !anyDuplicated(df[[cn]]) && !has_blank(df[[cn]])
+        },
         logical(1)
       )]
       # A column that is unique by chance (unit_cost, a timestamp) is not a
@@ -189,16 +195,17 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     child <- tables[[r$from_table]]
     fk <- child[[r$from_col]]
     empty <- is.null(fk) || nrow(child) == 0
+    missing_fk <- !empty && (anyNA(fk) || has_blank(fk))
     r$child_max <- if (empty) {
       "unknown"
-    } else if (!anyNA(fk) && length(unique(fk)) == length(fk)) {
+    } else if (!missing_fk && length(unique(fk)) == length(fk)) {
       "one"
     } else {
       "many"
     }
     r$parent_min <- if (empty) {
       "unknown"
-    } else if (anyNA(fk)) {
+    } else if (missing_fk) {
       "zero"
     } else {
       "one"
@@ -240,11 +247,14 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     # PK columns first, then original order
     cols <- c(intersect(cols, pks), setdiff(cols, pks))
     fk_in_order <- intersect(names(df), fks)
+    # Blank text values per column: counted as missing, and the exports say
+    # so, since a database would store them as empty strings
+    blanks <- vapply(cols, function(cn) n_blank(df[[cn]]), integer(1))
     is_unique <- vapply(
       cols,
       function(cn) {
         v <- df[[cn]]
-        n > 0 && !anyNA(v) && length(unique(v)) == n
+        n > 0 && !anyNA(v) && blanks[[cn]] == 0 && length(unique(v)) == n
       },
       logical(1)
     )
@@ -254,8 +264,9 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
       nullable = if (n == 0) {
         rep(NA, length(cols))
       } else {
-        vapply(cols, function(cn) anyNA(df[[cn]]), logical(1))
+        vapply(cols, function(cn) anyNA(df[[cn]]), logical(1)) | blanks > 0
       },
+      n_blank = unname(blanks),
       unique = unname(is_unique),
       pk = cols %in% pks,
       fk_index = match(cols, fk_in_order),
