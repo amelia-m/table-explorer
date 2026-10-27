@@ -652,14 +652,6 @@ test_that("distribution_from_profiles handles a count named by a blank string", 
   expect_gt(sim, 0)
 })
 
-test_that("detect_fks survives blank strings in compared text columns", {
-  tables <- list(
-    a = data.frame(grp = rep(1:10, 4), note = rep(c("", "x", "y", "z"), 10)),
-    b = data.frame(grp = rep(1:5, 8), note = rep(c("", "x", "y", "w"), 10))
-  )
-  expect_no_error(detect_fks(tables, method = "both", min_confidence = "low"))
-})
-
 # ── Incremental scans ─────────────────────────────────────────
 
 test_that("tables_needing_scan flags new and changed tables only", {

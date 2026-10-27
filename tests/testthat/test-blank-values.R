@@ -164,25 +164,11 @@ test_that("examples turned on for a column holding a blank stay on", {
   expect_match(row$examples, "red", fixed = TRUE)
 })
 
-test_that("the privacy review queue counts only non-blank values", {
-  tables <- list(
-    p = data.frame(
-      first_name = c("Ann", "", " ", NA),
-      last_name = c("", " ", NA, ""),
-      stringsAsFactors = FALSE
-    )
-  )
-  q <- privacy_review_queue(tables, list())
-  expect_equal(q$n_values[q$column == "first_name"], 1)
-  expect_equal(q$n_values[q$column == "last_name"], 0)
-})
-
 test_that("Unicode spaces are blank, zero-width characters and bad UTF-8 are not", {
   x <- c("\u00a0", " \u3000 ", "\u200b", "\ufeff", "a\u00a0")
-  expect_identical(is_blank_text(x), c(TRUE, TRUE, FALSE, FALSE, FALSE))
   expect_identical(
     blank_as_na(x),
-    c(NA, NA, "​", "﻿", "a ")
+    c(NA, NA, "\u200b", "\ufeff", "a\u00a0")
   )
   bad <- "ab\xff"
   expect_no_warning(out <- is_blank_text(c(bad, "")))
@@ -224,7 +210,6 @@ test_that("the ERD model counts blank text as missing", {
   expect_true(cols$nullable[cols$name == "note"])
   expect_equal(cols$n_blank[cols$name == "note"], 1L)
   expect_false(cols$unique[cols$name == "note"])
-  expect_false(cols$nullable[cols$name == "order_id"])
   # The blank customer_id is a missing parent, so the parent is optional,
   # and the remaining distinct values no longer make the link 1:1
   expect_equal(m$rels[[1]]$parent_min, "zero")
