@@ -1,5 +1,24 @@
 # TODO
 
+## Handoffs to agent-config waiting in `_scratch/` (2026-10-27)
+
+Not table-explorer work; parked here because they were written in a table-explorer session and `_scratch/` is ignored. Remove each line once agent-config has taken it.
+
+- [ ] Amelia: paste `_scratch/handoff_transcript_size_tool.md` into an agent-config session, so it adopts `_scratch/transcript_size_breakdown.ps1` as a reusable transcript-size diagnostic (five fixes listed in the brief).
+- [ ] Amelia: paste `_scratch/handoff_session_review_cf07f66b.md` into an agent-config session, so it builds a contract with you and dispatches a review of how the long project-time-tracker session worked (four questions for you listed in the brief).
+- [ ] Amelia: decide which proposed rule or habit changes to adopt: 9 in `_scratch/reviews/2026-10-27-session-working-review.md` and 6 in `_scratch/reviews/2026-10-27-session-working-review-part2.md` (reviews of the session that wrote these handoffs).
+
+Open questions from that session and its two reviews (Amelia decides each):
+
+- [ ] Delete `tr_dump.py` from the system temp folder? A review subagent wrote it there against its contract; its content was checked on 2026-10-28 and holds no transcript content.
+- [ ] Which branch should these `TODO.md` edits be committed on? The checkout was on `dev/public-fixtures` with an untracked `docs/ref/` the agent did not create.
+- [ ] Amelia: hand to agent-config, for the global rule "Ask before reading outside the working directory". Decided (Amelia, 2026-10-28): "read-only for app settings and listing names of sessions should not need a question first". Reading a session's transcript or content still needs the question.
+- [ ] Does a brief pasted into another session count as dispatching an agent under the task-contract rule, and does a brief that leaves the contract to the receiving session satisfy it?
+- [ ] Amelia: paste `_scratch/handoff_adapted_caveman.md` into an agent-config session, so it builds an adapted caveman skill that cuts fluff but keeps assumption labels, verification, open items and destructive-action targets in full (Amelia, 2026-10-28, replacing the question of which wins).
+- [ ] Should "transcripts hold no work data above low risk" (Amelia, 2026-10-27) go into the global rule text?
+- [ ] Amelia: hand to agent-config, for the task-contract skill's "Dispatching on it" section. Decided (Amelia, 2026-10-28, "do it"): the dispatcher picks its own spot-checks, never the subagent's suggestions: every finding the subagent marked as a breach, plus two other cited lines at random, plus one acceptance line that is not a line citation (for example "lists what it deferred").
+- [ ] Unchecked items not picked on 2026-10-28, drop or keep: whether `8d28a2c` really had broken YAML; timing a resume of the 26 MB transcript to confirm size caused the hang; full tool output at four transcript lines; speed of the session.
+
 ## Detection measurement on public datasets (2026-10-10)
 
 Harness: `dev/fixtures/public/fetch.R` then
