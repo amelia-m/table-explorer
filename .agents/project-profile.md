@@ -12,7 +12,7 @@ asked.
 
 ## Project type
 
-A work-adjacent personal project that does not contain work data (Amelia, 2026-10-28: "work-adjaccent personal project but does not contain work data"). Under the global rule "Notes in work projects" it counts as personal: one shared `TODO.md`, no `*.local.md` split and no findings log.
+A work-adjacent personal project that does not contain work data (Amelia, 2026-10-28: "work-adjaccent [sic] personal project but does not contain work data"). Under the global rule "Notes in work projects" it counts as personal: one shared `TODO.md`, no `*.local.md` split and no findings log.
 
 ## Correctness outweighs speed
 
