@@ -20,6 +20,23 @@ mod_upload_ui <- function(id) {
       style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
       "Data files: CSV, TSV, Excel, Parquet, JSON, SPSS, SAS, Stata, RDS, RData, ODS, Access"
     ),
+    # Read when a file is added, so it is set before the file, not after.
+    selectInput(
+      ns("excel_types"),
+      "Excel column types",
+      choices = c(
+        "Guess from the first 1,000 rows (faster)" = "sample",
+        "Guess from every row (slower, thorough)" = "all",
+        "Read every column as text" = "text"
+      ),
+      selected = excel_type_guess_default
+    ),
+    div(
+      style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
+      "Applies to files added after you change it. A sheet longer than 1,000 ",
+      "rows says so when it loads, and any value that did not fit its column's ",
+      "guessed type is reported as missing."
+    ),
     fileInput(
       ns("schema_file"),
       NULL,
@@ -125,7 +142,12 @@ mod_upload_server <- function(
           fsize <- input$data_files$size[i]
           tryCatch(
             {
-              result <- read_table_file(fpath, fname, notify_fn)
+              result <- read_table_file(
+                fpath,
+                fname,
+                notify_fn,
+                excel_types = input$excel_types %||% excel_type_guess_default
+              )
               raw_tbls <- result$tables
               if (length(result$relationships) > 0) {
                 declared <<- c(declared, result$relationships)
