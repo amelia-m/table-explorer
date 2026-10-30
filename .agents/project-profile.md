@@ -111,10 +111,7 @@ lack of quota.
   passed.** A multi-step edit that writes as it goes leaves the file half
   changed when a later step fails. Either use the editing tools, or build
   the whole new content in memory and write once at the end.
-- There is no CI here yet, so the output of `testthat::test_local()` and
-  `Rscript dev/fixtures/score_detection.R` stands in for it and belongs in the
-  pull request body, named with the command that produced it. Pulling the
-  Actions workflow out of draft PR #6 is on `TODO.md` and would change this.
+- CI runs on GitHub: `.github/workflows/r-ci.yml` runs `testthat::test_local()` and `dev/fixtures/score_detection.R` on every push and pull request, and the ruleset on `main` requires its `test` check, so a pull request cannot merge until it passes. `Rscript dev/check.R` is still required before the pull request: it also parses every R and JS file, checks `main` against `origin/main`, and gives the summary lines the pull request quotes. CI reports on a pushed branch only, so it does not replace the local run.
 - A change that cannot be checked without her eyes (visual or interaction
   work on real data) says so in the pull request and waits for her, however
   clean the review.
