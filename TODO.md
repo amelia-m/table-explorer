@@ -1,5 +1,29 @@
 # TODO
 
+## Handoffs to agent-config waiting in `_scratch/` (2026-10-27 to 2026-10-28)
+
+Not table-explorer work; parked here because they were written in a table-explorer session and `_scratch/` is ignored. Remove each line once agent-config has taken it.
+
+Briefs to paste into an agent-config session:
+
+- [ ] Amelia: paste `_scratch/handoff_transcript_size_tool.md`, so agent-config adopts `_scratch/transcript_size_breakdown.ps1` as a reusable transcript-size diagnostic (five fixes listed in the brief).
+- [ ] Amelia: paste `_scratch/handoff_session_review_cf07f66b.md`, so agent-config builds a contract with you and dispatches a review of how the long project-time-tracker session worked (four questions for you listed in the brief).
+- [ ] Amelia: paste `_scratch/handoff_adapted_caveman.md`, so agent-config builds an adapted caveman skill that cuts fluff but keeps assumption labels, verification, open items and destructive-action targets in full (Amelia, 2026-10-28, replacing the question of whether the caveman hook or the writing rules win).
+
+Decided, to hand to agent-config:
+
+- [ ] For the global rule "Ask before reading outside the working directory" (Amelia, 2026-10-28): "read-only for app settings and listing names of sessions should not need a question first". Reading a session's transcript or content still needs the question.
+- [ ] For the task-contract skill's "Dispatching on it" section (Amelia, 2026-10-28, "do it"): the dispatcher picks its own spot-checks, never the subagent's suggestions: every finding the subagent marked as a breach, plus two other cited lines at random, plus one acceptance line that is not a line citation (for example "lists what it deferred").
+
+Still open (Amelia decides each):
+
+- [ ] Decide which proposed rule or habit changes to adopt: 9 in `_scratch/reviews/2026-10-27-session-working-review.md` and 6 in `_scratch/reviews/2026-10-27-session-working-review-part2.md` (reviews of the session that wrote these handoffs).
+- [ ] Delete `tr_dump.py` from the Windows user temp folder (`%LOCALAPPDATA%\Temp`)? A review subagent wrote it there against its contract; its content was checked on 2026-10-28 and holds no transcript content.
+- [ ] Delete the empty file `_scratch_placeholder_do_not_use` in the folder that contains this repository (one level up)? The agent created it by mistake on 2026-10-28; nothing uses it.
+- [ ] Does a brief pasted into another session count as dispatching an agent under the task-contract rule, and does a brief that leaves the contract to the receiving session satisfy it?
+- [ ] Should "transcripts hold no work data above low risk" (Amelia, 2026-10-27) go into the global rule text?
+- [ ] Unchecked items not picked on 2026-10-28 (numbers from the session's table), drop or keep: (2) whether project-time-tracker commit `8d28a2c` really had broken YAML; (3c) timing a resume of the 26 MB transcript to confirm size caused the hang; (5) full tool output at four transcript lines; (10) speed of the session. Items 6 (caveman) and 9 (em dashes in thinking; all thinking blocks were empty) are resolved.
+
 ## Detection measurement on public datasets (2026-10-10)
 
 Harness: `dev/fixtures/public/fetch.R` then
