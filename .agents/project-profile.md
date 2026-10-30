@@ -83,6 +83,21 @@ Before cutting a worktree or quoting a commit in a brief, compare
 requests here are merged on GitHub and nothing pulls afterwards, so the local
 `main` is routinely tens of commits stale.
 
+## Public test data from R packages
+
+Amelia, 2026-10-17, on the CRAN `fec16` package (Federal Election Commission data, 2015-2016 cycle, which includes individual contributors' ZIP codes): "we can use it to test and refer to it in docs (with the fec16 package as provenance) but don't commit copies of its data."
+
+- **Use it, cite it, do not copy it.** Tests and measurements load it from the installed package (`utils::data(..., package = "fec16")`) and skip when it is not installed. Docs name the package and version as the source.
+- **Nothing from it is committed**: no fixtures, extracts, CSVs, snapshots or printed rows. Counts and rates measured on it may be committed.
+- Other R-package datasets follow the same rule until Amelia says otherwise for a given package.
+- **EM 42 does not classify these datasets.** Amelia, 2026-10-17: "em 42 applies to work data". What decides it is where the data came from, not which project uses it: public data used in a work project is still not classified under EM 42; anything obtained through work counts as work data, even if it looks public; a public file joined to work data becomes work data. So do not raise EM 42 classification as a question about a public dataset. Her own data stays under the global rule.
+
+## Open items written elsewhere
+
+The rule now lives in the global rules, under "Keep open items alive": when open items have to be written somewhere other than `TODO.md` (a contract's file scope, a checkout in use, a pull request body, a subagent's hand-back), a one-line pointer goes into `TODO.md` in the same work block, naming the note's path and how many items it holds; a note under `_scratch/` with no pointer counts as not written; and a dispatching session carries every deferred item, not only the ones it acts on. It came from this repository (Amelia, 2026-10-19: eight open items found in three notes under `_scratch/`).
+
+One addition kept here: **at the end of a work block, check `_scratch/` for open-item notes** and move or retire each one. That includes review reports a subagent hands back: their unapplied findings go into `TODO.md`, or a pointer to a saved copy, before replying to Amelia (2026-10-23, after a review's findings sat in the session unrecorded).
+
 ## Review, push and merge
 
 Amelia, 2026-10-09, for this repository only. Her GitHub Copilot and Codex
@@ -111,7 +126,7 @@ lack of quota.
   passed.** A multi-step edit that writes as it goes leaves the file half
   changed when a later step fails. Either use the editing tools, or build
   the whole new content in memory and write once at the end.
-- CI runs on GitHub: `.github/workflows/r-ci.yml` runs `testthat::test_local()` and `dev/fixtures/score_detection.R` on every push and pull request, and the ruleset on `main` requires its `test` check, so a pull request cannot merge until it passes. `Rscript dev/check.R` is still required before the pull request: it also parses the R files in `R/`, `tests/testthat/` and `dev/`, parses the app's own JS in `inst/app/www/` when node is on PATH, checks `main` against `origin/main`, and gives the summary lines the pull request quotes. CI reports on a pushed branch only, so it does not replace the local run. CI's result belongs in the pull request body too.
+- CI runs on GitHub: `.github/workflows/r-ci.yml` (added in #45 on 2026-10-09) runs `testthat::test_local()` and `dev/fixtures/score_detection.R` on every push and pull request, and the ruleset on `main` requires its `test` check, so a pull request cannot merge until it passes. `Rscript dev/check.R` is still required before the pull request: it also parses the R files in `R/`, `tests/testthat/` and `dev/`, parses the app's own JS in `inst/app/www/` when node is on PATH, checks `main` against `origin/main`, and gives the summary lines the pull request quotes. CI reports on a pushed branch only, so it does not replace the local run. CI's result belongs in the pull request body too.
 - A change that cannot be checked without her eyes (visual or interaction
   work on real data) says so in the pull request and waits for her, however
   clean the review.
