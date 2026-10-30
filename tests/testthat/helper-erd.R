@@ -32,15 +32,25 @@ erd_fixture <- function() {
 erd_fixture_rels <- function() {
   mk <- function(ft, fc, tt, tc, by = "naming", conf = FALSE) {
     list(
-      from_table = ft, from_col = fc, to_table = tt, to_col = tc,
-      detected_by = by, confidence = "high", score = 0.9,
+      from_table = ft,
+      from_col = fc,
+      to_table = tt,
+      to_col = tc,
+      detected_by = by,
+      confidence = "high",
+      score = 0.9,
       confirmed = conf
     )
   }
   list(
     mk("orders", "customer_id", "customers", "customer_id"),
-    mk("customer_profile", "customer_id", "customers", "customer_id",
-       by = "schema"),
+    mk(
+      "customer_profile",
+      "customer_id",
+      "customers",
+      "customer_id",
+      by = "schema"
+    ),
     mk("order_items", "order_id", "orders", "order_id", conf = TRUE),
     mk("order_items", "product_id", "products", "product_id", by = "manual")
   )
@@ -51,8 +61,10 @@ erd_fixture_model <- function() {
     erd_fixture(),
     erd_fixture_rels(),
     list(
-      customers = "customer_id", orders = "order_id",
-      customer_profile = "customer_id", products = "product_id",
+      customers = "customer_id",
+      orders = "order_id",
+      customer_profile = "customer_id",
+      products = "product_id",
       tlk_status = "id"
     ),
     list(order_items = list(c("order_id", "product_id")))

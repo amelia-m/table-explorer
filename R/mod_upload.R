@@ -20,6 +20,23 @@ mod_upload_ui <- function(id) {
       style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
       "Data files: CSV, TSV, Excel, Parquet, JSON, SPSS, SAS, Stata, RDS, RData, ODS, Access"
     ),
+    # Read when a file is added, so it is set before the file, not after.
+    selectInput(
+      ns("excel_types"),
+      "Excel column types",
+      choices = c(
+        "Guess from the first 1,000 rows (faster)" = "sample",
+        "Guess from every row (slower, thorough)" = "all",
+        "Read every column as text" = "text"
+      ),
+      selected = excel_type_guess_default
+    ),
+    div(
+      style = "font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:8px;line-height:1.5;",
+      "Applies to files added after you change it. A sheet longer than 1,000 ",
+      "rows says so when it loads, and any value that did not fit its column's ",
+      "guessed type is reported as missing."
+    ),
     fileInput(
       ns("schema_file"),
       NULL,
@@ -125,7 +142,12 @@ mod_upload_server <- function(
           fsize <- input$data_files$size[i]
           tryCatch(
             {
-              result <- read_table_file(fpath, fname, notify_fn)
+              result <- read_table_file(
+                fpath,
+                fname,
+                notify_fn,
+                excel_types = input$excel_types %||% excel_type_guess_default
+              )
               raw_tbls <- result$tables
               if (length(result$relationships) > 0) {
                 declared <<- c(declared, result$relationships)
@@ -362,7 +384,10 @@ mod_upload_server <- function(
           ),
           tags$tbody(
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "Dimensions"),
+              tags$td(
+                style = "padding:5px 10px;color:var(--text-secondary);",
+                "Dimensions"
+              ),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -377,7 +402,10 @@ mod_upload_server <- function(
               )
             ),
             tags$tr(
-              tags$td(style = "padding:5px 10px;color:var(--text-secondary);", "File size"),
+              tags$td(
+                style = "padding:5px 10px;color:var(--text-secondary);",
+                "File size"
+              ),
               tags$td(
                 style = "padding:5px 10px;",
                 if (!is.null(ex)) {
@@ -585,7 +613,10 @@ mod_upload_server <- function(
         dictionary_rv(merge_dictionary(dictionary_rv(), result$dictionary))
       }
       if (length(result$primary_keys) > 0 && !is.null(declared_pks_rv)) {
-        declared_pks_rv(merge_declared_pks(declared_pks_rv(), result$primary_keys))
+        declared_pks_rv(merge_declared_pks(
+          declared_pks_rv(),
+          result$primary_keys
+        ))
       }
 
       if (length(result$relationships) > 0) {
@@ -637,7 +668,9 @@ mod_upload_server <- function(
       rename_log_rv(log[log$source != nm, , drop = FALSE])
       # Decisions that let the old data's values show don't carry over to
       # whatever is loaded under this name next
-      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv(), nm))
+      if (!is.null(dictionary_rv)) {
+        dictionary_rv(privacy_reset(dictionary_rv(), nm))
+      }
       showNotification(paste0("Removed: ", nm), type = "message", duration = 3)
     })
 
@@ -656,7 +689,9 @@ mod_upload_server <- function(
       fk_cache$scanned_sig <- character(0)
       # Labels, descriptions and private-name patterns stay; "not private"
       # choices and rejected flags go, so new data starts on the safe side
-      if (!is.null(dictionary_rv)) dictionary_rv(privacy_reset(dictionary_rv()))
+      if (!is.null(dictionary_rv)) {
+        dictionary_rv(privacy_reset(dictionary_rv()))
+      }
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

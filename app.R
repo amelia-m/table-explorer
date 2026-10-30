@@ -15,5 +15,10 @@ pkg_root <- if (!is.null(sys.frame(1L)$ofile)) {
 } else {
   normalizePath(".", mustWork = TRUE)
 }
-pkgload::load_all(pkg_root, export_all = FALSE, helpers = FALSE, attach_testthat = FALSE)
+pkgload::load_all(
+  pkg_root,
+  export_all = FALSE,
+  helpers = FALSE,
+  attach_testthat = FALSE
+)
 tableexplorer::run_app()

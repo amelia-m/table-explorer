@@ -5,15 +5,20 @@
 #' @param max_request_size Largest upload accepted, in bytes (default 100 MB).
 #'   Applied when the app starts and restored when it stops.
 #' @export
-run_app <- function(onStart = NULL,
-                    options = list(),
-                    enableBookmarking = NULL,
-                    uiPattern = "/",
-                    max_request_size = 100 * 1024^2) {
+run_app <- function(
+  onStart = NULL,
+  options = list(),
+  enableBookmarking = NULL,
+  uiPattern = "/",
+  max_request_size = 100 * 1024^2
+) {
   # Register static assets (CSS, JS) under the package resource path
   www <- system.file("app/www", package = "tableexplorer")
   if (!nzchar(www)) {
-    stop("Can't find the app's static files: is the tableexplorer package installed or loaded?", call. = FALSE)
+    stop(
+      "Can't find the app's static files: is the tableexplorer package installed or loaded?",
+      call. = FALSE
+    )
   }
   shiny::addResourcePath("tableexplorer", www)
 

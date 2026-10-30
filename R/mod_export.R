@@ -23,9 +23,21 @@ mod_export_ui <- function(id) {
         downloadButton(ns("dl_mermaid"), "Mermaid (.mmd)", class = "dl-btn"),
         downloadButton(ns("dl_dbml"), "DBML (.dbml)", class = "dl-btn"),
         downloadButton(ns("dl_elk"), "ELK graph (.json)", class = "dl-btn"),
-        downloadButton(ns("dl_dict_csv"), "Data dictionary (.csv)", class = "dl-btn"),
-        downloadButton(ns("dl_dict_md"), "Data dictionary (.md)", class = "dl-btn"),
-        downloadButton(ns("dl_dict_yaml"), "data-dict (.yaml)", class = "dl-btn")
+        downloadButton(
+          ns("dl_dict_csv"),
+          "Data dictionary (.csv)",
+          class = "dl-btn"
+        ),
+        downloadButton(
+          ns("dl_dict_md"),
+          "Data dictionary (.md)",
+          class = "dl-btn"
+        ),
+        downloadButton(
+          ns("dl_dict_yaml"),
+          "data-dict (.yaml)",
+          class = "dl-btn"
+        )
       ),
       checkboxInput(
         ns("dbt_constraints"),
@@ -160,15 +172,42 @@ mod_export_server <- function(
     })
     output$dl_dict_csv <- downloadHandler(
       filename = "data_dictionary.csv",
-      content = function(file) write.csv(dict_df(), file, row.names = FALSE, na = "")
+      content = function(file) {
+        write.csv(dict_df(), file, row.names = FALSE, na = "")
+      }
     )
     output$dl_dict_md <- downloadHandler(
       filename = "data_dictionary.md",
-      content = function(file) writeLines(generate_data_dictionary_md(dict_df()), file)
+      content = function(file) {
+        writeLines(generate_data_dictionary_md(dict_df()), file)
+      }
     )
     output$dl_dict_yaml <- downloadHandler(
       filename = "data-dict.yaml",
       content = function(file) {
+        # Say what the spec cannot carry as a join, since the number is
+        # often most of the file's links and the loss is otherwise
+        # discovered only on re-import
+        n_unreviewed <- sum(vapply(
+          export_rels_rv(),
+          function(r) identical(rel_source(r), "detected"),
+          logical(1)
+        ))
+        if (n_unreviewed > 0) {
+          showNotification(
+            sprintf(
+              paste(
+                "%d detected link%s not confirmed. They are written as",
+                "candidates under x-tableexplorer, not as data-dict",
+                "relationships, and come back as 'to review'."
+              ),
+              n_unreviewed,
+              if (n_unreviewed == 1) " is" else "s are"
+            ),
+            type = "message",
+            duration = 10
+          )
+        }
         writeLines(
           generate_data_dict_yaml(
             all_tables_rv(),

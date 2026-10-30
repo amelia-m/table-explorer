@@ -82,8 +82,12 @@ mod_dictionary_ui <- function(id) {
       span(class = "dict-hint", "Selected rows:"),
       actionButton(ns("set_private"), "Private", class = "btn-sm"),
       actionButton(ns("set_public"), "Not private", class = "btn-sm"),
-      actionButton(ns("set_auto"), "Automatic", class = "btn-sm",
-        title = "Forget your choice and use the automatic flag"),
+      actionButton(
+        ns("set_auto"),
+        "Automatic",
+        class = "btn-sm",
+        title = "Forget your choice and use the automatic flag"
+      ),
       actionButton(ns("hide_ex"), "Hide examples", class = "btn-sm"),
       actionButton(ns("show_ex"), "Show examples", class = "btn-sm")
     ),
@@ -126,14 +130,22 @@ mod_dictionary_server <- function(
     redraw <- reactiveVal(0)
     bump <- function() redraw(isolate(redraw()) + 1)
     last_written <- reactiveVal(NULL)
-    observeEvent(dictionary_rv(), {
-      if (!identical(dictionary_rv(), last_written())) {
-        s <- dict_settings(dictionary_rv())
-        updateRadioButtons(session, "examples", selected = s$examples)
-        updateTextInput(session, "private_patterns", value = s$private_patterns)
-        bump()
-      }
-    }, ignoreInit = TRUE)
+    observeEvent(
+      dictionary_rv(),
+      {
+        if (!identical(dictionary_rv(), last_written())) {
+          s <- dict_settings(dictionary_rv())
+          updateRadioButtons(session, "examples", selected = s$examples)
+          updateTextInput(
+            session,
+            "private_patterns",
+            value = s$private_patterns
+          )
+          bump()
+        }
+      },
+      ignoreInit = TRUE
+    )
 
     observeEvent(tables_rv(), {
       tnames <- sort(names(tables_rv()))
@@ -157,7 +169,9 @@ mod_dictionary_server <- function(
       e <- d[[key]] %||% list()
       e[[field]] <- value
       # The old name for the label goes once the label is edited
-      if (identical(field, "label")) e$business_name <- NULL
+      if (identical(field, "label")) {
+        e$business_name <- NULL
+      }
       d[[key]] <- if (dict_entry_empty(e)) NULL else e
       commit(d)
     }
@@ -167,14 +181,20 @@ mod_dictionary_server <- function(
     # privacy_holds() in utils_privacy.R).
     write_flag <- function(keys, field, value) {
       d <- dictionary_rv()
-      stamp_field <- c(private = "public_for", hide_examples = "examples_for")[[field]]
+      stamp_field <- c(private = "public_for", hide_examples = "examples_for")[[
+        field
+      ]]
       for (k in keys) {
         e <- d[[k]] %||% list()
         e[[field]] <- value
         parts <- strsplit(k, "|", fixed = TRUE)[[1]]
         values <- tables_rv()[[parts[1]]][[paste(parts[-1], collapse = "|")]]
-        e[[stamp_field]] <- if (isFALSE(value) && !is.null(values)) privacy_data_hash(values)
-        if (identical(field, "private")) e$private_source <- NULL
+        e[[stamp_field]] <- if (isFALSE(value) && !is.null(values)) {
+          privacy_data_hash(values)
+        }
+        if (identical(field, "private")) {
+          e$private_source <- NULL
+        }
         d[[k]] <- if (dict_entry_empty(e)) NULL else e
       }
       commit(d, redraw_table = TRUE)
@@ -203,7 +223,9 @@ mod_dictionary_server <- function(
     shown_rv <- reactive({
       dd <- dd_rv()
       tn <- input$table %||% ""
-      if (nzchar(tn)) dd <- dd[dd$table == tn, , drop = FALSE]
+      if (nzchar(tn)) {
+        dd <- dd[dd$table == tn, , drop = FALSE]
+      }
       dd <- switch(
         input$show %||% "all",
         private = dd[dd$private, , drop = FALSE],
@@ -215,17 +237,25 @@ mod_dictionary_server <- function(
       dict <- isolate(dictionary_rv())
       for (i in seq_len(nrow(dd))) {
         e <- dict_entry(dict, dd$table[i], dd$column[i])
-        for (f in dict_text_fields) dd[[f]][i] <- e[[f]]
+        for (f in dict_text_fields) {
+          dd[[f]][i] <- e[[f]]
+        }
       }
       dd
     })
 
     # ── Settings ─────────────────────────────────────────────
-    observeEvent(input$examples, {
-      if (!identical(input$examples, dict_settings(dictionary_rv())$examples)) {
-        write_setting("examples", input$examples)
-      }
-    }, ignoreInit = TRUE)
+    observeEvent(
+      input$examples,
+      {
+        if (
+          !identical(input$examples, dict_settings(dictionary_rv())$examples)
+        ) {
+          write_setting("examples", input$examples)
+        }
+      },
+      ignoreInit = TRUE
+    )
     observeEvent(input$apply_patterns, {
       write_setting("private_patterns", trimws(input$private_patterns %||% ""))
     })
@@ -236,7 +266,11 @@ mod_dictionary_server <- function(
       rows <- input$dict_rows_selected
       rows <- rows[rows >= 1 & rows <= nrow(d)]
       if (length(rows) == 0) {
-        showNotification("Select one or more rows first.", type = "message", duration = 3)
+        showNotification(
+          "Select one or more rows first.",
+          type = "message",
+          duration = 3
+        )
         return(NULL)
       }
       mapply(dict_key, d$table[rows], d$column[rows], USE.NAMES = FALSE)
@@ -289,7 +323,8 @@ mod_dictionary_server <- function(
         showNotification(
           sprintf(
             "%d column%s flagged as possibly personal. Review them on the Data Dictionary tab.",
-            length(new), if (length(new) == 1) " was" else "s were"
+            length(new),
+            if (length(new) == 1) " was" else "s were"
           ),
           type = "warning",
           # Stays until dismissed: it arrives during a large upload, when
@@ -317,12 +352,14 @@ mod_dictionary_server <- function(
           if (n == 0) {
             sprintf(
               "All %d flagged column%s are empty, so nothing needs reviewing.",
-              n_empty, if (n_empty == 1) "" else "s"
+              n_empty,
+              if (n_empty == 1) "" else "s"
             )
           } else {
             sprintf(
               "%d column%s flagged as possibly personal. Until you review them they are treated as private: no example values or value ranges.",
-              n, if (n == 1) " was" else "s were"
+              n,
+              if (n == 1) " was" else "s were"
             )
           },
           if (n_empty > 0) {
@@ -330,7 +367,8 @@ mod_dictionary_server <- function(
               ns("review_hide_empty"),
               sprintf(
                 "Hide %d flagged column%s with no values",
-                n_empty, if (n_empty == 1) "" else "s"
+                n_empty,
+                if (n_empty == 1) "" else "s"
               ),
               # Isolated: this banner re-renders when the box is ticked,
               # and reading it reactively here would reset it each time
@@ -359,7 +397,11 @@ mod_dictionary_server <- function(
           tags$td(radioButtons(
             ns(paste0("rv_", i)),
             NULL,
-            choices = c("Private" = "confirmed", "Not personal" = "rejected", "Later" = "later"),
+            choices = c(
+              "Private" = "confirmed",
+              "Not personal" = "rejected",
+              "Later" = "later"
+            ),
             selected = "later",
             inline = TRUE
           ))
@@ -380,8 +422,12 @@ mod_dictionary_server <- function(
           tags$table(
             class = "table table-condensed dict-review-table",
             tags$thead(tags$tr(
-              tags$th("Table"), tags$th("Column"), tags$th("Why"),
-              tags$th("Format"), tags$th("Unique"), tags$th("Decision")
+              tags$th("Table"),
+              tags$th("Column"),
+              tags$th("Why"),
+              tags$th("Format"),
+              tags$th("Unique"),
+              tags$th("Decision")
             )),
             tags$tbody(rows)
           )
@@ -389,7 +435,11 @@ mod_dictionary_server <- function(
         footer = tagList(
           modalButton("Review later"),
           actionButton(ns("review_all_private"), "Confirm all as private"),
-          actionButton(ns("review_save"), "Save decisions", class = "btn-primary")
+          actionButton(
+            ns("review_save"),
+            "Save decisions",
+            class = "btn-primary"
+          )
         )
       ))
     })
@@ -409,9 +459,13 @@ mod_dictionary_server <- function(
     observeEvent(input$review_save, {
       q <- modal_queue()
       req(!is.null(q))
-      states <- vapply(seq_len(nrow(q)), function(i) {
-        input[[paste0("rv_", i)]] %||% "later"
-      }, "")
+      states <- vapply(
+        seq_len(nrow(q)),
+        function(i) {
+          input[[paste0("rv_", i)]] %||% "later"
+        },
+        ""
+      )
       save_review(states)
     })
     observeEvent(input$review_all_private, {
@@ -440,14 +494,24 @@ mod_dictionary_server <- function(
         placeholder = "What this table holds, where it comes from, who owns it"
       )
     })
-    observeEvent(input$table_desc, {
-      tn <- desc_table()
-      req(nzchar(tn), tn %in% names(tables_rv()))
-      if (!identical(input$table_desc, dict_entry(dictionary_rv(), tn)$description)) {
-        write_entry(dict_key(tn), "description", input$table_desc)
-      }
-    # Runs before the box is redrawn for a newly selected table
-    }, ignoreInit = TRUE, priority = 10)
+    observeEvent(
+      input$table_desc,
+      {
+        tn <- desc_table()
+        req(nzchar(tn), tn %in% names(tables_rv()))
+        if (
+          !identical(
+            input$table_desc,
+            dict_entry(dictionary_rv(), tn)$description
+          )
+        ) {
+          write_entry(dict_key(tn), "description", input$table_desc)
+        }
+        # Runs before the box is redrawn for a newly selected table
+      },
+      ignoreInit = TRUE,
+      priority = 10
+    )
 
     # ── The table ────────────────────────────────────────────
     output$dict_ui <- renderUI({
@@ -465,87 +529,110 @@ mod_dictionary_server <- function(
     })
 
     # Editable columns, 0-based, for DT
-    edit_cols <- c(label = 12L, description = 13L, units = 14L, values = 15L, details = 16L)
+    edit_cols <- c(
+      label = 12L,
+      description = 13L,
+      units = 14L,
+      values = 15L,
+      details = 16L
+    )
 
-    output$dict <- DT::renderDT({
-      d <- shown_rv()
-      privacy <- ifelse(
-        d$privacy_status == "none",
-        "",
-        paste0(
-          unname(privacy_status_labels[d$privacy_status]),
-          ifelse(nzchar(d$privacy_reason) & d$privacy_status %in% c("auto_unreviewed", "confirmed", "not_personal"),
-            paste0(": ", d$privacy_reason), "")
-        )
-      )
-      df <- data.frame(
-        Table = d$table,
-        `#` = d$position,
-        Column = d$column,
-        Type = d$type,
-        Format = d$format,
-        Keys = d$keys,
-        References = mapply(function(refs, srcs) {
-          if (!nzchar(refs)) return("")
-          refs <- strsplit(refs, "; ", fixed = TRUE)[[1]]
-          srcs <- strsplit(srcs, "; ", fixed = TRUE)[[1]]
-          paste0(refs, " (", srcs, ")", collapse = "; ")
-        }, d$references, d$reference_source, USE.NAMES = FALSE),
-        `Missing %` = d$pct_missing,
-        Unique = d$n_unique,
-        Range = dict_range_text(d),
-        Privacy = privacy,
-        Examples = ifelse(nzchar(d$examples_note), paste0("(", d$examples_note, ")"), d$examples),
-        Label = d$label,
-        Description = d$description,
-        Units = d$units,
-        `Allowed values` = d$values,
-        Details = d$details,
-        check.names = FALSE,
-        stringsAsFactors = FALSE
-      )
-      DT::datatable(
-        df,
-        rownames = FALSE,
-        # No per-column filters: numeric ones need DT's slider library,
-        # whose load failure stalls the page (see mod_relationships.R)
-        filter = "none",
-        selection = "multiple",
-        editable = list(
-          target = "cell",
-          disable = list(columns = setdiff(seq_len(ncol(df)) - 1L, edit_cols))
-        ),
-        options = list(
-          pageLength = 50,
-          lengthMenu = list(c(25, 50, 100, -1), c("25", "50", "100", "All")),
-          scrollX = TRUE,
-          # Without a capped body the horizontal bar sits under the last
-          # row, so on a 50-row page it is off screen until you scroll
-          # past everything. Capping the body keeps it in view.
-          scrollY = "62vh",
-          scrollCollapse = TRUE,
-          autoWidth = FALSE,
-          order = list(list(0, "asc"), list(1, "asc")),
-          columnDefs = list(
-            list(className = "dict-editable", targets = unname(edit_cols)),
-            list(className = "dt-center", targets = c(1L, 7L, 8L)),
-            list(className = "dict-range", targets = 9L),
-            list(className = "dict-muted dict-privacy", targets = 10L),
-            list(className = "dict-examples", targets = 11L)
+    output$dict <- DT::renderDT(
+      {
+        d <- shown_rv()
+        privacy <- ifelse(
+          d$privacy_status == "none",
+          "",
+          paste0(
+            unname(privacy_status_labels[d$privacy_status]),
+            ifelse(
+              nzchar(d$privacy_reason) &
+                d$privacy_status %in%
+                  c("auto_unreviewed", "confirmed", "not_personal"),
+              paste0(": ", d$privacy_reason),
+              ""
+            )
           )
-        ),
-        class = "compact hover dict-dt",
-        # DT saves an edit when the cell loses focus; make Enter save too
-        callback = DT::JS(
-          "table.on('keydown', 'td input, td textarea', function(e) {",
-          "  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.blur(); }",
-          "});"
         )
-      )
-    },
-    # Client-side data: an edit stays put when the table is paged or sorted
-    # (server-side data would reload the old value)
-    server = FALSE
+        df <- data.frame(
+          Table = d$table,
+          `#` = d$position,
+          Column = d$column,
+          Type = d$type,
+          Format = d$format,
+          Keys = d$keys,
+          References = mapply(
+            function(refs, srcs) {
+              if (!nzchar(refs)) {
+                return("")
+              }
+              refs <- strsplit(refs, "; ", fixed = TRUE)[[1]]
+              srcs <- strsplit(srcs, "; ", fixed = TRUE)[[1]]
+              paste0(refs, " (", srcs, ")", collapse = "; ")
+            },
+            d$references,
+            d$reference_source,
+            USE.NAMES = FALSE
+          ),
+          `Missing %` = d$pct_missing,
+          Unique = d$n_unique,
+          Range = dict_range_text(d),
+          Privacy = privacy,
+          Examples = ifelse(
+            nzchar(d$examples_note),
+            paste0("(", d$examples_note, ")"),
+            d$examples
+          ),
+          Label = d$label,
+          Description = d$description,
+          Units = d$units,
+          `Allowed values` = d$values,
+          Details = d$details,
+          check.names = FALSE,
+          stringsAsFactors = FALSE
+        )
+        DT::datatable(
+          df,
+          rownames = FALSE,
+          # No per-column filters: numeric ones need DT's slider library,
+          # whose load failure stalls the page (see mod_relationships.R)
+          filter = "none",
+          selection = "multiple",
+          editable = list(
+            target = "cell",
+            disable = list(columns = setdiff(seq_len(ncol(df)) - 1L, edit_cols))
+          ),
+          options = list(
+            pageLength = 50,
+            lengthMenu = list(c(25, 50, 100, -1), c("25", "50", "100", "All")),
+            scrollX = TRUE,
+            # Without a capped body the horizontal bar sits under the last
+            # row, so on a 50-row page it is off screen until you scroll
+            # past everything. Capping the body keeps it in view.
+            scrollY = "62vh",
+            scrollCollapse = TRUE,
+            autoWidth = FALSE,
+            order = list(list(0, "asc"), list(1, "asc")),
+            columnDefs = list(
+              list(className = "dict-editable", targets = unname(edit_cols)),
+              list(className = "dt-center", targets = c(1L, 7L, 8L)),
+              list(className = "dict-range", targets = 9L),
+              list(className = "dict-muted dict-privacy", targets = 10L),
+              list(className = "dict-examples", targets = 11L)
+            )
+          ),
+          class = "compact hover dict-dt",
+          # DT saves an edit when the cell loses focus; make Enter save too
+          callback = DT::JS(
+            "table.on('keydown', 'td input, td textarea', function(e) {",
+            "  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.blur(); }",
+            "});"
+          )
+        )
+      },
+      # Client-side data: an edit stays put when the table is paged or sorted
+      # (server-side data would reload the old value)
+      server = FALSE
     )
 
     observeEvent(input$dict_cell_edit, {
@@ -571,11 +658,15 @@ mod_dictionary_server <- function(
     })
     output$dl_csv <- downloadHandler(
       filename = "data_dictionary.csv",
-      content = function(file) write.csv(export_dd(), file, row.names = FALSE, na = "")
+      content = function(file) {
+        write.csv(export_dd(), file, row.names = FALSE, na = "")
+      }
     )
     output$dl_md <- downloadHandler(
       filename = "data_dictionary.md",
-      content = function(file) writeLines(generate_data_dictionary_md(export_dd()), file)
+      content = function(file) {
+        writeLines(generate_data_dictionary_md(export_dd()), file)
+      }
     )
     output$dl_yaml <- downloadHandler(
       filename = "data-dict.yaml",

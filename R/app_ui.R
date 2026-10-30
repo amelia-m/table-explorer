@@ -17,7 +17,9 @@ app_ui <- function(request) {
       tags$script(src = "tableexplorer/app.js"),
       # ERD diagram: layout (elkjs, EPL-2.0) and pan/zoom (BSD-2)
       tags$script(src = "tableexplorer/vendor/elkjs/elk-api.js"),
-      tags$script(src = "tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js"),
+      tags$script(
+        src = "tableexplorer/vendor/svg-pan-zoom/svg-pan-zoom.min.js"
+      ),
       tags$script(src = "tableexplorer/erd.js")
     ),
 
@@ -62,7 +64,9 @@ app_ui <- function(request) {
         `aria-label` = "Show controls",
         `aria-expanded` = "false",
         `aria-controls` = "sidebar-col",
-        tags$span(class = "sidebar-chevron", "â€º"),
+        # Escaped, not literal: a literal chevron was re-encoded through
+        # Windows-1252 once and rendered as three characters of mojibake
+        tags$span(class = "sidebar-chevron", "›"),
         # A bare chevron does not say what comes back
         tags$span(class = "sidebar-rail-label", "DATA & DETECTION")
       ),
@@ -82,7 +86,7 @@ app_ui <- function(request) {
               `aria-label` = "Hide controls",
               `aria-expanded` = "true",
               `aria-controls` = "sidebar-col",
-              tags$span(class = "sidebar-chevron", "â€¹")
+              tags$span(class = "sidebar-chevron", "‹")
             ),
             mod_upload_ui("upload"),
             tags$hr(),

@@ -31,7 +31,12 @@ supported_extensions <- c(
 
 # ── Multi-format file reader dispatcher ────────────────────────
 
-read_table_file <- function(path, name, notify_fn = message) {
+read_table_file <- function(
+  path,
+  name,
+  notify_fn = message,
+  excel_types = excel_type_guess_default
+) {
   ext <- tolower(tools::file_ext(name))
   if (!startsWith(ext, ".")) {
     ext <- paste0(".", ext)
@@ -61,7 +66,7 @@ read_table_file <- function(path, name, notify_fn = message) {
 
       ".xlsx" = ,
       ".xls" = ,
-      ".xlsm" = read_excel_file(path, name, notify_fn),
+      ".xlsm" = read_excel_file(path, name, notify_fn, excel_types),
 
       ".ods" = read_ods_file(path, name, notify_fn),
 
@@ -113,7 +118,35 @@ read_table_file <- function(path, name, notify_fn = message) {
 
 # ── Excel reader ───────────────────────────────────────────────
 
-read_excel_file <- function(path, name, notify_fn) {
+# How readxl decides each column's type. readxl's own default looks at the
+# first 1000 rows only, so a column that is numeric for 1000 rows and holds
+# text further down has those later values read as missing, silently, and
+# the dictionary then reports them as missing data.
+#   all     guess from every row: correct, and slower on very large sheets
+#   sample  readxl's default, the first 1000 rows
+#   text    read every column as text and let the app's own profiling
+#           describe it; nothing can be lost to a wrong guess
+excel_type_guesses <- c("all", "sample", "text")
+# The first 1000 rows, for a fast first load (Amelia, 2026-10-16: the app
+# should still prioritise speed, "but with warnings and options to use more
+# thorough/slower procedures"). The warning is the other half of the
+# default: any sheet longer than the guess window says so when it loads, so
+# nobody is relying on a 1000-row guess without knowing it.
+excel_type_guess_default <- "sample"
+# readxl's own guess window. Named so the warning and the default agree.
+excel_guess_rows <- 1000L
+# Excel's own row limit (2^20), so "every row" is exact for any sheet Excel
+# can hold. readxl caps guess_max at .Machine$integer.max %/% 100 with a
+# warning, which this stays well under.
+excel_max_rows <- 1048576L
+
+read_excel_file <- function(
+  path,
+  name,
+  notify_fn,
+  excel_types = excel_type_guess_default
+) {
+  excel_types <- match.arg(excel_types, excel_type_guesses)
   if (!requireNamespace("readxl", quietly = TRUE)) {
     notify_fn(
       "Install the 'readxl' package to read Excel files: install.packages('readxl')"
@@ -124,8 +157,25 @@ read_excel_file <- function(path, name, notify_fn) {
   base <- tools::file_path_sans_ext(name)
   tbls <- list()
   for (s in sheets) {
+    # readxl warns once per value it could not read as the guessed type and
+    # sets that value to missing. Count those warnings rather than letting
+    # them vanish, because each one is a value the user never sees.
+    lost <- 0L
     df <- tryCatch(
-      as.data.frame(readxl::read_excel(path, sheet = s)),
+      withCallingHandlers(
+        as.data.frame(switch(
+          excel_types,
+          all = readxl::read_excel(path, sheet = s, guess_max = excel_max_rows),
+          sample = readxl::read_excel(path, sheet = s),
+          text = readxl::read_excel(path, sheet = s, col_types = "text")
+        )),
+        warning = function(w) {
+          if (grepl("^Expecting ", conditionMessage(w))) {
+            lost <<- lost + 1L
+            invokeRestart("muffleWarning")
+          }
+        }
+      ),
       error = function(e) {
         notify_fn(paste0(
           "Could not read sheet '",
@@ -136,6 +186,40 @@ read_excel_file <- function(path, name, notify_fn) {
         NULL
       }
     )
+    # Said whether or not anything was lost: a guess from the first rows
+    # can be wrong without readxl noticing, for instance a column of codes
+    # that is all digits for 1000 rows and has leading zeros later.
+    if (
+      identical(excel_types, "sample") &&
+        !is.null(df) &&
+        nrow(df) > excel_guess_rows
+    ) {
+      notify_fn(sprintf(
+        paste(
+          "Sheet '%s' has %s rows; column types were guessed from the first",
+          "%s. If a column changes type further down, choose 'Guess from",
+          "every row' under Excel column types and add the file again."
+        ),
+        s,
+        format(nrow(df), big.mark = ","),
+        format(excel_guess_rows, big.mark = ",")
+      ))
+    }
+    if (lost > 0L) {
+      notify_fn(sprintf(
+        paste(
+          "Sheet '%s': %d value%s could not be read as the type guessed for",
+          "%s column and %s set to missing. Choose 'Guess from every row' or",
+          "'Read every column as text' under Excel column types and add the",
+          "file again to keep them."
+        ),
+        s,
+        lost,
+        if (lost == 1L) "" else "s",
+        if (lost == 1L) "its" else "their",
+        if (lost == 1L) "was" else "were"
+      ))
+    }
     if (!is.null(df) && nrow(df) > 0) {
       tname <- if (length(sheets) == 1) {
         base
@@ -358,7 +442,9 @@ parse_schema_file <- function(path, name, notify_fn = message) {
             if (isTRUE(c$primary_key) || isTRUE(c$pk)) c$name
           }))
         }
-        if (length(pk) > 0) primary_keys[[tname]] <- as.character(pk)
+        if (length(pk) > 0) {
+          primary_keys[[tname]] <- as.character(pk)
+        }
         # Extract inline foreign_key definitions
         for (cdef in cols) {
           fk <- cdef$foreign_key
@@ -403,7 +489,11 @@ parse_schema_file <- function(path, name, notify_fn = message) {
     }
   }
 
-  list(tables = tables, relationships = relationships, primary_keys = primary_keys)
+  list(
+    tables = tables,
+    relationships = relationships,
+    primary_keys = primary_keys
+  )
 }
 
 # ── data-dict YAML ─────────────────────────────────────────────
@@ -413,7 +503,9 @@ parse_schema_file <- function(path, name, notify_fn = message) {
 # values and display: restricted as dictionary entries.
 data_dict_empty_column <- function(type) {
   type <- type %||% "string"
-  if (startsWith(type, "number")) return(numeric(0))
+  if (startsWith(type, "number")) {
+    return(numeric(0))
+  }
   switch(
     type,
     boolean = logical(0),
@@ -424,7 +516,13 @@ data_dict_empty_column <- function(type) {
 }
 
 parse_data_dict_schema <- function(schema, notify_fn = message) {
-  txt <- function(x) if (is.null(x)) "" else trimws(paste(as.character(unlist(x)), collapse = " "))
+  txt <- function(x) {
+    if (is.null(x)) {
+      ""
+    } else {
+      trimws(paste(as.character(unlist(x)), collapse = " "))
+    }
+  }
   tables <- list()
   dictionary <- list()
   primary_keys <- list()
@@ -434,8 +532,12 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       if (nzchar(txt(def[[f]]))) e[[f]] <- txt(def[[f]])
     }
     if (column) {
-      if (nzchar(txt(def$units))) e$units <- txt(def$units)
-      if (!is.null(def$values)) e$values <- dict_format_values(def$values)
+      if (nzchar(txt(def$units))) {
+        e$units <- txt(def$units)
+      }
+      if (!is.null(def$values)) {
+        e$values <- dict_format_values(def$values)
+      }
       if (identical(def$display, "restricted")) {
         e[["private"]] <- TRUE
         e$private_source <- "import"
@@ -452,12 +554,16 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
   }
   for (tdef in table_defs) {
     tname <- tdef$name
-    if (is.null(tname) || !nzchar(tname)) next
+    if (is.null(tname) || !nzchar(tname)) {
+      next
+    }
     add_entry(dict_key(tname), tdef)
     cols <- list()
     for (cdef in tdef$columns %||% list()) {
       cn <- cdef$name
-      if (is.null(cn) || !nzchar(cn)) next
+      if (is.null(cn) || !nzchar(cn)) {
+        next
+      }
       # Empty columns of the declared type, so a re-export keeps the types
       cols[[cn]] <- data_dict_empty_column(cdef$type)
       add_entry(dict_key(tname, cn), cdef, column = TRUE)
@@ -466,7 +572,9 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       }
     }
     # A data-dict file lists every key, so a table without one has none
-    if (is.null(primary_keys[[tname]])) primary_keys[tname] <- list(character(0))
+    if (is.null(primary_keys[[tname]])) {
+      primary_keys[tname] <- list(character(0))
+    }
     tables[[tname]] <- if (length(cols)) {
       as.data.frame(cols, stringsAsFactors = FALSE, check.names = FALSE)
     } else {
@@ -479,7 +587,11 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
   for (rdef in schema$relationships %||% list()) {
     m <- regmatches(
       rdef$join %||% "",
-      regexec("^\\s*([^.\\s]+)\\.([^=\\s]+)\\s*=\\s*([^.\\s]+)\\.([^=\\s]+)\\s*$", rdef$join %||% "", perl = TRUE)
+      regexec(
+        "^\\s*([^.\\s]+)\\.([^=\\s]+)\\s*=\\s*([^.\\s]+)\\.([^=\\s]+)\\s*$",
+        rdef$join %||% "",
+        perl = TRUE
+      )
     )[[1]]
     if (length(m) != 5) {
       skipped <- skipped + 1L
@@ -513,6 +625,43 @@ parse_data_dict_schema <- function(schema, notify_fn = message) {
       skipped
     ))
   }
+
+  # Candidates this app wrote into its own namespaced block. They come
+  # back as detected links awaiting review, never as declared ones: an
+  # unconfirmed guess that survives a round trip must still be reviewed.
+  ext <- schema[["x-tableexplorer"]]
+  n_cand <- 0L
+  for (cdef in ext$candidate_relationships %||% list()) {
+    if (
+      is.null(cdef$from_table) ||
+        is.null(cdef$from_col) ||
+        is.null(cdef$to_table) ||
+        is.null(cdef$to_col)
+    ) {
+      next
+    }
+    n_cand <- n_cand + 1L
+    relationships[[length(relationships) + 1]] <- list(
+      from_table = txt(cdef$from_table),
+      from_col = txt(cdef$from_col),
+      to_table = txt(cdef$to_table),
+      to_col = txt(cdef$to_col),
+      detected_by = txt(cdef$detected_by %||% "import"),
+      confidence = txt(cdef$confidence %||% "low"),
+      score = suppressWarnings(as.numeric(cdef$score %||% NA_real_)),
+      signals = list(),
+      reasons = c(
+        "candidate carried through a data-dict round trip",
+        if (nzchar(txt(cdef$evidence))) txt(cdef$evidence)
+      )
+    )
+  }
+  if (n_cand > 0) {
+    notify_fn(sprintf(
+      "%d candidate link(s) read back from this file: still to review, not declared.",
+      n_cand
+    ))
+  }
   list(
     tables = tables,
     relationships = relationships,
@@ -535,10 +684,16 @@ merge_dictionary <- function(current, imported) {
     # column restricted still overrides an automatic flag the user rejected
     decided <- !is.null(e[["private"]])
     for (f in setdiff(names(imported[[k]]), "private_source")) {
-      if (f == "private" && decided) next
+      if (f == "private" && decided) {
+        next
+      }
       have <- e[[f]]
       empty <- is.null(have) || (is.character(have) && !nzchar(have))
-      if (f == "label" && !is.null(e$business_name) && nzchar(e$business_name)) empty <- FALSE
+      if (
+        f == "label" && !is.null(e$business_name) && nzchar(e$business_name)
+      ) {
+        empty <- FALSE
+      }
       if (empty) {
         e[[f]] <- imported[[k]][[f]]
         if (f == "private") e$private_source <- imported[[k]]$private_source
@@ -557,12 +712,26 @@ merge_dictionary <- function(current, imported) {
 
 app_export_signatures <- list(
   "relationships list" = c(
-    "from_table", "from_col", "to_table", "to_col", "detected_by",
-    "confidence", "score", "signals", "reasons"
+    "from_table",
+    "from_col",
+    "to_table",
+    "to_col",
+    "detected_by",
+    "confidence",
+    "score",
+    "signals",
+    "reasons"
   ),
   "table details" = c(
-    "table", "table_rows", "table_cols", "column", "type", "non_null",
-    "unique_vals", "is_pk", "is_fk"
+    "table",
+    "table_rows",
+    "table_cols",
+    "column",
+    "type",
+    "non_null",
+    "unique_vals",
+    "is_pk",
+    "is_fk"
   )
 )
 
@@ -676,10 +845,16 @@ access_relationship_rels <- function(rows) {
   if (is.null(rows) || nrow(rows) == 0) {
     return(list())
   }
-  rows <- rows[!grepl("^MSys", rows$szObject) & !grepl("^MSys", rows$szReferencedObject), , drop = FALSE]
+  rows <- rows[
+    !grepl("^MSys", rows$szObject) & !grepl("^MSys", rows$szReferencedObject),
+    ,
+    drop = FALSE
+  ]
   lapply(seq_len(nrow(rows)), function(i) {
     grbit <- suppressWarnings(as.integer(rows$grbit[i]))
-    if (is.na(grbit)) grbit <- 0L
+    if (is.na(grbit)) {
+      grbit <- 0L
+    }
     enforced <- bitwAnd(grbit, 2L) == 0L
     list(
       from_table = janitor::make_clean_names(rows$szObject[i]),
@@ -727,7 +902,10 @@ access_relationship_rows_jackcess <- function(path) {
     return(NULL)
   }
   jar_dir <- access_jar_dir()
-  jar_paths <- file.path(jar_dir, vapply(ucanaccess_jars, `[[`, character(1), "file"))
+  jar_paths <- file.path(
+    jar_dir,
+    vapply(ucanaccess_jars, `[[`, character(1), "file")
+  )
   jar_paths <- jar_paths[file.exists(jar_paths)]
   if (!any(grepl("jackcess", jar_paths))) {
     return(NULL)
@@ -747,7 +925,8 @@ access_relationship_rows_jackcess <- function(path) {
         parent_cols <- r$getFromColumns()
         child_cols <- r$getToColumns()
         # Same bits as MSysRelationships.grbit: 1 = one-to-one, 2 = not enforced
-        flags <- as.integer(r$isOneToOne()) + 2L * as.integer(!r$hasReferentialIntegrity())
+        flags <- as.integer(r$isOneToOne()) +
+          2L * as.integer(!r$hasReferentialIntegrity())
         for (j in seq_len(child_cols$size()) - 1L) {
           out[[length(out) + 1]] <- data.frame(
             szRelationship = r$getName(),
@@ -763,9 +942,12 @@ access_relationship_rows_jackcess <- function(path) {
       }
       if (length(out) == 0) {
         out <- list(data.frame(
-          szRelationship = character(0), grbit = integer(0),
-          icolumn = integer(0), szObject = character(0),
-          szColumn = character(0), szReferencedObject = character(0),
+          szRelationship = character(0),
+          grbit = integer(0),
+          icolumn = integer(0),
+          szObject = character(0),
+          szColumn = character(0),
+          szReferencedObject = character(0),
           szReferencedColumn = character(0)
         ))
       }

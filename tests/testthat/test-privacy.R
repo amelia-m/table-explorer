@@ -15,10 +15,16 @@ test_that("names and values suggest personal data", {
   expect_match(privacy_guess("email_address")$reason, "email")
   expect_null(privacy_guess("has_email", c(TRUE, FALSE)))
   emails <- c("a@x.io", "b@y.org", "c@z.com", NA)
-  expect_match(privacy_guess("contact", emails)$reason, "100% of values look like email addresses")
+  expect_match(
+    privacy_guess("contact", emails)$reason,
+    "100% of values look like email addresses"
+  )
   phones <- c("402-555-1234", "(402) 555-9999", "402.555.0000")
   expect_match(privacy_guess("contact", phones)$reason, "phone numbers")
-  expect_match(privacy_guess("x", c("123-45-6789", "987-65-4321"))$reason, "social security")
+  expect_match(
+    privacy_guess("x", c("123-45-6789", "987-65-4321"))$reason,
+    "social security"
+  )
   expect_null(privacy_guess("code", c("AB", "CD", "EF")))
 })
 
@@ -27,11 +33,16 @@ test_that("user choices beat patterns, which beat automatic flags", {
   expect_equal(dict_privacy(list(), "t", "email", v)$status, "auto_unreviewed")
   expect_true(dict_privacy(list(), "t", "email", v)$private)
   expect_true(dict_privacy(list(), "t", "email", v)$needs_review)
-  d <- list("t|email" = list(private = FALSE, public_for = privacy_data_hash(v)))
+  d <- list(
+    "t|email" = list(private = FALSE, public_for = privacy_data_hash(v))
+  )
   expect_equal(dict_privacy(d, "t", "email", v)$status, "user_public")
   expect_false(dict_privacy(d, "t", "email", v)$private)
   # "Not private" was chosen for other data: back to the automatic flag
-  expect_equal(dict_privacy(d, "t", "email", c("z@x.io", "y@x.io"))$status, "auto_unreviewed")
+  expect_equal(
+    dict_privacy(d, "t", "email", c("z@x.io", "y@x.io"))$status,
+    "auto_unreviewed"
+  )
   d <- list("t|notes" = list(private = TRUE))
   expect_equal(dict_privacy(d, "t", "notes")$status, "user_private")
   d <- list(.settings = list(private_patterns = "*_notes, other.secret"))
@@ -44,11 +55,13 @@ test_that("user choices beat patterns, which beat automatic flags", {
 })
 
 test_that("the review queue counts each flagged column's values", {
-  tabs <- list(t = data.frame(
-    email = c("a@x.io", NA),
-    home_phone = c(NA_character_, NA_character_),
-    n = 1:2
-  ))
+  tabs <- list(
+    t = data.frame(
+      email = c("a@x.io", NA),
+      home_phone = c(NA_character_, NA_character_),
+      n = 1:2
+    )
+  )
   q <- privacy_review_queue(tabs, list())
   expect_equal(q$n_values[q$column == "email"], 1L)
   # All-NA: flagged by name, but there is nothing in it to disclose
@@ -62,27 +75,37 @@ test_that("an empty review queue still carries n_values", {
 })
 
 test_that("reviews confirm or clear automatic flags until the reason changes", {
-  tabs <- list(t = data.frame(email = c("a@x.io", "b@x.io"), dob = c("x", "y"), n = 1:2))
+  tabs <- list(
+    t = data.frame(email = c("a@x.io", "b@x.io"), dob = c("x", "y"), n = 1:2)
+  )
   q <- privacy_review_queue(tabs, list())
   expect_equal(q$column, c("email", "dob"))
   d <- privacy_review_set(list(), tabs, "t|email", "rejected")
   d <- privacy_review_set(d, tabs, "t|dob", "confirmed")
   expect_equal(nrow(privacy_review_queue(tabs, d)), 0)
-  expect_equal(dict_privacy(d, "t", "email", tabs$t$email)$status, "not_personal")
+  expect_equal(
+    dict_privacy(d, "t", "email", tabs$t$email)$status,
+    "not_personal"
+  )
   expect_false(dict_privacy(d, "t", "email", tabs$t$email)$private)
   expect_equal(dict_privacy(d, "t", "dob", tabs$t$dob)$status, "confirmed")
   # A stale review (different reason) asks again
   d[["t|email"]]$privacy_review$reason <- "something else"
-  expect_equal(dict_privacy(d, "t", "email", tabs$t$email)$status, "auto_unreviewed")
+  expect_equal(
+    dict_privacy(d, "t", "email", tabs$t$email)$status,
+    "auto_unreviewed"
+  )
 })
 
 test_that("private columns keep metadata but lose examples and ranges", {
-  tabs <- list(p = data.frame(
-    id = 1:4,
-    birth_year = c(1950, 1960, 1970, 1980),
-    email = c("a@x.io", "bb@x.io", "ccc@x.io", NA),
-    stringsAsFactors = FALSE
-  ))
+  tabs <- list(
+    p = data.frame(
+      id = 1:4,
+      birth_year = c(1950, 1960, 1970, 1980),
+      email = c("a@x.io", "bb@x.io", "ccc@x.io", NA),
+      stringsAsFactors = FALSE
+    )
+  )
   dd <- build_data_dictionary(tabs, list(), list(p = "id"))
   by <- dd[dd$column == "birth_year", ]
   expect_true(by$private)
@@ -99,31 +122,56 @@ test_that("private columns keep metadata but lose examples and ranges", {
   expect_equal(c(by2$min, by2$max), c("1950", "1980"))
   expect_equal(by2$examples, "1950, 1960, 1970, 1980")
   expect_match(dict_range_text(by2), "1950 – 1980")
-  expect_equal(dict_range_text(dd[dd$column == "birth_year", ]), "hidden (private)")
+  expect_equal(
+    dict_range_text(dd[dd$column == "birth_year", ]),
+    "hidden (private)"
+  )
 })
 
 test_that("hide_examples and the examples setting", {
-  tabs <- list(t = data.frame(id = 1:3, tier = c("a", "b", "c"), stringsAsFactors = FALSE))
+  tabs <- list(
+    t = data.frame(id = 1:3, tier = c("a", "b", "c"), stringsAsFactors = FALSE)
+  )
   d <- list("t|tier" = list(hide_examples = TRUE))
   dd <- build_data_dictionary(tabs, list(), list(t = "id"), dictionary = d)
   expect_equal(dd$examples_note[dd$column == "tier"], "hidden by you")
   expect_false(dd$private[dd$column == "tier"])
-  off <- list(.settings = list(examples = "off"), "t|tier" = list(hide_examples = FALSE, examples_for = privacy_data_hash(tabs$t$tier)))
+  off <- list(
+    .settings = list(examples = "off"),
+    "t|tier" = list(
+      hide_examples = FALSE,
+      examples_for = privacy_data_hash(tabs$t$tier)
+    )
+  )
   dd <- build_data_dictionary(tabs, list(), list(t = "id"), dictionary = off)
   expect_equal(dd$examples[dd$column == "tier"], "a, b, c")
   expect_equal(dd$examples_note[dd$column == "id"], "examples off")
   # New data under the same name: examples go off again
-  tabs2 <- list(t = data.frame(id = 1:3, tier = c("x", "y", "z"), stringsAsFactors = FALSE))
+  tabs2 <- list(
+    t = data.frame(id = 1:3, tier = c("x", "y", "z"), stringsAsFactors = FALSE)
+  )
   dd2 <- build_data_dictionary(tabs2, list(), list(t = "id"), dictionary = off)
   expect_equal(dd2$examples_note[dd2$column == "tier"], "examples off")
 })
 
 test_that("labels replace business names; older entries still read", {
-  expect_equal(dict_entry(list("t|c" = list(business_name = "Old")), "t", "c")$label, "Old")
-  expect_equal(dict_entry(list("t|c" = list(label = "New", business_name = "Old")), "t", "c")$label, "New")
+  expect_equal(
+    dict_entry(list("t|c" = list(business_name = "Old")), "t", "c")$label,
+    "Old"
+  )
+  expect_equal(
+    dict_entry(
+      list("t|c" = list(label = "New", business_name = "Old")),
+      "t",
+      "c"
+    )$label,
+    "New"
+  )
   expect_true(dict_entry_empty(list(label = "", description = "")))
   expect_false(dict_entry_empty(list(private = FALSE)))
-  expect_false(dict_entry_empty(list(privacy_review = list(state = "rejected", reason = "x"))))
+  expect_false(dict_entry_empty(list(
+    privacy_review = list(state = "rejected", reason = "x")
+  )))
 })
 
 test_that("'name' after an entity word names a thing; qualifiers anywhere later count", {
@@ -179,7 +227,11 @@ test_that("privacy_reset drops decisions that let values show", {
 
 test_that("an import never overrides the user's own privacy decision", {
   imported <- list(
-    "t|email" = list(private = TRUE, private_source = "import", label = "Email"),
+    "t|email" = list(
+      private = TRUE,
+      private_source = "import",
+      label = "Email"
+    ),
     "t|dob" = list(private = TRUE, private_source = "import"),
     "t|new" = list(private = TRUE, private_source = "import")
   )
@@ -223,10 +275,15 @@ test_that("Remove all tables resets privacy decisions and declared keys", {
 })
 
 test_that("Dictionary tab: selected rows become private; review decisions save", {
-  tabs <- list(t = data.frame(
-    id = 1:3, email = c("a@x.io", "b@x.io", "c@x.io"), product_code = c("A", "B", "C"),
-    dob = c("x", "y", "z"), stringsAsFactors = FALSE
-  ))
+  tabs <- list(
+    t = data.frame(
+      id = 1:3,
+      email = c("a@x.io", "b@x.io", "c@x.io"),
+      product_code = c("A", "B", "C"),
+      dob = c("x", "y", "z"),
+      stringsAsFactors = FALSE
+    )
+  )
   dict <- reactiveVal(list())
   testServer(
     mod_dictionary_server,
@@ -245,7 +302,10 @@ test_that("Dictionary tab: selected rows become private; review decisions save",
       session$setInputs(set_private = 1)
       expect_true(dict()[["t|product_code"]][["private"]])
       session$setInputs(set_public = 2)
-      expect_equal(dict()[["t|product_code"]]$public_for, privacy_data_hash(tabs$t$product_code))
+      expect_equal(
+        dict()[["t|product_code"]]$public_for,
+        privacy_data_hash(tabs$t$product_code)
+      )
       # Review: email -> not personal, dob -> private
       q <- queue_rv()
       expect_equal(q$column, c("email", "dob"))
@@ -257,7 +317,13 @@ test_that("Dictionary tab: selected rows become private; review decisions save",
       expect_equal(nrow(queue_rv()), 0)
       # A text edit on a cell lands on the right column
       d <- shown_rv()
-      session$setInputs(dict_cell_edit = list(row = which(d$column == "id"), col = 12L, value = "Identifier"))
+      session$setInputs(
+        dict_cell_edit = list(
+          row = which(d$column == "id"),
+          col = 12L,
+          value = "Identifier"
+        )
+      )
       expect_equal(dict()[["t|id"]]$label, "Identifier")
     }
   )
@@ -265,10 +331,23 @@ test_that("Dictionary tab: selected rows become private; review decisions save",
 
 test_that("choices that let values show follow the data: factors, overwrites", {
   f <- factor(c("a@x.io", "b@x.io"))
-  d <- list("t|email" = list(private = FALSE, public_for = privacy_data_hash(f)))
-  expect_equal(dict_privacy(d, "t", "email", as.character(f))$status, "user_public")
-  tabs <- list(t = data.frame(first_name = c("Ann", "Bo"), stringsAsFactors = FALSE))
+  d <- list(
+    "t|email" = list(private = FALSE, public_for = privacy_data_hash(f))
+  )
+  expect_equal(
+    dict_privacy(d, "t", "email", as.character(f))$status,
+    "user_public"
+  )
+  tabs <- list(
+    t = data.frame(first_name = c("Ann", "Bo"), stringsAsFactors = FALSE)
+  )
   r <- privacy_review_set(list(), tabs, "t|first_name", "rejected")
-  expect_equal(dict_privacy(r, "t", "first_name", tabs$t$first_name)$status, "not_personal")
-  expect_equal(dict_privacy(r, "t", "first_name", c("Cy", "Di"))$status, "auto_unreviewed")
+  expect_equal(
+    dict_privacy(r, "t", "first_name", tabs$t$first_name)$status,
+    "not_personal"
+  )
+  expect_equal(
+    dict_privacy(r, "t", "first_name", c("Cy", "Di"))$status,
+    "auto_unreviewed"
+  )
 })
