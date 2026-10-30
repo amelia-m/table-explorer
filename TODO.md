@@ -4,6 +4,8 @@
 
 Not table-explorer work; parked here because they were written in a table-explorer session and `_scratch/` is ignored. Remove each line once agent-config has taken it.
 
+All of it, plus the questions below marked for agent-config, is bundled for one paste in `_scratch/handoff_agent_config_bundle.md`.
+
 Briefs to paste into an agent-config session:
 
 - [ ] Amelia: paste `_scratch/handoff_transcript_size_tool.md`, so agent-config adopts `_scratch/transcript_size_breakdown.ps1` as a reusable transcript-size diagnostic (five fixes listed in the brief).
@@ -19,9 +21,9 @@ Still open (Amelia decides each):
 
 - [ ] Decide which proposed rule or habit changes to adopt: 9 in `_scratch/reviews/2026-10-27-session-working-review.md` and 6 in `_scratch/reviews/2026-10-27-session-working-review-part2.md` (reviews of the session that wrote these handoffs).
 - [ ] Delete `tr_dump.py` from the Windows user temp folder (`%LOCALAPPDATA%\Temp`)? A review subagent wrote it there against its contract; its content was checked on 2026-10-28 and holds no transcript content.
-- [ ] Delete the empty file `_scratch_placeholder_do_not_use` in the folder that contains this repository (one level up)? The agent created it by mistake on 2026-10-28; nothing uses it.
 - [ ] Does a brief pasted into another session count as dispatching an agent under the task-contract rule, and does a brief that leaves the contract to the receiving session satisfy it?
-- [ ] Should "transcripts hold no work data above low risk" (Amelia, 2026-10-27) go into the global rule text?
+- [ ] For Amelia to discuss with agent-config (in the bundle, with proposed wording): should "transcripts hold no work data above low risk" (Amelia, 2026-10-27) go into the global rule text?
+- [ ] For Amelia to discuss with agent-config (in the bundle): should agents be allowed to delete empty files, and leftover copies of something moved, without asking (Amelia, 2026-10-30)?
 - [ ] Unchecked items not picked on 2026-10-28 (numbers from the session's table), drop or keep: (2) whether project-time-tracker commit `8d28a2c` really had broken YAML; (3c) timing a resume of the 26 MB transcript to confirm size caused the hang; (5) full tool output at four transcript lines; (10) speed of the session. Items 6 (caveman) and 9 (em dashes in thinking; all thinking blocks were empty) are resolved.
 
 ## Detection measurement on public datasets (2026-10-10)
@@ -597,9 +599,7 @@ errors and 4 expected skips. `Rscript dev/fixtures/score_detection.R` gives
       content is about 1050 lines of Python features in `app.py`: database
       connections, export, run detection, name cleaning and scan triage,
       plus SQLAlchemy in `requirements.txt`. Whether to port that depends
-      on the framework research. Take two pieces separately:
-      - its GitHub Actions R CI workflow (`.github/workflows/r-ci.yml`,
-        Ubuntu, `devtools::test()`). `main` has no CI.
+      on the framework research. Take one piece separately:
       - `URL`, `BugReports` and a real `person("Amelia", "Miramonti", ...)`
         in `DESCRIPTION`.
 
