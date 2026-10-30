@@ -1,0 +1,14 @@
+# The USPS ZIP Locale Detail edition this repository was last checked against.
+# Written by: Rscript dev/check_usps_zip_locale.R --record
+# Read by:    Rscript dev/check_usps_zip_locale.R, and the weekly workflow
+#             .github/workflows/usps-zip-locale.yml. Do not edit by hand.
+source_page: https://postalpro.usps.com/ZIP_Locale_Detail
+file_url: https://postalpro.usps.com/mnt/glusterfs/2026-10/Zip_Locale_Detail.xlsx
+file_updated: '2026-10-01'
+fetched_on: '2026-10-16'
+md5: 4dbb0d33411e1219bfab5d00d777b065
+distinct_zips: 41486
+lowest_zip: '00501'
+highest_zip: '99950'
+csv_file: docs/ref/usps-zip-locale.csv
+csv_rows: 46912
