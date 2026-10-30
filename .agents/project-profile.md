@@ -101,7 +101,7 @@ lack of quota.
   as does anything else the global rules gate (force pushes, resets,
   discarding work, changing remotes or settings).
 - **Verification is a command whose result you quote, never the absence of
-  output.** Run `Rscript dev/check.R`: it parses every R and JS file, runs
+  output.** Run `Rscript dev/check.R`: it parses the R and JS files named below, runs
   the suite and reports the counts, runs the detection scorer, and exits
   non-zero on any failure. Quote its summary lines in the pull request. An
   empty grep, a missing "Failed" header or a silent command is not evidence
@@ -111,10 +111,7 @@ lack of quota.
   passed.** A multi-step edit that writes as it goes leaves the file half
   changed when a later step fails. Either use the editing tools, or build
   the whole new content in memory and write once at the end.
-- There is no CI here yet, so the output of `testthat::test_local()` and
-  `Rscript dev/fixtures/score_detection.R` stands in for it and belongs in the
-  pull request body, named with the command that produced it. Pulling the
-  Actions workflow out of draft PR #6 is on `TODO.md` and would change this.
+- CI runs on GitHub: `.github/workflows/r-ci.yml` runs `testthat::test_local()` and `dev/fixtures/score_detection.R` on every push and pull request, and the ruleset on `main` requires its `test` check, so a pull request cannot merge until it passes. `Rscript dev/check.R` is still required before the pull request: it also parses the R files in `R/`, `tests/testthat/` and `dev/`, parses the app's own JS in `inst/app/www/` when node is on PATH, checks `main` against `origin/main`, and gives the summary lines the pull request quotes. CI reports on a pushed branch only, so it does not replace the local run. CI's result belongs in the pull request body too.
 - A change that cannot be checked without her eyes (visual or interaction
   work on real data) says so in the pull request and waits for her, however
   clean the review.
