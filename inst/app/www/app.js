@@ -41,6 +41,25 @@
             if (e.target.closest("#sidebar-rail")) setSidebar(false, true);
           });
         }
+        // Disclosures marked data-remember keep their open or closed state
+        // across reloads, per viewer: collapsing the ERD settings or the key
+        // to give the diagram room should not have to be redone every visit.
+        // localStorage can be absent or throw (private windows, blocked site
+        // data); the page then simply opens with the defaults.
+        var REMEMBER_PREFIX = "tableexplorer.open.";
+        document.querySelectorAll("details[data-remember]").forEach(function(d) {
+          var stored = null;
+          try { stored = localStorage.getItem(REMEMBER_PREFIX + d.dataset.remember); } catch (e) {}
+          if (stored === "0") d.open = false;
+          if (stored === "1") d.open = true;
+        });
+        document.body.addEventListener("toggle", function(e) {
+          var d = e.target;
+          if (!d.dataset || !d.dataset.remember) return;
+          try { localStorage.setItem(REMEMBER_PREFIX + d.dataset.remember, d.open ? "1" : "0"); } catch (err) {}
+          // The diagram sizes itself to its container
+          window.dispatchEvent(new Event("resize"));
+        }, true);
         // Table Details column lists open closed, and a DataTable laid out
         // while hidden measures every column as zero wide. Re-measure when
         // one is opened. The toggle event does not bubble, hence capture.
