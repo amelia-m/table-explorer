@@ -326,6 +326,23 @@ generate_mermaid_erd <- function(
 # Keeps what Mermaid can't: not null, notes, composite PK indexes, subject
 # area TableGroups and header colours, muted colour for inferred refs.
 
+# The note an export adds to a column holding blank text, which the app
+# counts as missing; "" when there is none
+blank_values_note <- function(n) {
+  if (is.na(n) || n == 0) {
+    return("")
+  }
+  if (n == 1) {
+    return(
+      "1 blank value counted as missing; a database would store it as an empty string."
+    )
+  }
+  sprintf(
+    "%s blank values counted as missing; a database would store them as empty strings.",
+    format(n, big.mark = ",")
+  )
+}
+
 generate_dbml <- function(
   tables,
   rels,
@@ -358,11 +375,19 @@ generate_dbml <- function(
     single_pk <- sum(cols$pk) == 1
     for (i in seq_len(nrow(cols))) {
       c_desc <- dict_entry(dictionary, t$name, cols$name[i])$description
+      # A description without closing punctuation gets a full stop before
+      # the blank-values note
+      b_note <- blank_values_note(cols$n_blank[i])
+      c_note <- if (nzchar(c_desc) && nzchar(b_note)) {
+        paste0(c_desc, if (!grepl("[.!?]$", c_desc)) ".", " ", b_note)
+      } else {
+        paste0(c_desc, b_note)
+      }
       settings <- c(
         if (cols$pk[i] && single_pk) "pk",
         if (cols$uk[i]) "unique",
         if (isFALSE(cols$nullable[i])) "not null",
-        if (nzchar(c_desc)) sprintf("note: '%s'", dq(c_desc))
+        if (nzchar(c_note)) sprintf("note: '%s'", dq(c_note))
       )
       lines <- c(
         lines,
@@ -897,6 +922,7 @@ dict_entry_empty <- function(e) {
 
 # A readable format: the value fingerprint for text, else from the type
 dict_format <- function(v) {
+  v <- blank_as_na(v)
   if (inherits(v, "POSIXt")) {
     return("datetime")
   }
@@ -1010,15 +1036,20 @@ build_data_dictionary <- function(
     out_rels <- Filter(function(r) r$from_table == t$name, model$rels)
     lapply(seq_len(nrow(cols)), function(i) {
       cn <- cols$name[i]
-      v <- df[[cn]]
-      if (is.factor(v)) {
-        v <- as.character(v)
+      raw <- df[[cn]]
+      if (is.factor(raw)) {
+        raw <- as.character(raw)
       }
+      # Blank text counts as missing for everything profiled here, but
+      # privacy decisions were stamped with a hash of the raw values, so
+      # the privacy checks read raw (a decision must not go stale because
+      # of this rule)
+      v <- blank_as_na(raw)
       n <- length(v)
       present <- v[!is.na(v)]
       refs <- Filter(function(r) r$from_col == cn, out_rels)
       e <- dict_entry(dictionary, t$name, cn)
-      p <- dict_privacy(dictionary, t$name, cn, v)
+      p <- dict_privacy(dictionary, t$name, cn, raw)
 
       # Text lengths never identify anyone; a numeric or date range can
       # (ages, birth dates), so it is left out for private columns
@@ -1047,7 +1078,7 @@ build_data_dictionary <- function(
       } else if (isTRUE(e$hide_examples)) {
         "hidden by you"
       } else if (
-        !examples_on && !dict_examples_forced(dictionary, t$name, cn, v)
+        !examples_on && !dict_examples_forced(dictionary, t$name, cn, raw)
       ) {
         "examples off"
       } else {
@@ -1406,7 +1437,7 @@ generate_data_dict_yaml <- function(
       drop = FALSE
     ]
     cn <- t$columns$name[i]
-    v <- tables[[t$name]][[cn]]
+    v <- blank_as_na(tables[[t$name]][[cn]])
     if (is.factor(v)) {
       v <- as.character(v)
     }
@@ -1459,6 +1490,13 @@ generate_data_dict_yaml <- function(
         collapse = "\n\n"
       )
       units <- ""
+    }
+    b_note <- blank_values_note(t$columns$n_blank[i])
+    if (nzchar(b_note)) {
+      details <- paste(
+        c(if (nzchar(details)) details, b_note),
+        collapse = "\n\n"
+      )
     }
 
     constraints <- c(

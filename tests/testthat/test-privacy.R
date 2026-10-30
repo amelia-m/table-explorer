@@ -57,14 +57,15 @@ test_that("user choices beat patterns, which beat automatic flags", {
 test_that("the review queue counts each flagged column's values", {
   tabs <- list(
     t = data.frame(
-      email = c("a@x.io", NA),
-      home_phone = c(NA_character_, NA_character_),
-      n = 1:2
+      email = c("a@x.io", NA, ""),
+      home_phone = c(NA_character_, " ", NA_character_),
+      n = 1:3
     )
   )
   q <- privacy_review_queue(tabs, list())
+  # Blank text is missing, like NA
   expect_equal(q$n_values[q$column == "email"], 1L)
-  # All-NA: flagged by name, but there is nothing in it to disclose
+  # Nothing but NA and blanks: flagged by name, nothing in it to disclose
   expect_equal(q$n_values[q$column == "home_phone"], 0L)
 })
 

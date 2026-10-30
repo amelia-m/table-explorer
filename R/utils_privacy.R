@@ -424,9 +424,9 @@ privacy_review_queue <- function(tables, dictionary) {
           table = t,
           column = cn,
           reason = p$reason,
-          # An all-NA column has nothing to disclose, so the caller can
-          # keep it out of the review queue
-          n_values = sum(!is.na(df[[cn]])),
+          # An all-NA or all-blank column has nothing to disclose, so the
+          # caller can keep it out of the review queue
+          n_values = n_present(df[[cn]]),
           stringsAsFactors = FALSE
         )
       }

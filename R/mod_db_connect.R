@@ -208,6 +208,7 @@ mod_db_connect_server <- function(
         ""
       }
       db_renames <- list()
+      loaded_now <- character(0)
 
       withProgress(message = "Loading tables...", value = 0, {
         n <- length(input$db_selected_tables)
@@ -227,6 +228,7 @@ mod_db_connect_server <- function(
           if (!is.null(df) && nrow(df) > 0) {
             clean_df <- janitor::clean_names(df)
             existing[[tname]] <- clean_df
+            loaded_now <- c(loaded_now, tname)
             existing_meta[[tname]] <- list(
               size = object.size(clean_df),
               nrow = nrow(clean_df),
@@ -272,6 +274,10 @@ mod_db_connect_server <- function(
         type = "message",
         duration = 5
       )
+      odd_spaces <- unusual_blank_notice(existing[unique(loaded_now)])
+      if (!is.null(odd_spaces)) {
+        showNotification(odd_spaces, type = "warning", duration = 12)
+      }
     })
 
     invisible(NULL)

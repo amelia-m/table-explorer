@@ -15,6 +15,194 @@
   }
 }
 
+# ── Blank values ─────────────────────────────────────────────
+# A blank text value, "" or whitespace only, is an absent value, not a
+# value: treat it as missing, the same as NA, wherever values are profiled
+# (FK and key detection, the data dictionary, privacy checks). Kept as ""
+# it counted as a real, shared value, so two text columns that both held
+# blanks overlapped on it, and a dictionary undercounted missing text.
+# Only character and factor columns are touched; other types pass through.
+#
+# Whitespace is Unicode whitespace ((*UCP) with PCRE), so a non-breaking
+# space (U+00A0) or an ideographic space counts, as Amelia decided on
+# 2026-10-23. Zero-width characters (U+200B, U+FEFF) are not whitespace and
+# do not count. Strings that are not valid UTF-8 are never blank: the regex
+# engines only warn on them.
+
+blank_re <- "(*UCP)^[[:space:]]*$"
+ascii_blank_re <- "^[ \t\n\r\f\v]*$"
+
+# TRUE for each element that is blank text; FALSE for NA and invalid UTF-8.
+# Latin-1 marked strings are converted first: validUTF8() checks bytes, so a
+# Latin-1 non-breaking space would otherwise never count.
+is_blank_text <- function(x) {
+  lat <- !is.na(x) & Encoding(x) == "latin1"
+  if (any(lat)) {
+    x[lat] <- enc2utf8(x[lat])
+  }
+  out <- logical(length(x))
+  ok <- !is.na(x) & validUTF8(x)
+  out[ok] <- grepl(blank_re, x[ok], perl = TRUE)
+  out
+}
+
+# Blank counts for one column: all blank values, and those blank only
+# through whitespace beyond ASCII. Factors are counted through their levels.
+blank_counts_uncached <- function(x) {
+  if (is.factor(x)) {
+    lv <- is_blank_text(levels(x))
+    if (!any(lv)) {
+      return(c(0L, 0L))
+    }
+    odd_lv <- lv & !grepl(ascii_blank_re, levels(x))
+    codes <- as.integer(x)
+    return(c(
+      sum(lv[codes], na.rm = TRUE),
+      sum(odd_lv[codes], na.rm = TRUE)
+    ))
+  }
+  b <- is_blank_text(x)
+  if (!any(b)) {
+    return(c(0L, 0L))
+  }
+  c(sum(b), sum(!grepl(ascii_blank_re, x[b])))
+}
+
+# A loaded column is counted many times (detection, every ERD redraw, each
+# export, Table Details), and a pass over a few million strings takes
+# seconds, so the counts of large loaded columns are cached by memory
+# address. The cache holds the column itself: while it does, R copies the
+# column before any change, so an address can never point at changed or
+# different values.
+#
+# Only loading stores entries (store = TRUE, through the load notice);
+# every other call only looks up. Otherwise the normalised copies that
+# detection makes and drops would be cached and kept alive. Oldest entries
+# go first once there are more than blank_cache_max, so a removed table's
+# columns are held until then.
+blank_cache <- new.env(parent = emptyenv())
+blank_cache$entries <- list()
+blank_cache_max <- 256L
+blank_cache_min_len <- 10000L
+
+blank_counts <- function(x, store = FALSE) {
+  if (!is.character(x) && !is.factor(x)) {
+    return(c(0L, 0L))
+  }
+  if (length(x) < blank_cache_min_len) {
+    return(blank_counts_uncached(x))
+  }
+  key <- rlang::obj_address(x)
+  hit <- blank_cache$entries[[key]]
+  if (!is.null(hit) && identical(rlang::obj_address(hit$x), key)) {
+    return(hit$counts)
+  }
+  counts <- blank_counts_uncached(x)
+  if (store) {
+    entries <- blank_cache$entries
+    entries[[key]] <- list(x = x, counts = counts)
+    if (length(entries) > blank_cache_max) {
+      entries <- utils::tail(entries, blank_cache_max)
+    }
+    blank_cache$entries <- entries
+  }
+  counts
+}
+
+#' @noRd
+blank_as_na <- function(x) {
+  if (is.factor(x)) {
+    # Setting a level to NA drops it and turns its values missing
+    blank_lv <- is_blank_text(levels(x))
+    if (any(blank_lv)) {
+      levels(x)[blank_lv] <- NA
+    }
+    return(x)
+  }
+  if (!is.character(x) || blank_counts(x)[[1]] == 0L) {
+    return(x)
+  }
+  b <- is_blank_text(x)
+  x[b] <- NA_character_
+  x
+}
+
+# How many values of a text or factor column are blank; 0 for other types
+#' @noRd
+n_blank <- function(x) blank_counts(x)[[1]]
+
+# Values present (not NA, not blank), and how many distinct ones. The
+# distinct count works on unique(x), which is short next to the column.
+#' @noRd
+n_present <- function(x) sum(!is.na(x)) - n_blank(x)
+
+#' @noRd
+n_distinct_present <- function(x) {
+  u <- unique(x)
+  if (is.factor(u)) {
+    u <- as.character(u)
+  }
+  if (!is.character(u)) {
+    return(sum(!is.na(u)))
+  }
+  sum(!is.na(u) & !is_blank_text(u))
+}
+
+# TRUE when a text or factor column holds a blank value. Key tests call it
+# on the few columns that already pass "no NA, all distinct".
+#' @noRd
+has_blank <- function(x) n_blank(x) > 0
+
+# Per column, how many values are blank only because of whitespace beyond
+# ASCII (a non-breaking space, say). Such a value looks like text in most
+# tools, so the load notice names the columns. Only columns with any.
+#' @noRd
+unusual_blank_counts <- function(df, store = FALSE) {
+  counts <- vapply(df, function(x) blank_counts(x, store)[[2]], integer(1))
+  counts[counts > 0]
+}
+
+# The load notice for unusual_blank_counts(): one message for a named list
+# of tables, or NULL when no column has such values. It runs on newly
+# loaded tables, so it is what fills the blank-count cache.
+#' @noRd
+unusual_blank_notice <- function(tables, max_cols = 5) {
+  found <- unlist(lapply(names(tables), function(t) {
+    cnt <- unusual_blank_counts(tables[[t]], store = TRUE)
+    if (length(cnt)) stats::setNames(cnt, paste0(t, ".", names(cnt)))
+  }))
+  if (length(found) == 0) {
+    return(NULL)
+  }
+  shown <- names(found)[seq_len(min(max_cols, length(found)))]
+  more <- length(found) - length(shown)
+  one <- sum(found) == 1
+  sprintf(
+    "%s value%s in %d column%s (%s%s) %s only non-standard spaces, such as a non-breaking space. %s treated as missing, like blank values.",
+    format(sum(found), big.mark = ","),
+    if (one) "" else "s",
+    length(found),
+    if (length(found) == 1) "" else "s",
+    paste(shown, collapse = ", "),
+    if (more > 0) sprintf(" and %d more", more) else "",
+    if (one) "holds" else "hold",
+    if (one) "It is" else "They are"
+  )
+}
+
+#' @noRd
+blanks_as_na <- function(df) {
+  if (!is.data.frame(df)) {
+    return(df)
+  }
+  for (j in seq_along(df)) {
+    if (is.character(df[[j]]) || is.factor(df[[j]])) {
+      df[[j]] <- blank_as_na(df[[j]])
+    }
+  }
+  df
+}
+
 #' Stable key for a relationship, used for suppress/confirm decisions
 #' @noRd
 rel_key <- function(r) {
