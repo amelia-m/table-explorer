@@ -408,7 +408,7 @@ test_that("a real .accdb keeps a table with a space in its name", {
   )
   skip_if(!all(file.exists(jars)), "UCanAccess jars not downloaded")
   path <- tempfile(fileext = ".accdb")
-  file.copy(test_path("fixtures", "declared_rels.accdb"), path)
+  expect_true(file.copy(test_path("fixtures", "declared_rels.accdb"), path))
   res <- read_table_file(path, "declared_rels.accdb", function(...) NULL)
   expect_equal(
     vapply(res$tables, nrow, 1L)[c("tbl Visits", "tlk_services", "tlk_sites")],

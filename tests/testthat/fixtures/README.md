@@ -10,4 +10,4 @@ Made by hand by Amelia Miramonti to test reading an Access file. Every value is 
 | `tlk_services` | `ID`, `Service` | 3 |
 | `tlk_sites` | `ID`, `Site` | 3 |
 
-Two declared relationships: `ServiceID` to `tlk_services.ID` (integrity enforced) and `SiteID` to `tlk_sites.ID` (not enforced). The space in `tbl Visits` is part of the test.
+Two declared relationships: `ServiceID` to `tlk_services.ID` (integrity enforced) and `SiteID` to `tlk_sites.ID` (not enforced). A regression test relies on the space in `tbl Visits`, so keep the name.
