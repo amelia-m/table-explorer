@@ -388,13 +388,38 @@ test_that("MSysRelationships rows become declared links with cleaned names", {
 test_that("relationships are read from a real .accdb with mdbtools", {
   skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
   path <- test_path("fixtures", "declared_rels.accdb")
-  rels <- access_relationships(path, notify_fn = function(...) NULL)
+  # Not access_relationships(): that tries Jackcess first and would hide mdbtools
+  rels <- access_relationship_rels(access_relationship_rows_mdbtools(path))
   expect_setequal(
     vapply(rels, rel_key, ""),
     c(
       "tbl_visits|service_id|tlk_services|id",
       "tbl_visits|site_id|tlk_sites|id"
     )
+  )
+})
+
+test_that("a real .accdb keeps a table with a space in its name", {
+  skip_if_not_installed("RJDBC")
+  skip_if_not_installed("rJava")
+  jars <- file.path(
+    access_jar_dir(),
+    vapply(ucanaccess_jars, `[[`, "", "file")
+  )
+  skip_if(!all(file.exists(jars)), "UCanAccess jars not downloaded")
+  path <- tempfile(fileext = ".accdb")
+  file.copy(test_path("fixtures", "declared_rels.accdb"), path)
+  res <- read_table_file(path, "declared_rels.accdb", function(...) NULL)
+  expect_equal(
+    vapply(res$tables, nrow, 1L)[c("tbl Visits", "tlk_services", "tlk_sites")],
+    c("tbl Visits" = 6L, tlk_services = 3L, tlk_sites = 3L)
+  )
+  expect_length(res$tables, 3)
+  # Every declared link has to land on a table that was loaded
+  ends <- unlist(lapply(res$relationships, `[`, c("from_table", "to_table")))
+  expect_setequal(
+    ends,
+    janitor::make_clean_names(names(res$tables))
   )
 })
 
