@@ -1,0 +1,212 @@
+"kind","table_raw","table_clean","column_raw","column_clean","rows","pk","expect_read","ref_table_raw","ref_column_raw","ref_table_clean","ref_column_clean","rel_name","icolumn","grbit_native","grbit_app","note"
+"table","tlk Status","tlk_status",,,5,"StatusID","yes",,,,,,,,,""
+"column","tlk Status","tlk_status","StatusID","status_id",,,,,,,,,,,,
+"column","tlk Status","tlk_status","Status Label","status_label",,,,,,,,,,,,
+"column","tlk Status","tlk_status","Sort#","sort_number",,,,,,,,,,,,
+"column","tlk Status","tlk_status","Is Active?","is_active",,,,,,,,,,,,
+"table","tlk_Region","tlk_region",,,4,"Code","yes",,,,,,,,,""
+"column","tlk_Region","tlk_region","Code","code",,,,,,,,,,,,
+"column","tlk_Region","tlk_region","Region/Area","region_area",,,,,,,,,,,,
+"column","tlk_Region","tlk_region","Rate %","rate_percent",,,,,,,,,,,,
+"table","tlk Ship Method","tlk_ship_method",,,3,"ID","yes",,,,,,,,,""
+"column","tlk Ship Method","tlk_ship_method","ID","id",,,,,,,,,,,,
+"column","tlk Ship Method","tlk_ship_method","Method","method",,,,,,,,,,,,
+"table","tblCustomer","tbl_customer",,,12,"CustomerID","yes",,,,,,,,,""
+"column","tblCustomer","tbl_customer","CustomerID","customer_id",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Customer Name","customer_name",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","StatusID","status_id",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","RegionCode","region_code",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","ReferredBy","referred_by",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Balance","balance",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Visits","visits",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Score","score",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Ratio","ratio",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Is Member","is_member",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Joined","joined",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Call Time","call_time",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Birth Date","birth_date",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Homepage","homepage",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Notes","notes",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","Row Guid","row_guid",,,,,,,,,,,,
+"column","tblCustomer","tbl_customer","ZIP","zip",,,,,,,,,,,,
+"table","Customer Photo","customer_photo",,,3,"CustomerID","yes",,,,,,,,,""
+"column","Customer Photo","customer_photo","CustomerID","customer_id",,,,,,,,,,,,
+"column","Customer Photo","customer_photo","Caption","caption",,,,,,,,,,,,
+"column","Customer Photo","customer_photo","Photo","photo",,,,,,,,,,,,
+"table","Customer Profile","customer_profile",,,5,"CustomerID","yes",,,,,,,,,""
+"column","Customer Profile","customer_profile","CustomerID","customer_id",,,,,,,,,,,,
+"column","Customer Profile","customer_profile","Email","email",,,,,,,,,,,,
+"column","Customer Profile","customer_profile","Phone","phone",,,,,,,,,,,,
+"column","Customer Profile","customer_profile","2nd Phone","x2nd_phone",,,,,,,,,,,,
+"table","Orders","orders",,,8,"OrderNo","yes",,,,,,,,,""
+"column","Orders","orders","OrderNo","order_no",,,,,,,,,,,,
+"column","Orders","orders","CustomerID","customer_id",,,,,,,,,,,,
+"column","Orders","orders","Select","select",,,,,,,,,,,,
+"column","Orders","orders","Order","order",,,,,,,,,,,,
+"column","Orders","orders","Date","date",,,,,,,,,,,,
+"column","Orders","orders","Group","group",,,,,,,,,,,,
+"column","Orders","orders","ShipMethodID","ship_method_id",,,,,,,,,,,,
+"column","Orders","orders","Pay Type","pay_type",,,,,,,,,,,,
+"column","Orders","orders","LegacyCustNo","legacy_cust_no",,,,,,,,,,,,
+"table","Order Line","order_line",,,10,"OrderNo|LineNo","yes",,,,,,,,,""
+"column","Order Line","order_line","OrderNo","order_no",,,,,,,,,,,,
+"column","Order Line","order_line","LineNo","line_no",,,,,,,,,,,,
+"column","Order Line","order_line","Qty","qty",,,,,,,,,,,,
+"column","Order Line","order_line","Unit Price","unit_price",,,,,,,,,,,,
+"table","Line Note","line_note",,,4,"NoteID","yes",,,,,,,,,""
+"column","Line Note","line_note","NoteID","note_id",,,,,,,,,,,,
+"column","Line Note","line_note","Ref Order","ref_order",,,,,,,,,,,,
+"column","Line Note","line_note","Ref Line","ref_line",,,,,,,,,,,,
+"column","Line Note","line_note","Note","note",,,,,,,,,,,,
+"table","Line Alloc","line_alloc",,,3,"AllocID","yes",,,,,,,,,""
+"column","Line Alloc","line_alloc","AllocID","alloc_id",,,,,,,,,,,,
+"column","Line Alloc","line_alloc","Alloc Line","alloc_line",,,,,,,,,,,,
+"column","Line Alloc","line_alloc","Alloc Order","alloc_order",,,,,,,,,,,,
+"column","Line Alloc","line_alloc","Share","share",,,,,,,,,,,,
+"table","Warehouse","warehouse",,,3,"WarehouseID","yes",,,,,,,,,""
+"column","Warehouse","warehouse","WarehouseID","warehouse_id",,,,,,,,,,,,
+"column","Warehouse","warehouse","Name","name",,,,,,,,,,,,
+"table","Empty Carrier","empty_carrier",,,0,"CarrierID","yes",,,,,,,,,""
+"column","Empty Carrier","empty_carrier","CarrierID","carrier_id",,,,,,,,,,,,
+"column","Empty Carrier","empty_carrier","Carrier Name","carrier_name",,,,,,,,,,,,
+"column","Empty Carrier","empty_carrier","Active","active",,,,,,,,,,,,
+"table","Shipment","shipment",,,4,"ShipmentID","yes",,,,,,,,,""
+"column","Shipment","shipment","ShipmentID","shipment_id",,,,,,,,,,,,
+"column","Shipment","shipment","FromWarehouse","from_warehouse",,,,,,,,,,,,
+"column","Shipment","shipment","ToWarehouse","to_warehouse",,,,,,,,,,,,
+"column","Shipment","shipment","CarrierID","carrier_id",,,,,,,,,,,,
+"table","Store","store",,,3,"StoreID","yes",,,,,,,,,""
+"column","Store","store","StoreID","store_id",,,,,,,,,,,,
+"column","Store","store","RegionCode","region_code",,,,,,,,,,,,
+"column","Store","store","HomeWarehouse","home_warehouse",,,,,,,,,,,,
+"table","Legacy Code","legacy_code",,,3,"","yes",,,,,,,,,""
+"column","Legacy Code","legacy_code","LegacyCode","legacy_code",,,,,,,,,,,,
+"column","Legacy Code","legacy_code","Meaning","meaning",,,,,,,,,,,,
+"table","Legacy Use","legacy_use",,,3,"","yes",,,,,,,,,""
+"column","Legacy Use","legacy_use","LegacyCode","legacy_code",,,,,,,,,,,,
+"column","Legacy Use","legacy_use","Used On","used_on",,,,,,,,,,,,
+"table","Audit Log","audit_log",,,6,"","yes",,,,,,,,,""
+"column","Audit Log","audit_log","CustomerID","customer_id",,,,,,,,,,,,
+"column","Audit Log","audit_log","Action","action",,,,,,,,,,,,
+"table","Device","device",,,3,"DeviceGuid","yes",,,,,,,,,""
+"column","Device","device","DeviceGuid","device_guid",,,,,,,,,,,,
+"column","Device","device","Label","label",,,,,,,,,,,,
+"table","Device Log","device_log",,,4,"LogID","yes",,,,,,,,,""
+"column","Device Log","device_log","LogID","log_id",,,,,,,,,,,,
+"column","Device Log","device_log","DeviceGuid","device_guid",,,,,,,,,,,,
+"column","Device Log","device_log","Reading","reading",,,,,,,,,,,,
+"table","Date Traps","date_traps",,,13,"DateID","yes",,,,,,,,,""
+"column","Date Traps","date_traps","DateID","date_id",,,,,,,,,,,,
+"column","Date Traps","date_traps","Case Name","case_name",,,,,,,,,,,,
+"column","Date Traps","date_traps","Value","value",,,,,,,,,,,,
+"column","Date Traps","date_traps","Expected","expected",,,,,,,,,,,,
+"table","Number Traps","number_traps",,,5,"NumID","yes",,,,,,,,,""
+"column","Number Traps","number_traps","NumID","num_id",,,,,,,,,,,,
+"column","Number Traps","number_traps","Case Name","case_name",,,,,,,,,,,,
+"column","Number Traps","number_traps","ByteV","byte_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","IntV","int_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","LongV","long_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","SingleV","single_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","DoubleV","double_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","CurrV","curr_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","DecV","dec_v",,,,,,,,,,,,
+"column","Number Traps","number_traps","Expected","expected",,,,,,,,,,,,
+"table","Text Traps","text_traps",,,29,"TextID","yes",,,,,,,,,""
+"column","Text Traps","text_traps","TextID","text_id",,,,,,,,,,,,
+"column","Text Traps","text_traps","Case Name","case_name",,,,,,,,,,,,
+"column","Text Traps","text_traps","Short Text","short_text",,,,,,,,,,,,
+"column","Text Traps","text_traps","Comp Text","comp_text",,,,,,,,,,,,
+"column","Text Traps","text_traps","Long Text","long_text",,,,,,,,,,,,
+"column","Text Traps","text_traps","Expected Len","expected_len",,,,,,,,,,,,
+"column","Text Traps","text_traps","Expected Hex","expected_hex",,,,,,,,,,,,
+"table","Collide Cols","collide_cols",,,2,"RowID","yes",,,,,,,,,""
+"column","Collide Cols","collide_cols","RowID","row_id",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","Item Code","item_code",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","item_code","item_code_2",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","ITEM-CODE","item_code_3",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","ItemCode","item_code_4",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","Item%","item_percent",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","Café Nº","cafe_no",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","Naïve Field","naive_field",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","日本語","ri_ben_yu",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","#","number",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","%","percent",,,,,,,,,,,,
+"column","Collide Cols","collide_cols","NA","na",,,,,,,,,,,,
+"table","Order Detail","order_detail",,,2,"","yes",,,,,,,,,""
+"column","Order Detail","order_detail","OrderNo","order_no",,,,,,,,,,,,
+"column","Order Detail","order_detail","Qty","qty",,,,,,,,,,,,
+"table","order_detail","order_detail",,,3,"","yes",,,,,,,,,""
+"column","order_detail","order_detail","Order No","order_no",,,,,,,,,,,,
+"column","order_detail","order_detail","Comment","comment",,,,,,,,,,,,
+"table","Order-Detail","order_detail",,,4,"","yes",,,,,,,,,""
+"column","Order-Detail","order_detail","OrderNo","order_no",,,,,,,,,,,,
+"column","Order-Detail","order_detail","Flag","flag",,,,,,,,,,,,
+"table","Customer's Notes","customers_notes",,,1,"","yes",,,,,,,,,""
+"column","Customer's Notes","customers_notes","CustomerID","customer_id",,,,,,,,,,,,
+"column","Customer's Notes","customers_notes","Author's Note","authors_note",,,,,,,,,,,,
+"table","Select","select",,,1,"","yes",,,,,,,,,""
+"column","Select","select","From","from",,,,,,,,,,,,
+"column","Select","select","Where","where",,,,,,,,,,,,
+"table","Reports/Monthly","reports_monthly",,,2,"","yes",,,,,,,,,""
+"column","Reports/Monthly","reports_monthly","Month","month",,,,,,,,,,,,
+"column","Reports/Monthly","reports_monthly","Total #","total_number",,,,,,,,,,,,
+"table","Übersicht Bücher","ubersicht_bucher",,,2,"","yes",,,,,,,,,""
+"column","Übersicht Bücher","ubersicht_bucher","Büro Nr","buro_nr",,,,,,,,,,,,
+"column","Übersicht Bücher","ubersicht_bucher","Titel","titel",,,,,,,,,,,,
+"table","顧客","gu_ke",,,1,"","yes",,,,,,,,,""
+"column","顧客","gu_ke","ID","id",,,,,,,,,,,,
+"column","顧客","gu_ke","Label","label",,,,,,,,,,,,
+"table","Long_Table_Name_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","long_table_name_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",,,1,"","yes",,,,,,,,,""
+"column","Long_Table_Name_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","long_table_name_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","ID","id",,,,,,,,,,,,
+"table","MSystem Parts","m_system_parts",,,2,"","yes",,,,,,,,,"negative case: a user table, name resembles MSys"
+"column","MSystem Parts","m_system_parts","PartNo","part_no",,,,,,,,,,,,
+"column","MSystem Parts","m_system_parts","RegionCode","region_code",,,,,,,,,,,,
+"table","USystem Notes","u_system_notes",,,1,"","yes",,,,,,,,,"negative case: a user table, name resembles USys"
+"column","USystem Notes","u_system_notes","NoteNo","note_no",,,,,,,,,,,,
+"column","USystem Notes","u_system_notes","Body","body",,,,,,,,,,,,
+"table","~Draft Table","draft_table",,,1,"","yes",,,,,,,,,"negative case: a user table, name begins with a tilde"
+"column","~Draft Table","draft_table","DraftNo","draft_no",,,,,,,,,,,,
+"table","msys_lower","msys_lower",,,1,"","yes",,,,,,,,,"negative case: lower case, the filter is case sensitive"
+"column","msys_lower","msys_lower","LowerNo","lower_no",,,,,,,,,,,,
+"table","Hidden Table","hidden_table",,,2,"","yes",,,,,,,,,"hidden, still the user's data"
+"column","Hidden Table","hidden_table","HiddenNo","hidden_no",,,,,,,,,,,,
+"column","Hidden Table","hidden_table","StatusID","status_id",,,,,,,,,,,,
+"table","USysRibbons","u_sys_ribbons",,,1,"","no",,,,,,,,,"USys prefix is Access's own convention for app tables"
+"column","USysRibbons","u_sys_ribbons","RibbonName","ribbon_name",,,,,,,,,,,,
+"column","USysRibbons","u_sys_ribbons","RibbonXML","ribbon_xml",,,,,,,,,,,,
+"table","MSysUserMade","m_sys_user_made",,,1,"","no",,,,,,,,,"true MSys prefix, made through DAO"
+"column","MSysUserMade","m_sys_user_made","MadeNo","made_no",,,,,,,,,,,,
+"table","Flagged System","flagged_system",,,1,"","no",,,,,,,,,"carries the system object flag"
+"column","Flagged System","flagged_system","FlagNo","flag_no",,,,,,,,,,,,
+"relationship","tblCustomer","tbl_customer","StatusID","status_id",,,,"tlk Status","StatusID","tlk_status","status_id","R01_status",0,0,0,
+"relationship","tblCustomer","tbl_customer","RegionCode","region_code",,,,"tlk_Region","Code","tlk_region","code","R02_region_unenforced",0,2,2,
+"relationship","tblCustomer","tbl_customer","ReferredBy","referred_by",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R03_self",0,0,0,
+"relationship","Customer Profile","customer_profile","CustomerID","customer_id",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R04_profile_1to1",0,1,1,
+"relationship","Orders","orders","CustomerID","customer_id",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R05_orders_cascade",0,4352,0,
+"relationship","Orders","orders","ShipMethodID","ship_method_id",,,,"tlk Ship Method","ID","tlk_ship_method","id","R06_lookup_ship",0,2,2,
+"relationship","Order Line","order_line","OrderNo","order_no",,,,"Orders","OrderNo","orders","order_no","R07_line_order",0,4096,0,
+"relationship","Line Note","line_note","Ref Order","ref_order",,,,"Order Line","OrderNo","order_line","order_no","R08_note_composite",0,0,0,
+"relationship","Line Note","line_note","Ref Line","ref_line",,,,"Order Line","LineNo","order_line","line_no","R08_note_composite",1,0,0,
+"relationship","Line Alloc","line_alloc","Alloc Order","alloc_order",,,,"Order Line","OrderNo","order_line","order_no","R09_alloc_reversed",0,0,0,
+"relationship","Line Alloc","line_alloc","Alloc Line","alloc_line",,,,"Order Line","LineNo","order_line","line_no","R09_alloc_reversed",1,0,0,
+"relationship","Shipment","shipment","FromWarehouse","from_warehouse",,,,"Warehouse","WarehouseID","warehouse","warehouse_id","R10_ship_from",0,0,0,
+"relationship","Shipment","shipment","ToWarehouse","to_warehouse",,,,"Warehouse","WarehouseID","warehouse","warehouse_id","R11_ship_to",0,0,0,
+"relationship","Shipment","shipment","CarrierID","carrier_id",,,,"Empty Carrier","CarrierID","empty_carrier","carrier_id","R12_ship_carrier_empty",0,0,0,
+"relationship","Store","store","RegionCode","region_code",,,,"tlk_Region","Code","tlk_region","code","R13_store_region_case",0,0,0,
+"relationship","Legacy Use","legacy_use","LegacyCode","legacy_code",,,,"Legacy Code","LegacyCode","legacy_code","legacy_code","R14_legacy_unique",0,0,0,
+"relationship","Audit Log","audit_log","CustomerID","customer_id",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R15_audit_nopk",0,2,2,
+"relationship","Device Log","device_log","DeviceGuid","device_guid",,,,"Device","DeviceGuid","device","device_guid","R16_device_guid",0,0,0,
+"relationship","MSystem Parts","m_system_parts","RegionCode","region_code",,,,"tlk_Region","Code","tlk_region","code","R17_msystem_like",0,2,2,
+"relationship","Collide Cols","collide_cols","ITEM-CODE","item_code_3",,,,"tlk_Region","Code","tlk_region","code","R18_collide_col",0,2,2,
+"relationship","Order-Detail","order_detail","OrderNo","order_no",,,,"Orders","OrderNo","orders","order_no","R19_collide_table",0,2,2,
+"relationship","Store","store","HomeWarehouse","home_warehouse",,,,"Warehouse","WarehouseID","warehouse","warehouse_id","R20_left_join",0,16777218,2,
+"relationship","Hidden Table","hidden_table","StatusID","status_id",,,,"tlk Status","StatusID","tlk_status","status_id","R21_hidden_child",0,2,2,
+"relationship","Customer's Notes","customers_notes","CustomerID","customer_id",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R22_apostrophe",0,2,2,
+"relationship","Übersicht Bücher","ubersicht_bucher","Büro Nr","buro_nr",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R23_non_ascii",0,2,2,
+"relationship","Customer Photo","customer_photo","CustomerID","customer_id",,,,"tblCustomer","CustomerID","tbl_customer","customer_id","R24_photo",0,0,0,
+"query","qryActiveCustomers","qry_active_customers",,,,,"no",,,,,,,,,
+"query","qry Customer Param","qry_customer_param",,,,,"no",,,,,,,,,
+"query","qryUpdateNothing","qry_update_nothing",,,,,"no",,,,,,,,,
+"query","qryUnion","qry_union",,,,,"no",,,,,,,,,
+"query","qryCrosstab","qry_crosstab",,,,,"no",,,,,,,,,
+"query","qryWildIIf","qry_wild_i_if",,,,,"no",,,,,,,,,
