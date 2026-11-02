@@ -46,7 +46,7 @@ To look at the schema in the app, source the file and pass
 
 ## Real Access files
 
-`access/` builds `access_fixture.mdb` and the `trap_*` files in `tests/testthat/fixtures/`, for testing the Access readers on real files. Rebuilding needs Windows, the Access Database Engine and the 32-bit DAO 3.6 that Windows ships, for Jet 3. The check needs rJava and the jars the app downloads on first use. Only some of what it builds is committed: `tests/testthat/fixtures/README.md` lists those files.
+`access/` builds `access_fixture.mdb` and the `trap_*` files in `tests/testthat/fixtures/`, for testing the Access readers on real files. Rebuilding needs Windows, the Access Database Engine and the 32-bit DAO 3.6 that Windows ships, for Jet 3. The check needs rJava and the jars the app downloads on first use. Only some of what it builds is committed: `tests/testthat/fixtures/README.md` lists those files. `access/TRAPS.md` lists each trap, where it sits and what each reader did.
 
 ```sh
 pwsh -NoProfile -File dev/fixtures/access/build_all.ps1 -OutDir <empty folder>

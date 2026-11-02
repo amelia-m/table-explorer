@@ -2,9 +2,8 @@
 
 ## Access fixtures, 2026-10-30
 
-The generated fixture is in `tests/testthat/fixtures/` and `dev/fixtures/access/`. The items below come from its first run. `TRAPS.md` (one row per trap, with results by reader and steps for what needs Access by hand) and the run logs stay local in `_scratch/mdb-fixture/`.
+The generated fixture is in `tests/testthat/fixtures/` and `dev/fixtures/access/`. The items below come from its first run. `dev/fixtures/access/TRAPS.md` has one row per trap, with results by reader and steps for what needs Access by hand. `run_readers.R` and the run logs stay local in `_scratch/mdb-fixture/`.
 
-- [ ] **Commit `TRAPS.md`?** For Amelia. It was on neither the "add" nor the "leave out" list. It is 23 KB and is the only map from each trap to its table and column, so without it the fixture's purpose is only in `TODO.md` and the key.
 - [ ] **One bad column loses the whole table.** An OLE Object, attachment or multi-value column, or a replicated table, stops `read_access_db()` with `BLOB to String` or `OTHER to String`. Should the app drop the column with a notice and keep the rest?
 - [ ] **Look-alike names are dropped with no notice.** `^MSys|^USys|^~` in `read_access_db()`, and `^MSys` in `access_relationship_rels()`, also remove `MSystem Parts`, `USystem Notes` and `~Draft Table`, and any link to them. For Amelia: should `~Draft Table` stay (`~` is also Access's prefix for temporary objects)? Should `USysRibbons` and `MSysUserMade` be dropped?
 - [ ] **Saved queries load as tables.** Four loaded before the space fix, five after, and 16 of 32 detected links in the draft's run touched one. For Amelia: load them at all, or mark them?
