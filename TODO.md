@@ -1,5 +1,12 @@
 # TODO
 
+## Access fixtures, 2026-10-30
+
+- [ ] **Richer Access fixture** (Amelia, 2026-10-30: "improve it"). Add a composite link, a one-to-one link and more, as a generated file. The hand-made `declared_rels.accdb` stays as it is, because a regression test relies on it. Waits on the `.mdb` draft in progress, whose generator can build both formats.
+- [ ] **Assert Jackcess directly on a real file.** For Amelia to decide. `access_relationship_rows_jackcess()` has no direct test. On CI it can return NULL and `access_relationships()` falls through to mdbtools, so the integration test stays green. One test calling it on a copy of the fixture would close this.
+- [ ] **Cache the UCanAccess jars in CI.** Every run downloads them from Maven, so a Maven outage fails the required check. Left out to keep the workflow simple; rerunning the job is the workaround. `actions/cache` keyed on `R/utils_file_readers.R` would do it.
+- [ ] **RODBC with a spaced table name is unmeasured.** Assumed fine because `sqlFetch` quotes names; not checked, because RODBC is not installed here. Reading `declared_rels.accdb` with RODBC would settle it.
+
 ## Decided 2026-10-23, not yet built
 
 - [ ] **Read CSV with `readr::read_csv()` instead of `read.csv()`** (Amelia, 2026-10-23: "let's switch to read_csv"). Agreed design:
