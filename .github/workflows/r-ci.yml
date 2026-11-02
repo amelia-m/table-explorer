@@ -60,6 +60,10 @@ jobs:
           pkgload::load_all(quiet = TRUE)
           if (!ensure_ucanaccess_jars(access_jar_dir(), message)) stop("jars missing")
 
+      # The tests compare against this key, so the key is held to the file first
+      - name: Check the Access fixture against its key
+        run: Rscript dev/fixtures/access/check_answer_key.R tests/testthat/fixtures/access_fixture.mdb
+
       - name: Run test suite
         shell: Rscript {0}
         run: |
