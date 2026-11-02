@@ -4,10 +4,17 @@
 
 jack_jars <- function() {
   d <- file.path(tools::R_user_dir("tableexplorer", "cache"), "access_jars")
-  need <- c("jackcess-4.0.1.jar", "commons-lang3-3.12.0.jar", "commons-logging-1.2.jar")
+  need <- c(
+    "jackcess-4.0.1.jar",
+    "commons-lang3-3.12.0.jar",
+    "commons-logging-1.2.jar"
+  )
   p <- file.path(d, need)
   if (!all(file.exists(p))) {
-    stop("Jackcess jars missing; not downloading them. Looked for: ", paste(need, collapse = ", "))
+    stop(
+      "Jackcess jars missing; not downloading them. Looked for: ",
+      paste(need, collapse = ", ")
+    )
   }
   p
 }
@@ -57,7 +64,10 @@ jack_objects <- function(db) {
 # not used here because they already apply Jackcess's own view of hidden and
 # system objects, which is one of the things being measured.
 engine_table <- function(nm) {
-  grepl("^(MSysObjects|MSysACEs|MSysQueries|MSysRelationships|MSysAccessObjects|MSysAccessXML|MSysAccessStorage|MSysNavPane.*|MSysNameMap|MSysComplex.*|MSysIMEX.*|MSysCmdbars|MSysDb|MSysModules.*|MSysResources|MSysObjects|f_[0-9A-F]+_.*)$", nm)
+  grepl(
+    "^(MSysObjects|MSysACEs|MSysQueries|MSysRelationships|MSysAccessObjects|MSysAccessXML|MSysAccessStorage|MSysNavPane.*|MSysNameMap|MSysComplex.*|MSysIMEX.*|MSysCmdbars|MSysDb|MSysModules.*|MSysResources|MSysObjects|f_[0-9A-F]+_.*)$",
+    nm
+  )
 }
 
 # Java 21 refuses rJava's `$` on the JDK's private unmodifiable list classes, so
@@ -74,10 +84,27 @@ jack_pk <- function(tbl) {
   tryCatch(
     {
       ix <- tbl$getPrimaryKeyIndex()
-      paste(vapply(jack_list(ix$getColumns()), function(cc) jack_str(cc$getName()), ""), collapse = "|")
+      paste(
+        vapply(
+          jack_list(ix$getColumns()),
+          function(cc) jack_str(cc$getName()),
+          ""
+        ),
+        collapse = "|"
+      )
     },
     error = function(e) {
-      if (grepl("IllegalArgument|no primary key", conditionMessage(e), ignore.case = TRUE)) "" else stop(e)
+      if (
+        grepl(
+          "IllegalArgument|no primary key",
+          conditionMessage(e),
+          ignore.case = TRUE
+        )
+      ) {
+        ""
+      } else {
+        stop(e)
+      }
     }
   )
 }
