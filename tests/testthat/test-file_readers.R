@@ -365,7 +365,7 @@ msys_rows <- function() {
   )
 }
 
-test_that("MSysRelationships rows become declared links with cleaned names", {
+test_that("MSysRelationships rows become declared links, a table named like MSys too", {
   rels <- access_relationship_rels(msys_rows())
   # The third was lost to a ^MSys name filter: a user table named like one
   expect_equal(
@@ -558,10 +558,15 @@ test_that("a real .mdb that cannot be opened gives no tables and a notice", {
   }
 })
 
-test_that("a real .mdb with a broken link keeps its local table", {
+test_that("a real .mdb with a broken link keeps its local table and names the link", {
   skip_without_ucanaccess()
-  tbls <- read_access_db(access_copy("trap_linked.mdb"), function(...) NULL)
+  notices <- character()
+  tbls <- read_access_db(access_copy("trap_linked.mdb"), function(m) {
+    notices <<- c(notices, m)
+  })
   expect_equal(nrow(tbls[["Local Table"]]), 1L)
+  # Used to vanish with only a Java console warning
+  expect_true(any(grepl("does not list: 'Linked Item'", notices, fixed = TRUE)))
 })
 
 test_that("a real .accdb keeps a table with a space in its name", {
