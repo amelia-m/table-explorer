@@ -845,11 +845,9 @@ access_relationship_rels <- function(rows) {
   if (is.null(rows) || nrow(rows) == 0) {
     return(list())
   }
-  rows <- rows[
-    !grepl("^MSys", rows$szObject) & !grepl("^MSys", rows$szReferencedObject),
-    ,
-    drop = FALSE
-  ]
+  # No name filter: a "^MSys" one dropped links to user tables such as
+  # "MSystem Parts", and no row joining two system tables was found in the
+  # fixtures or in a file made in Access itself
   lapply(seq_len(nrow(rows)), function(i) {
     grbit <- suppressWarnings(as.integer(rows$grbit[i]))
     if (is.na(grbit)) {
@@ -957,6 +955,65 @@ access_relationship_rows_jackcess <- function(path) {
   )
 }
 
+# User tables as Jackcess sees them: Access's system flag decides, not the
+# name. NULL when Jackcess cannot be reached.
+access_user_tables_jackcess <- function(path) {
+  if (!requireNamespace("rJava", quietly = TRUE)) {
+    return(NULL)
+  }
+  jar_paths <- file.path(
+    access_jar_dir(),
+    vapply(ucanaccess_jars, `[[`, character(1), "file")
+  )
+  jar_paths <- jar_paths[file.exists(jar_paths)]
+  if (!any(grepl("jackcess", jar_paths))) {
+    return(NULL)
+  }
+  tryCatch(
+    {
+      rJava::.jinit()
+      rJava::.jaddClassPath(jar_paths)
+      builder <- rJava::.jnew(
+        "com/healthmarketscience/jackcess/DatabaseBuilder",
+        rJava::.jnew("java/io/File", normalizePath(path))
+      )
+      db <- builder$setReadOnly(TRUE)$open()
+      on.exit(try(db$close(), silent = TRUE), add = TRUE)
+      # Not $iterator(): rJava's reflection may not touch TreeMap's iterator
+      arr <- rJava::.jcall(
+        db$getTableNames(),
+        "[Ljava/lang/Object;",
+        "toArray"
+      )
+      vapply(arr, function(o) rJava::.jcall(o, "S", "toString"), character(1))
+    },
+    error = function(e) NULL
+  )
+}
+
+# Tables that load but whose names Access treats as its own (USys) or that
+# look like its system tables (MSys). They are user tables, so they stay;
+# the notice says why they are there.
+access_lookalike_notice <- function(tnames, path, notify_fn) {
+  odd <- tnames[grepl("^(MSys|USys)", tnames, ignore.case = TRUE)]
+  if (length(odd) > 0) {
+    notify_fn(paste0(
+      basename(path),
+      ": loaded ",
+      length(odd),
+      " table",
+      if (length(odd) == 1L) "" else "s",
+      " named like Access system tables (MSys or USys): ",
+      paste0("'", odd, "'", collapse = ", "),
+      ". Access does not mark ",
+      if (length(odd) == 1L) "it" else "them",
+      " as system tables, so ",
+      if (length(odd) == 1L) "it is" else "they are",
+      " kept as data."
+    ))
+  }
+}
+
 read_access_db <- function(path, notify_fn = message) {
   # Strategy 1: RJDBC + UCanAccess (all platforms, needs Java)
   if (requireNamespace("RJDBC", quietly = TRUE)) {
@@ -1003,8 +1060,31 @@ read_access_db <- function(path, notify_fn = message) {
             add = TRUE
           )
 
-          all_tables <- DBI::dbListTables(con)
-          user_tables <- all_tables[!grepl("^MSys|^USys|^~", all_tables)]
+          # UCanAccess already leaves out the tables Access flags as
+          # system, so no name filter: "^MSys|^USys|^~" also dropped user
+          # tables, without a word
+          user_tables <- DBI::dbListTables(con)
+          # UCanAccess neither lists nor opens a name starting with ~;
+          # Jackcess shows what it skipped
+          unlisted <- setdiff(access_user_tables_jackcess(path), user_tables)
+          if (length(unlisted) > 0) {
+            notify_fn(paste0(
+              basename(path),
+              ": could not read ",
+              length(unlisted),
+              " table",
+              if (length(unlisted) == 1L) "" else "s",
+              ", which the Access driver does not list: ",
+              paste0("'", unlisted, "'", collapse = ", "),
+              ".",
+              if (any(startsWith(unlisted, "~"))) {
+                paste0(
+                  " It cannot open names starting with ~, the prefix Access ",
+                  "uses for temporary objects."
+                )
+              }
+            ))
+          }
 
           tbls <- setNames(
             lapply(user_tables, function(tname) {
@@ -1025,7 +1105,9 @@ read_access_db <- function(path, notify_fn = message) {
             }),
             user_tables
           )
-          Filter(Negate(is.null), tbls)
+          tbls <- Filter(Negate(is.null), tbls)
+          access_lookalike_notice(names(tbls), path, notify_fn)
+          tbls
         },
         error = function(e) {
           notify_fn(paste0(
@@ -1067,7 +1149,9 @@ read_access_db <- function(path, notify_fn = message) {
             }),
             tnames
           )
-          Filter(Negate(is.null), tbls)
+          tbls <- Filter(Negate(is.null), tbls)
+          access_lookalike_notice(names(tbls), path, notify_fn)
+          tbls
         } else {
           NULL
         }

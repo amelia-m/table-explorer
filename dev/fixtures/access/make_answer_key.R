@@ -192,7 +192,7 @@ tables <- list(
     "msys_lower",
     1,
     "LowerNo",
-    note = "negative case: lower case, the filter is case sensitive"
+    note = "negative case: lower case"
   ),
   tbl(
     "Hidden Table",
@@ -204,15 +204,13 @@ tables <- list(
     "USysRibbons",
     1,
     c("RibbonName", "RibbonXML"),
-    expect = "no",
-    note = "USys prefix is Access's own convention for app tables"
+    note = "USys prefix is Access's own convention for app tables; kept, with a notice"
   ),
   tbl(
     "MSysUserMade",
     1,
     "MadeNo",
-    expect = "no",
-    note = "true MSys prefix, made through DAO"
+    note = "true MSys prefix, made through DAO, no system flag; kept, with a notice"
   ),
   tbl(
     "Flagged System",
