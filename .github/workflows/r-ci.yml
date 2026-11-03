@@ -27,15 +27,20 @@ jobs:
         with:
           use-public-rspm: true
 
+      # The Access tests read a real .accdb with mdbtools; without it they skip
+      - name: Install mdbtools
+        run: sudo apt-get update && sudo apt-get install -y mdbtools
+
       - name: Install package dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           needs: Imports
           # The Excel reader's tests need readxl and openxlsx: readxl to read,
           # openxlsx to write the fixture. Without them every Excel test skips
-          # here and CI reports green on code it never ran. This comment sits
-          # outside the block below on purpose: every line inside a `|` block,
-          # a `#` line included, is passed on as a package name.
+          # here and CI reports green on code it never ran. The Access reader
+          # needs RJDBC the same way. This comment sits outside the block
+          # below on purpose: every line inside a `|` block, a `#` line
+          # included, is passed on as a package name.
           extra-packages: |
             any::devtools
             any::testthat
@@ -46,6 +51,18 @@ jobs:
             any::stringdist
             any::readxl
             any::openxlsx
+            any::RJDBC
+
+      # The app downloads these on first use; a test must not
+      - name: Fetch UCanAccess jars
+        shell: Rscript {0}
+        run: |
+          pkgload::load_all(quiet = TRUE)
+          if (!ensure_ucanaccess_jars(access_jar_dir(), message)) stop("jars missing")
+
+      # The tests compare against this key, so the key is held to the file first
+      - name: Check the Access fixture against its key
+        run: Rscript dev/fixtures/access/check_answer_key.R tests/testthat/fixtures/access_fixture.mdb
 
       - name: Run test suite
         shell: Rscript {0}
@@ -54,6 +71,9 @@ jobs:
           df <- as.data.frame(res)
           cat("failed:", sum(df$failed), " errors:", sum(df$error), "\n")
           if (sum(df$failed) > 0 || sum(df$error) > 0) quit(status = 1)
+          access <- df[grepl("real (Jet 3 )?\\.(accdb|mdb)", df$test), ]
+          if (nrow(access) == 0) stop("no real Access test ran")
+          if (any(access$skipped)) stop("skipped: ", toString(access$test[access$skipped]))
 
       # The real regression guard for detection: a scoring change that
       # loses a link, or invents one, shows up here and not in the tests

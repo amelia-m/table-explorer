@@ -1,5 +1,27 @@
 # TODO
 
+## Access fixtures, 2026-10-30
+
+The generated fixture is in `tests/testthat/fixtures/` and `dev/fixtures/access/`. The items below come from its first run. `dev/fixtures/access/TRAPS.md` has one row per trap, with results by reader and steps for what needs Access by hand. `run_readers.R` and the run logs stay local in `_scratch/mdb-fixture/`.
+
+- [ ] **One bad column loses the whole table.** An OLE Object, attachment or multi-value column, or a replicated table, stops `read_access_db()` with `BLOB to String` or `OTHER to String`. Should the app drop the column with a notice and keep the rest?
+- [ ] **Look-alike names are dropped with no notice.** `^MSys|^USys|^~` in `read_access_db()`, and `^MSys` in `access_relationship_rels()`, also remove `MSystem Parts`, `USystem Notes` and `~Draft Table`, and any link to them. For Amelia: should `~Draft Table` stay (`~` is also Access's prefix for temporary objects)? Should `USysRibbons` and `MSysUserMade` be dropped?
+- [ ] **Saved queries load as tables.** Four loaded before the space fix, five after, and 16 of 32 detected links in the draft's run touched one. For Amelia: load them at all, or mark them?
+- [ ] **Names that collide after cleaning.** `access_relationship_rels()` cleans each column name alone, so a declared link can land on `item_code` when the real column is `item_code_3`. In `R/mod_upload.R`, `Order Detail`, `order_detail` and `Order-Detail` overwrite each other: last one wins, and links attach to the wrong table.
+- [ ] **Wrong types through RJDBC.** Yes/No, Currency, Single and Decimal arrive as character. A zero Single reads `0E-7`, and `build_data_dictionary` gave a Single `score` the format "phone number".
+- [ ] **Wrong dates through RJDBC.** Before the 1582 cutover, 1582-10-10 reads as 1582-09-30 and 0100-01-01 as 0100-01-03. A time in a DST gap (2021-03-14 02:30) becomes NA and counts as missing. Causes are inferred, not traced: rerun with `TZ=UTC`, and read the driver's conversion.
+- [ ] **Jet 3 text corrupts with no notice** under UCanAccess when Java's default charset is UTF-8. Setting `com.healthmarketscience.jackcess.charset.VERSION_3=Cp1252` fixed cp1252. Cp1251 on `trap_jet3_cyrillic.mdb` is untried.
+- [ ] **Misleading failure messages.** A password-protected, corrupt or non-Access file gets "is Java installed?" and "Install the RJDBC package".
+- [ ] **Linked tables.** With its source missing, as after any upload, a linked table is absent with only a Java console warning. With the source present, the connection fails outright. That second result rests on a build since deleted.
+- [ ] **Declared links vanish silently.** "Read 25 relationship(s)" was reported and 8 reached the ERD (`R/mod_upload.R`, `R/utils_erd_model.R`). Rerun after the space fix: the count should change, but a link to an unread table still disappears with no notice.
+- [ ] **A `;` in the file path** cuts the UCanAccess URL and the read fails.
+- [ ] **Gaps, not bugs.** Declared primary keys are never read for Access. A composite link becomes two single links. Cascade bits are dropped on the Jackcess route. Descriptions and `RowSource` are ignored. For Amelia: which are wanted?
+- [ ] **Not run on the fixture:** `mdb-export` beyond the relationship test on CI; RODBC; file exports (CSV, Markdown, DBML, Mermaid) of the odd values; `privacy_guess` alone; blank handling after the reader; FK detection precision (173 links at medium on the harness path, unscored). For Amelia: install mdbtools or RODBC here, or leave those to CI?
+- [ ] **Not built:** forms, reports, macros, VBA and workgroup security need Access by hand (`TRAPS.md` rows U1, U2). Also Access 2.0, attachment and multi-value fields holding data, Large Number, calculated and Rich Text fields, and a relationship across Long and Text.
+- [ ] **Harness results need rerunning.** Rows marked "hrn" in `TRAPS.md` came from the agent's bracket-quoted SELECT, because the space bug stopped the app reading those tables. Rerun `run_readers.R` on the fixed code. Also unchecked: whether RJDBC versions differ in quoting (RJDBC is not in `renv.lock`), and whether Jackcess reads table rows from `trap_password.mdb` without the password.
+- [ ] **Cache the UCanAccess jars in CI.** Every run downloads them from Maven, so a Maven outage fails the required check. Left out to keep the workflow simple; rerunning the job is the workaround. `actions/cache` keyed on `R/utils_file_readers.R` would do it.
+- [ ] **RODBC with a spaced table name is unmeasured.** Assumed fine because `sqlFetch` quotes names; not checked, because RODBC is not installed here. Reading `declared_rels.accdb` with RODBC would settle it.
+
 ## Decided 2026-10-23, not yet built
 
 - [ ] **Read CSV with `readr::read_csv()` instead of `read.csv()`** (Amelia, 2026-10-23: "let's switch to read_csv"). Agreed design:

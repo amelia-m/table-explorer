@@ -1009,7 +1009,9 @@ read_access_db <- function(path, notify_fn = message) {
           tbls <- setNames(
             lapply(user_tables, function(tname) {
               tryCatch(
-                DBI::dbReadTable(con, tname),
+                # Not dbReadTable(): RJDBC leaves the name unquoted, so a
+                # table name with a space fails. Access names cannot hold ]
+                DBI::dbGetQuery(con, paste0("SELECT * FROM [", tname, "]")),
                 error = function(e) {
                   notify_fn(paste0(
                     "Could not read table '",

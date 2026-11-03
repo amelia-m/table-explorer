@@ -388,13 +388,172 @@ test_that("MSysRelationships rows become declared links with cleaned names", {
 test_that("relationships are read from a real .accdb with mdbtools", {
   skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
   path <- test_path("fixtures", "declared_rels.accdb")
-  rels <- access_relationships(path, notify_fn = function(...) NULL)
+  # Not access_relationships(): that tries Jackcess first and would hide mdbtools
+  rels <- access_relationship_rels(access_relationship_rows_mdbtools(path))
   expect_setequal(
     vapply(rels, rel_key, ""),
     c(
       "tbl_visits|service_id|tlk_services|id",
       "tbl_visits|site_id|tlk_sites|id"
     )
+  )
+})
+
+skip_without_ucanaccess <- function() {
+  skip_if_not_installed("RJDBC")
+  skip_if_not_installed("rJava")
+  jars <- file.path(
+    access_jar_dir(),
+    vapply(ucanaccess_jars, `[[`, "", "file")
+  )
+  skip_if(!all(file.exists(jars)), "UCanAccess jars not downloaded")
+}
+
+# A reader opens the file, so never hand it the tracked one
+access_copy <- function(name) {
+  path <- file.path(tempfile("access"), name)
+  dir.create(dirname(path))
+  expect_true(file.copy(test_path("fixtures", name), path))
+  path
+}
+
+# Held to access_fixture.mdb by dev/fixtures/access/check_answer_key.R
+access_key <- function(kind) {
+  key <- utils::read.csv(
+    test_path("fixtures", "access_fixture_key.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    na.strings = "",
+    fileEncoding = "UTF-8"
+  )
+  key[key$kind == kind, ]
+}
+
+access_key_rel_rows <- function() {
+  key <- access_key("relationship")
+  sort(paste(
+    key$table_raw,
+    key$column_raw,
+    key$ref_table_raw,
+    key$ref_column_raw,
+    key$grbit_app,
+    sep = "|"
+  ))
+}
+
+access_rel_rows <- function(rows) {
+  sort(paste(
+    rows$szObject,
+    rows$szColumn,
+    rows$szReferencedObject,
+    rows$szReferencedColumn,
+    bitwAnd(as.integer(rows$grbit), 3L),
+    sep = "|"
+  ))
+}
+
+test_that("relationships are read from a real .accdb with Jackcess", {
+  skip_without_ucanaccess()
+  path <- access_copy("declared_rels.accdb")
+  rels <- access_relationship_rels(access_relationship_rows_jackcess(path))
+  expect_setequal(
+    paste(vapply(rels, rel_key, ""), vapply(rels, `[[`, "", "reasons")),
+    c(
+      paste(
+        "tbl_visits|service_id|tlk_services|id",
+        "declared in Access (integrity enforced)"
+      ),
+      paste(
+        "tbl_visits|site_id|tlk_sites|id",
+        "declared in Access (not enforced, e.g. a lookup field)"
+      )
+    )
+  )
+})
+
+test_that("relationships are read from a real .mdb with Jackcess", {
+  skip_without_ucanaccess()
+  path <- access_copy("access_fixture.mdb")
+  expect_equal(
+    access_rel_rows(access_relationship_rows_jackcess(path)),
+    access_key_rel_rows()
+  )
+})
+
+test_that("relationships are read from a real .mdb with mdbtools", {
+  skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
+  path <- access_copy("access_fixture.mdb")
+  expect_equal(
+    access_rel_rows(access_relationship_rows_mdbtools(path)),
+    access_key_rel_rows()
+  )
+})
+
+test_that("a real .mdb loads its tables with the right row counts", {
+  skip_without_ucanaccess()
+  tbls <- read_access_db(access_copy("access_fixture.mdb"), function(...) NULL)
+  want <- access_key("table")
+  want <- want[want$expect_read == "yes", ]
+  # Known losses, on the open list in TODO.md: a BLOB column, and names that
+  # only look like system tables
+  lost <- c("Customer Photo", "MSystem Parts", "USystem Notes", "~Draft Table")
+  want <- want[!want$table_raw %in% lost, ]
+  expect_setequal(setdiff(want$table_raw, names(tbls)), character(0))
+  found <- intersect(want$table_raw, names(tbls))
+  expect_equal(
+    vapply(tbls[found], nrow, 1L),
+    setNames(as.integer(want$rows), want$table_raw)[found]
+  )
+})
+
+test_that("a real Jet 3 .mdb loads its tables", {
+  skip_without_ucanaccess()
+  # Row counts only: its text comes back corrupt, on the open list in TODO.md
+  for (name in c("trap_jet3.mdb", "trap_jet3_cyrillic.mdb")) {
+    tbls <- read_access_db(access_copy(name), function(...) NULL)
+    expect_equal(
+      vapply(tbls, nrow, 1L)[c("tlk Kind", "Item")],
+      c("tlk Kind" = 2L, Item = 3L)
+    )
+  }
+})
+
+test_that("a real .mdb that cannot be opened gives no tables and a notice", {
+  skip_without_ucanaccess()
+  for (name in c(
+    "trap_password.mdb",
+    "trap_encoded.mdb",
+    "trap_truncated.mdb"
+  )) {
+    notices <- character()
+    res <- read_table_file(access_copy(name), name, function(m) {
+      notices <<- c(notices, m)
+    })
+    expect_length(res$tables, 0)
+    expect_gt(length(notices), 0)
+  }
+})
+
+test_that("a real .mdb with a broken link keeps its local table", {
+  skip_without_ucanaccess()
+  tbls <- read_access_db(access_copy("trap_linked.mdb"), function(...) NULL)
+  expect_equal(nrow(tbls[["Local Table"]]), 1L)
+})
+
+test_that("a real .accdb keeps a table with a space in its name", {
+  skip_without_ucanaccess()
+  path <- access_copy("declared_rels.accdb")
+  res <- read_table_file(path, "declared_rels.accdb", function(...) NULL)
+  expect_equal(
+    vapply(res$tables, nrow, 1L)[c("tbl Visits", "tlk_services", "tlk_sites")],
+    c("tbl Visits" = 6L, tlk_services = 3L, tlk_sites = 3L)
+  )
+  expect_length(res$tables, 3)
+  # Every declared link has to land on a table that was loaded
+  ends <- unlist(lapply(res$relationships, `[`, c("from_table", "to_table")))
+  expect_setequal(
+    ends,
+    janitor::make_clean_names(names(res$tables))
   )
 })
 
