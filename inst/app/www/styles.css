@@ -508,11 +508,43 @@
     .rename-summary b { color: var(--accent); }
 
     /* ── ERD diagram (erd.js) ─────────────────────────────────── */
-    .erd-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 18px; }
-    .erd-controls .form-group { margin-bottom: 6px; }
-    .erd-controls .control-label { font-size: 12px; color: var(--text-secondary); }
-    .erd-buttons { display: flex; gap: 6px; margin-bottom: 10px; }
-    .erd-summary { font-size: 12px; color: var(--text-secondary); margin: 2px 0 8px; }
+    /* A visible disclosure marker. The base styles give summary elements
+       display: block, and Chrome draws its own triangle only on
+       display: list-item, so every disclosure lost its marker and did not
+       read as collapsible. Drawn here instead, the same for every one. */
+    .te-disclosure > summary { list-style: none; cursor: pointer; user-select: none; }
+    .te-disclosure > summary::-webkit-details-marker { display: none; }
+    .te-disclosure > summary::before {
+      content: "\25B8";
+      display: inline-block;
+      width: 1em;
+      color: var(--accent);
+      transition: transform 0.12s ease;
+    }
+    .te-disclosure[open] > summary::before { transform: rotate(90deg); }
+    .erd-settings > summary {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    /* Stacked radio groups: each takes one narrow column, so the whole set
+       fits in one row on a laptop screen instead of three */
+    .erd-controls { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 14px; }
+    .erd-controls .form-group { margin-bottom: 4px; }
+    /* Shiny gives an input with no width argument a 300px box, so a stacked
+       radio group was as wide as a text box; size these to their content */
+    .erd-controls .shiny-input-radiogroup,
+    .erd-controls .shiny-input-container:has(> .checkbox) { width: auto; }
+    .erd-controls .control-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
+    .erd-controls .shiny-options-group .radio { margin: 0; }
+    .erd-controls .shiny-options-group .radio label { min-height: 0; line-height: 1.35; font-size: 12px; }
+    .erd-control-stack .form-group { margin-bottom: 0; }
+    .erd-control-stack .checkbox { margin: 2px 0 0; }
+    .erd-control-stack .checkbox label { font-size: 12px; min-height: 0; }
+    .erd-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 6px; }
+    .erd-buttons { display: flex; gap: 6px; }
+    .erd-summary { font-size: 12px; color: var(--text-secondary); margin: 0; }
     .erd-layout { display: flex; gap: 12px; align-items: flex-start; }
     .erd-main { flex: 1 1 auto; min-width: 0; }
     .erd-side { flex: 0 0 260px; max-height: 72vh; overflow-y: auto; }

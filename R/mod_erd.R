@@ -52,72 +52,90 @@ mod_erd_ui <- function(id) {
     ),
     conditionalPanel(
       "output.has_tables == 'true'",
+      # Collapsible: on a laptop screen these took three rows above the
+      # diagram. The open/closed state is remembered by app.js.
+      tags$details(
+        id = ns("settings"),
+        class = "erd-settings te-disclosure",
+        open = NA,
+        `data-remember` = "erd-settings",
+        tags$summary("Diagram settings"),
+        div(
+          class = "erd-controls",
+          selectizeInput(
+            ns("focus"),
+            "Focus table",
+            choices = c("All tables" = ""),
+            width = "160px",
+            options = list(placeholder = "All tables")
+          ),
+          sliderInput(
+            ns("hops"),
+            "Hops (4 = all)",
+            min = 1,
+            max = 4,
+            value = 2,
+            step = 1,
+            width = "110px",
+            ticks = FALSE
+          ),
+          radioButtons(
+            ns("detail"),
+            "Show",
+            choices = c(
+              "All columns" = "all",
+              "Keys only" = "keys",
+              "Names only" = "names"
+            ),
+            selected = "all",
+            inline = FALSE
+          ),
+          selectizeInput(
+            ns("areas"),
+            "Subject areas",
+            choices = NULL,
+            multiple = TRUE,
+            width = "160px",
+            options = list(placeholder = "All areas")
+          ),
+          radioButtons(
+            ns("ref_links"),
+            "Lookup links",
+            choices = c("Lines" = "lines", "Labels" = "labels"),
+            selected = "lines",
+            inline = FALSE
+          ),
+          radioButtons(
+            ns("direction"),
+            "Layout",
+            choices = c("Left → right" = "RIGHT", "Top → down" = "DOWN"),
+            selected = "RIGHT",
+            inline = FALSE
+          ),
+          # Which links to draw, and whether to include weak ones: one
+          # column, so the set fits in a single row
+          div(
+            class = "erd-control-stack",
+            selectInput(
+              ns("sources"),
+              "Sources",
+              choices = c(
+                "Declared + detected" = "both",
+                "Declared only" = "declared",
+                "Detected (all)" = "detected",
+                "Detected, confirmed" = "confirmed",
+                "Detected, to review" = "to_review"
+              ),
+              selected = "both",
+              width = "160px"
+            ),
+            checkboxInput(ns("show_low"), "Show low-confidence links", FALSE)
+          )
+        )
+      ),
       div(
-        class = "erd-controls",
-        selectizeInput(
-          ns("focus"),
-          "Focus table",
-          choices = c("All tables" = ""),
-          width = "220px",
-          options = list(placeholder = "All tables")
-        ),
-        sliderInput(
-          ns("hops"),
-          "Hops (4 = all)",
-          min = 1,
-          max = 4,
-          value = 2,
-          step = 1,
-          width = "130px",
-          ticks = FALSE
-        ),
-        radioButtons(
-          ns("detail"),
-          "Show",
-          choices = c(
-            "All columns" = "all",
-            "Keys only" = "keys",
-            "Names only" = "names"
-          ),
-          selected = "all",
-          inline = TRUE
-        ),
-        selectizeInput(
-          ns("areas"),
-          "Subject areas",
-          choices = NULL,
-          multiple = TRUE,
-          width = "220px",
-          options = list(placeholder = "All areas")
-        ),
-        radioButtons(
-          ns("ref_links"),
-          "Lookup links",
-          choices = c("Lines" = "lines", "Labels" = "labels"),
-          selected = "lines",
-          inline = TRUE
-        ),
-        radioButtons(
-          ns("direction"),
-          "Layout",
-          choices = c("Left → right" = "RIGHT", "Top → down" = "DOWN"),
-          selected = "RIGHT",
-          inline = TRUE
-        ),
-        selectInput(
-          ns("sources"),
-          "Sources",
-          choices = c(
-            "Declared + detected" = "both",
-            "Declared only" = "declared",
-            "Detected (all)" = "detected",
-            "Detected, confirmed" = "confirmed",
-            "Detected, to review" = "to_review"
-          ),
-          selected = "both",
-          width = "180px"
-        ),
-        checkboxInput(ns("show_low"), "Show low-confidence links", FALSE),
+        class = "erd-bar",
+        uiOutput(ns("summary")),
         div(
           class = "erd-buttons",
           tags$button(
@@ -137,7 +155,6 @@ mod_erd_ui <- function(id) {
           )
         )
       ),
-      uiOutput(ns("summary")),
       div(
         class = "erd-layout",
         div(
@@ -145,8 +162,10 @@ mod_erd_ui <- function(id) {
           # Above the canvas: below it the key sat off the bottom of a
           # tall diagram, so the symbols went unexplained
           tags$details(
-            class = "erd-legend",
+            id = ns("legend_box"),
+            class = "erd-legend te-disclosure",
             open = NA,
+            `data-remember` = "erd-key",
             tags$summary("Key"),
             div(id = ns("legend"), class = "erd-legend-body")
           ),
