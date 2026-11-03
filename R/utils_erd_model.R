@@ -196,9 +196,13 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     fk <- child[[r$from_col]]
     empty <- is.null(fk) || nrow(child) == 0
     missing_fk <- !empty && (anyNA(fk) || has_blank(fk))
+    # Uniqueness is judged on the values present, like a UNIQUE column that
+    # allows NULLs: rows without a parent say nothing about repeats. Missing
+    # values only make the parent end optional
+    n_fk <- if (empty) 0L else n_present(fk)
     r$child_max <- if (empty) {
       "unknown"
-    } else if (!missing_fk && length(unique(fk)) == length(fk)) {
+    } else if (n_fk > 0 && n_distinct_present(fk) == n_fk) {
       "one"
     } else {
       "many"

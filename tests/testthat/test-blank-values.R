@@ -210,10 +210,35 @@ test_that("the ERD model counts blank text as missing", {
   expect_true(cols$nullable[cols$name == "note"])
   expect_equal(cols$n_blank[cols$name == "note"], 1L)
   expect_false(cols$unique[cols$name == "note"])
-  # The blank customer_id is a missing parent, so the parent is optional,
-  # and the remaining distinct values no longer make the link 1:1
+  # The blank customer_id is a missing parent, so the parent is optional
   expect_equal(m$rels[[1]]$parent_min, "zero")
-  expect_equal(m$rels[[1]]$child_max, "many")
+})
+
+test_that("child_max judges uniqueness on present values, not on blanks", {
+  # Regression: one blank or NA FK value made a 1:1 link one-to-many
+  tables <- list(
+    customer = data.frame(id = c("a", "b", "c"), stringsAsFactors = FALSE),
+    orders = data.frame(
+      order_id = 1:5,
+      gappy = c("a", "", "b", NA, "c"),
+      repeats = c("a", "", "a", NA, "b"),
+      stringsAsFactors = FALSE
+    )
+  )
+  rels <- lapply(c("gappy", "repeats"), function(cn) {
+    list(
+      from_table = "orders",
+      from_col = cn,
+      to_table = "customer",
+      to_col = "id"
+    )
+  })
+  m <- erd_model(tables, rels, list(customer = "id", orders = "order_id"))
+  by_col <- stats::setNames(m$rels, vapply(m$rels, `[[`, "", "from_col"))
+  expect_equal(by_col$gappy$child_max, "one")
+  expect_equal(by_col$gappy$parent_min, "zero")
+  # A repeat among the present values still makes it many
+  expect_equal(by_col$repeats$child_max, "many")
 })
 
 test_that("a declared key holding '' is still the key", {

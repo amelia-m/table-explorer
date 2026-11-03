@@ -307,7 +307,8 @@ test_that("session round-trips review decisions", {
 erd_export_fixture <- function() {
   tables <- list(
     customers = data.frame(customer_id = 1:3, email = c("a", "b", "c")),
-    orders = data.frame(order_id = 1:4, customer_id = c(1L, NA, 2L, 3L)),
+    # A repeat, so the link is one-to-many; the NA makes the parent optional
+    orders = data.frame(order_id = 1:4, customer_id = c(1L, NA, 2L, 1L)),
     customer_profile = data.frame(customer_id = 1:3, bio = c("x", "y", "z")),
     order_items = data.frame(
       order_id = c(1L, 1L, 2L),

@@ -487,6 +487,14 @@ Found in review, not fixed there. How the pieces work: `docs/internals.md`.
       were unconfirmed (they're under `todo`, not `relationships`), and all
       examples (no rows). Expected, but worth a note if round trips matter.
 
+## Blank values as missing (PR #71, logged 2026-11-03)
+
+- [ ] Re-evaluate the `child_max` rule later (Amelia, 2026-11-03: "yes for now but note todo to evaluate again later"). `erd_model()` now judges the child end's uniqueness on present values only, so a unique FK with blanks or NAs is drawn zero-or-one (o|) and exported as 1:1 in DBML and Mermaid. Before, any missing value made it one-to-many. Worth checking against real schemas: whether gappy 1:1 links are more often true 1:1 or coincidence.
+- [ ] Follow-up PR after #71 (Amelia, 2026-11-03: dialog, "follow up"): when a declared key column holds `''` or space-only values, ask the app user in a dialog whether to treat them as missing. Proposed design, not yet confirmed in detail: one dialog per load (upload, schema import, a restore without a saved choice); declared PK columns and the FK columns of declared links only; one choice per column, "Keep blanks as values (as the database stores them)" or "Treat blanks as missing"; default and dismiss keep them as values; the choice saved in the session; a "change" note in Table Details reopens the dialog.
+- [ ] A detected (not declared) key loses its PK status over a single blank, with nothing on screen saying why: in the made-up `blank-check` sample, `regions.region_code` (one `''`) lost the key to `label`. That is #71's rule working, but should the app say so, or offer the same question as the declared-key dialog? Amelia's call.
+- [ ] Other warnings still disappear on a timer: the blank-value notice now stays until dismissed (`notify_unusual_blanks()`, Amelia 2026-11-03: "easy to miss warning"), but the Access notices (`notify_fn` in `read_access_db()`), the warning at `R/app_server.R` around line 239 (12 s) and the load errors (8 to 12 s) do not. Decide which of them should also stay.
+- [ ] NEL (U+0085) counts as whitespace, so a value made only of it is blank. In a cp1252 file read as Latin-1, byte 0x85 is an ellipsis that arrives as NEL, so a cell holding only "..." in that file would count as blank. Rare; kept as is (recommended 2026-11-03), noted in case it turns up.
+
 ## Repository housekeeping (logged 2026-09-30)
 
 Baseline: on `main` at `6276a1e`, with the real packages (R 4.6.1),
