@@ -190,6 +190,24 @@ unusual_blank_notice <- function(tables, max_cols = 5) {
   )
 }
 
+# Shows unusual_blank_notice() for newly loaded tables. Counting fills the
+# blank-count cache, so detection and the ERD reuse it; on a large table
+# this pass takes seconds, hence the progress bar. The warning stays until
+# dismissed: these values look like text, and nothing else on screen says
+# they were counted as missing.
+#' @noRd
+notify_unusual_blanks <- function(tables) {
+  msg <- shiny::withProgress(
+    message = "Checking for blank values...",
+    value = 0.5,
+    unusual_blank_notice(tables)
+  )
+  if (!is.null(msg)) {
+    shiny::showNotification(msg, type = "warning", duration = NULL)
+  }
+  invisible(msg)
+}
+
 #' @noRd
 blanks_as_na <- function(df) {
   if (!is.data.frame(df)) {

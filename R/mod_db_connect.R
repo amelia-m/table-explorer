@@ -274,10 +274,7 @@ mod_db_connect_server <- function(
         type = "message",
         duration = 5
       )
-      odd_spaces <- unusual_blank_notice(existing[unique(loaded_now)])
-      if (!is.null(odd_spaces)) {
-        showNotification(odd_spaces, type = "warning", duration = 12)
-      }
+      notify_unusual_blanks(existing[unique(loaded_now)])
     })
 
     invisible(NULL)
