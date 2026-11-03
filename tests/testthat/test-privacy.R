@@ -28,6 +28,53 @@ test_that("names and values suggest personal data", {
   expect_null(privacy_guess("code", c("AB", "CD", "EF")))
 })
 
+test_that("spelled-out SSNs, taxpayer ids, birthdays and cell numbers are caught", {
+  # Regression: social_security_number, soc_sec_no, tin and the rest were
+  # not flagged at all (Amelia, 2026-10-16)
+  for (n in c(
+    "social_security_number",
+    "client_social_security",
+    "soc_sec_no",
+    "ss_num",
+    "ss_no",
+    "ss_number",
+    "ssnum",
+    "client_tin",
+    "itin",
+    "taxpayer_id",
+    "bday",
+    "client_bdate",
+    "cell",
+    "cell_number",
+    "cellphone",
+    "taxid",
+    "client_tax_id",
+    "tax_no",
+    "tax_number"
+  )) {
+    expect_false(is.null(privacy_guess(n)), info = n)
+  }
+  # Survival: "soc" alone is not added, because soc_code and soc2018 are
+  # Standard Occupational Classification codes; "tax" alone is not added,
+  # because these hold money and dates; and a qualifier still marks a column
+  # that describes the data rather than holding it
+  for (n in c(
+    "soc_code",
+    "soc2018",
+    "soc_title",
+    "sales_tax",
+    "tax_amount",
+    "tax_rate",
+    "tax_year",
+    "property_tax",
+    "ssn_type",
+    "tin_type",
+    "cell_count"
+  )) {
+    expect_null(privacy_guess(n), info = n)
+  }
+})
+
 test_that("user choices beat patterns, which beat automatic flags", {
   v <- c("a@x.io", "b@x.io")
   expect_equal(dict_privacy(list(), "t", "email", v)$status, "auto_unreviewed")

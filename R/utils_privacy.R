@@ -20,8 +20,15 @@
 # parts (split at "_"), ignoring trailing digits, so zip5 and street1 count.
 privacy_words <- c(
   "ssn",
+  "ssnum",
   "sin",
   "nino",
+  # Taxpayer identification numbers: an ITIN is issued to people who cannot
+  # get an SSN, and "tin" covers SSNs and EINs used as tax ids
+  "tin",
+  "itin",
+  "taxpayer",
+  "taxid",
   "password",
   "passwd",
   "pwd",
@@ -29,9 +36,16 @@ privacy_words <- c(
   "birth",
   "birthdate",
   "birthday",
+  "bday",
+  "bdate",
   "email",
   "phone",
   "mobile",
+  # Nearly always a phone number in records about people. It also names a
+  # biological cell line or a spreadsheet cell; flagging one of those costs a
+  # review, and cell_type and cell_count stay unflagged through the qualifiers
+  "cell",
+  "cellphone",
   "telephone",
   "fax",
   "address",
@@ -63,7 +77,21 @@ privacy_phrases <- c(
   "member_id",
   "ssn_last4",
   "birth_dt",
-  "dob_dt"
+  "dob_dt",
+  # Spelled-out and abbreviated social security numbers. Matched as phrases,
+  # not as the word "soc", which far more often means a Standard Occupational
+  # Classification code (soc_code, soc2018) in workforce data
+  "social_security",
+  "soc_sec",
+  "ss_num",
+  "ss_no",
+  "ss_number",
+  # A tax identifier, as phrases: the word "tax" alone would flag sales_tax,
+  # tax_amount, tax_rate and tax_year, which hold money and dates, not people
+  "tax_id",
+  "tax_no",
+  "tax_num",
+  "tax_number"
 )
 
 # A name word followed by one of these describes the data rather than
