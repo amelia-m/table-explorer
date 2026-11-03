@@ -1,0 +1,117 @@
+name: USPS ZIP reference check
+
+# Weekly: has USPS published a newer ZIP Locale Detail edition than the one
+# the ZIP checks use? USPS replaces it monthly, and a stale reference list
+# reports new ZIPs as "not in the reference list" without saying why.
+#
+#   exit 0   current                   the run passes
+#   exit 10  USPS has a newer edition  one issue is opened, never a second
+#                                      while the bot's own issue is open
+#   exit 20  page unreachable or       the run FAILS, so GitHub emails about
+#            unreadable                it: a warning on a green run is never
+#                                      seen, and a check that cannot run for
+#                                      months must not look like a pass
+#   anything else (30, a crash)        the run FAILS
+#
+# GitHub disables scheduled workflows in public repositories after 60 days
+# with no activity, without a failing run. If the weekly runs stop, re-enable
+# the workflow from the Actions tab.
+
+"on":
+  schedule:
+    # Mondays 14:00 UTC
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# A manual run overlapping the scheduled one could otherwise file two issues
+# before search sees the first
+concurrency:
+  group: usps-zip-locale
+  cancel-in-progress: false
+
+env:
+  RENV_CONFIG_AUTOLOADER_ENABLED: "FALSE"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      # No token left in .git/config while third-party R code runs; gh is
+      # pointed at the repository through GH_REPO instead
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # install.packages only warns when it fails; library() makes the step
+      # fail instead, rather than the check dying later and looking green
+      - name: Install the one package the check needs
+        run: Rscript -e 'install.packages("yaml"); library(yaml)'
+
+      - name: Compare the USPS page with the recorded edition
+        id: check
+        shell: bash
+        run: |
+          set +e
+          out=$(Rscript dev/check_usps_zip_locale.R 2>&1)
+          code=$?
+          set -e
+          # The output carries text scraped from a third-party page: stop the
+          # runner acting on any workflow command inside it, and use a random
+          # delimiter so it cannot end the multi-line output early
+          token=$(openssl rand -hex 16)
+          echo "::stop-commands::$token"
+          echo "$out"
+          echo "::$token::"
+          delim=$(openssl rand -hex 16)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          {
+            echo "message<<$delim"
+            echo "$out"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when USPS has published a newer edition
+        if: steps.check.outputs.code == '10'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MESSAGE: ${{ steps.check.outputs.message }}
+        run: |
+          title="USPS ZIP Locale Detail has a newer edition"
+          # Only the bot's own open issue counts: a title search alone matches
+          # any issue containing the phrase, which anyone can open
+          open=$(gh issue list --state open --author "app/github-actions" \
+            --search "\"$title\" in:title" --json number --jq 'length')
+          case "$open" in
+            ''|*[!0-9]*) echo "Unexpected answer from gh issue list: '$open'"; exit 1 ;;
+          esac
+          if [ "$open" != "0" ]; then
+            echo "The bot's issue is already open; not opening another."
+            exit 0
+          fi
+          gh issue create --title "$title" --body "$(printf '%s\n\n%s\n%s\n%s\n' \
+            "$MESSAGE" \
+            "To update, from the repository root:" \
+            "Rscript dev/check_usps_zip_locale.R --record" \
+            "then commit docs/ref/usps-zip-locale.csv and docs/ref/zip-locale-source.yml.")"
+
+      - name: Fail when the check could not run or failed
+        if: steps.check.outputs.code != '0' && steps.check.outputs.code != '10'
+        shell: bash
+        env:
+          CODE: ${{ steps.check.outputs.code }}
+        run: |
+          echo "USPS ZIP reference check exited $CODE; see the comparison step above."
+          exit 1
