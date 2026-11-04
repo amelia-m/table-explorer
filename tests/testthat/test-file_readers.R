@@ -477,6 +477,25 @@ test_that("relationships are read from a real .mdb with Jackcess", {
   )
 })
 
+test_that("an Access upload opens the file with Jackcess once, not twice", {
+  skip_without_ucanaccess()
+  path <- access_copy("access_fixture.mdb")
+  real <- with_jackcess_db
+  opens <- 0L
+  local_mocked_bindings(with_jackcess_db = function(path, fn) {
+    opens <<- opens + 1L
+    real(path, fn)
+  })
+  notices <- character()
+  res <- read_table_file(path, basename(path), function(m) {
+    notices <<- c(notices, m)
+  })
+  expect_equal(opens, 1L)
+  # The one open still serves both the ~ table check and the declared links
+  expect_true(any(grepl("'~Draft Table'", notices, fixed = TRUE)))
+  expect_length(res$relationships, nrow(access_key("relationship")))
+})
+
 test_that("relationships are read from a real .mdb with mdbtools", {
   skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
   path <- access_copy("access_fixture.mdb")
