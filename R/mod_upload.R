@@ -343,6 +343,7 @@ mod_upload_server <- function(
         type = "message",
         duration = 4
       )
+      notify_unusual_blanks(lapply(file_map, `[[`, "clean"))
     }
 
     # ---- Conflict resolution modal ----
@@ -502,6 +503,7 @@ mod_upload_server <- function(
           type = "message",
           duration = 3
         )
+        notify_unusual_blanks(stats::setNames(list(rc$clean), nm))
       } else if (action == "keep_both") {
         new_nm <- nm
         suffix <- 2
@@ -545,6 +547,7 @@ mod_upload_server <- function(
           type = "message",
           duration = 3
         )
+        notify_unusual_blanks(stats::setNames(list(rc$clean), new_nm))
       } else {
         showNotification(
           paste0("'", nm, "' incoming file discarded."),
@@ -585,6 +588,7 @@ mod_upload_server <- function(
       if (length(result$tables) > 0) {
         existing <- all_tables_rv()
         schema_renames <- list()
+        # No blank-value check: a schema gives tables with no rows
         for (nm in names(result$tables)) {
           clean_nm <- janitor::make_clean_names(nm)
           if (!clean_nm %in% names(existing)) {
@@ -671,6 +675,7 @@ mod_upload_server <- function(
       if (!is.null(dictionary_rv)) {
         dictionary_rv(privacy_reset(dictionary_rv(), nm))
       }
+      forget_unusual_blanks(nm)
       showNotification(paste0("Removed: ", nm), type = "message", duration = 3)
     })
 
@@ -692,6 +697,7 @@ mod_upload_server <- function(
       if (!is.null(dictionary_rv)) {
         dictionary_rv(privacy_reset(dictionary_rv()))
       }
+      forget_unusual_blanks()
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

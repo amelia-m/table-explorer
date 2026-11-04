@@ -318,7 +318,8 @@ is_lookup_table <- function(tname, df) {
           cc <- clean_name(cn)
           (cc %in% generic_key_names || is_key_name(cc)) &&
             !anyNA(df[[cn]]) &&
-            length(unique(df[[cn]])) == nrow(df)
+            length(unique(df[[cn]])) == nrow(df) &&
+            !has_blank(df[[cn]])
         },
         logical(1)
       )))
@@ -364,7 +365,7 @@ jaro_winkler_sim <- function(s1, s2) {
 # ── Format fingerprint ───────────────────────────────────────
 
 format_fingerprint <- function(col, sample_size = 200) {
-  vals <- na.omit(col)
+  vals <- na.omit(blank_as_na(col))
   if (length(vals) == 0) {
     return(NULL)
   }
@@ -386,6 +387,9 @@ format_fingerprint <- function(col, sample_size = 200) {
 # column rather than once per candidate pair.
 
 column_profile <- function(v, sample_cap = 5000) {
+  # detect_fks() and detect_shared_columns() pass columns already normalised;
+  # this repeat is one cheap pass per column and covers direct callers
+  v <- blank_as_na(v)
   vals <- as.character(v[!is.na(v)])
   uniq <- unique(vals)
   uniq_sample <- uniq
@@ -432,7 +436,9 @@ distribution_from_profiles <- function(p1, p2) {
   }
 
   # Use only shared vocabulary for cosine - much cheaper than full union.
-  # match(), not c1[shared]: indexing by the name "" (blank strings) gives NA
+  # match(), not c1[shared]: indexing by the name "" gives NA. Profiles now
+  # drop blank text (blank_as_na), so "" no longer reaches here from
+  # column_profile(), but the guard keeps hand-built counts safe
   shared <- intersect(names(c1), names(c2))
   if (length(shared) == 0) {
     return(0.0)
@@ -462,6 +468,8 @@ null_pattern_correlation <- function(df1, col1, df2, col2) {
   if (nrow(df1) != nrow(df2) || nrow(df1) < 2) {
     return(0.0)
   }
+  # detect_fks() has already turned blank text into NA; this runs per
+  # candidate pair, so it does not normalise again
   mask1 <- as.numeric(is.na(df1[[col1]]))
   mask2 <- as.numeric(is.na(df2[[col2]]))
   if (sd(mask1) == 0 || sd(mask2) == 0) {
@@ -497,7 +505,9 @@ detect_pks <- function(df, table_name, method = "both") {
       cols,
       function(c) {
         v <- df[[c]]
-        !anyNA(v) && length(unique(v)) == n
+        # A blank is a missing value, so a key cannot hold one; checked last,
+        # on the few columns that pass the cheap tests
+        !anyNA(v) && length(unique(v)) == n && !has_blank(v)
       },
       logical(1)
     )]
@@ -871,6 +881,7 @@ detect_composite_pks <- function(
   if (n < 2L) {
     return(list())
   }
+  df <- blanks_as_na(df)
 
   unique_cols <- detect_pks(df, table_name, method = "uniqueness")
 
@@ -976,6 +987,8 @@ detect_fks <- function(
   if (method == "manual" || length(tables) < 2) {
     return(list())
   }
+  # Once per scan, so every signal below sees blank text as missing
+  tables <- lapply(tables, blanks_as_na)
 
   conf_rank <- c(low = 0L, medium = 1L, high = 2L)
   min_rank <- conf_rank[[min_confidence]]
@@ -1541,6 +1554,7 @@ detect_shared_columns <- function(
   if (length(tnames) < 2) {
     return(list())
   }
+  tables <- lapply(tables, blanks_as_na)
   unique_cols <- lapply(tables, function(df) {
     n <- nrow(df)
     if (n == 0) {

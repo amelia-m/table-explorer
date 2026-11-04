@@ -94,6 +94,16 @@
             status.style.display = "block";
           }
         });
+        // Blank-value warning: Shiny does not say when a notification is
+        // closed, so tell the server which version was closed; it then stops
+        // naming the tables that version named. Capture, because Shiny's own
+        // handler removes the element.
+        document.body.addEventListener("click", function(e) {
+          if (!e.target.closest("#shiny-notification-unusual-blanks .shiny-notification-close")) return;
+          var tag = document.querySelector("#shiny-notification-unusual-blanks [data-unusual-blanks]");
+          var version = tag ? Number(tag.getAttribute("data-unusual-blanks")) : 0;
+          Shiny.setInputValue("unusual_blanks_dismissed", version, {priority: "event"});
+        }, true);
         // Sticky node panel close button
         document.body.addEventListener("click", function(e) {
           if (e.target.id === "node-panel-close") {
