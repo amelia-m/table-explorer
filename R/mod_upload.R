@@ -588,12 +588,11 @@ mod_upload_server <- function(
       if (length(result$tables) > 0) {
         existing <- all_tables_rv()
         schema_renames <- list()
-        added <- character(0)
+        # No blank-value check: a schema gives tables with no rows
         for (nm in names(result$tables)) {
           clean_nm <- janitor::make_clean_names(nm)
           if (!clean_nm %in% names(existing)) {
             existing[[clean_nm]] <- janitor::clean_names(result$tables[[nm]])
-            added <- c(added, clean_nm)
             if (nm != clean_nm) {
               schema_renames[[length(schema_renames) + 1]] <- data.frame(
                 object_type = "table",
@@ -606,9 +605,6 @@ mod_upload_server <- function(
           }
         }
         all_tables_rv(existing)
-        if (length(added) > 0) {
-          notify_unusual_blanks(existing[added])
-        }
         if (length(schema_renames) > 0) {
           prev <- rename_log_rv()
           rename_log_rv(rbind(prev, do.call(rbind, schema_renames)))

@@ -343,3 +343,39 @@ test_that("the blank-value warning names tables not yet dismissed (stacked one p
   expect_match(msg, "(d.p)", fixed = TRUE)
   expect_null(shiny::withReactiveDomain(module, forget_unusual_blanks("d")))
 })
+
+test_that("restoring a session shows the blank-value warning for its tables only", {
+  skip_if_not_installed("jsonlite")
+  f <- tempfile(fileext = ".json")
+  writeLines(
+    save_session_json(
+      list(a = data.frame(p = c(" ", "x"), stringsAsFactors = FALSE)),
+      list(),
+      list(),
+      list()
+    ),
+    f,
+    useBytes = TRUE
+  )
+  shiny::testServer(
+    mod_export_server,
+    args = list(
+      all_tables_rv = shiny::reactiveVal(list()),
+      all_rels_rv = shiny::reactive(list()),
+      pk_map_rv = shiny::reactive(list()),
+      composite_pk_map_rv = shiny::reactive(list()),
+      manual_rels_rv = shiny::reactiveVal(list()),
+      schema_rels_rv = shiny::reactiveVal(list()),
+      false_positives_rv = shiny::reactiveVal(character()),
+      confirmed_rels_rv = shiny::reactiveVal(list()),
+      detect_method = shiny::reactive("both"),
+      min_confidence = shiny::reactive("medium")
+    ),
+    {
+      # A table from before the restore, which replaces every table
+      session$userData$unusual_blanks <- list(old = c(q = 1L))
+      session$setInputs(restore_session_file = list(datapath = f))
+      expect_named(session$userData$unusual_blanks, "a")
+    }
+  )
+})
