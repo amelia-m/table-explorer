@@ -10,7 +10,8 @@
 #
 # Cardinality is inferred from a data snapshot:
 #   child_max  "one" when the FK column's present values are unique in the
-#              child (1:1), otherwise "many"; missing values are set aside
+#              child (1:1), otherwise "many"; missing values are set aside,
+#              as for a column's unique flag and its UK badge
 #   parent_min "zero" when the FK column has NULLs (optional parent),
 #              otherwise "one"
 # Blank text ("" or whitespace only) counts as missing throughout, the same
@@ -196,13 +197,11 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     fk <- child[[r$from_col]]
     empty <- is.null(fk) || nrow(child) == 0
     missing_fk <- !empty && (anyNA(fk) || has_blank(fk))
-    # Uniqueness is judged on the values present, like a UNIQUE column that
-    # allows NULLs: rows without a parent say nothing about repeats. Missing
-    # values only make the parent end optional
-    n_fk <- if (empty) 0L else n_present(fk)
+    # Rows without a parent say nothing about repeats, so missing values
+    # only make the parent end optional
     r$child_max <- if (empty) {
       "unknown"
-    } else if (n_fk > 0 && n_distinct_present(fk) == n_fk) {
+    } else if (unique_present(fk)) {
       "one"
     } else {
       "many"
@@ -254,14 +253,9 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     # Blank text values per column: counted as missing, and the exports say
     # so, since a database would store them as empty strings
     blanks <- vapply(cols, function(cn) n_blank(df[[cn]]), integer(1))
-    is_unique <- vapply(
-      cols,
-      function(cn) {
-        v <- df[[cn]]
-        n > 0 && !anyNA(v) && blanks[[cn]] == 0 && length(unique(v)) == n
-      },
-      logical(1)
-    )
+    # The same rule as child_max: unique on the values present, so a UK can
+    # have gaps, as a UNIQUE column can hold NULLs. A PK still has none
+    is_unique <- vapply(cols, function(cn) unique_present(df[[cn]]), logical(1))
     columns <- data.frame(
       name = cols,
       type = vapply(cols, function(cn) erd_col_type(df[[cn]]), character(1)),

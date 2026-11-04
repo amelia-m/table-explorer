@@ -1284,6 +1284,41 @@ test_that("data-dict: one-to-one joins, and aliases that avoid table names", {
   expect_equal(one$cardinality, "one-to-one")
 })
 
+test_that("a unique column with gaps is unique in the model and in data-dict (was many-to-one, not UK)", {
+  skip_if_not_installed("yaml")
+  t <- list(
+    customer = data.frame(
+      id = 1:3,
+      code = c("A", NA, "C"),
+      tag = c("x", "", "x"),
+      stringsAsFactors = FALSE
+    ),
+    orders = data.frame(
+      order_id = 1:4,
+      cust_code = c("A", "", NA, "C"),
+      stringsAsFactors = FALSE
+    )
+  )
+  rels <- list(list(
+    from_table = "orders",
+    from_col = "cust_code",
+    to_table = "customer",
+    to_col = "code",
+    detected_by = "schema"
+  ))
+  pks <- list(customer = "id", orders = "order_id")
+  cols <- erd_model(t, rels, pks)$tables$customer$columns
+  expect_true(cols$uk[cols$name == "code"])
+  # A repeat among the values present is still not unique
+  expect_false(cols$unique[cols$name == "tag"])
+  doc <- dd_doc(t, rels, pks)
+  joins <- vapply(doc$relationships, `[[`, "", "join")
+  one <- doc$relationships[[match("orders.cust_code = customer.code", joins)]]
+  expect_equal(one$cardinality, "one-to-one")
+  code <- dd_cols(doc$tables[[1]])$code
+  expect_true("unique" %in% unlist(code$constraints))
+})
+
 test_that("data-dict import: one-to-many joins with aliases", {
   skip_if_not_installed("yaml")
   f <- tempfile(fileext = ".yaml")

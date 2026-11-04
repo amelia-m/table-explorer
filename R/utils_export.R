@@ -1629,9 +1629,13 @@ generate_data_dict_yaml <- function(
     if (isTRUE(r$self_ref)) {
       out$aliases <- aliases
     }
-    one_to_one <- identical(r$child_max, "one") &&
-      paste(r$from_table, r$from_col, sep = "|") %in% key_cols
-    out$cardinality <- if (one_to_one) "one-to-one" else "many-to-one"
+    # As in the ERD, DBML and Mermaid. The spec's cardinality only
+    # describes the join; it does not need the FK to carry a constraint
+    out$cardinality <- if (identical(r$child_max, "one")) {
+      "one-to-one"
+    } else {
+      "many-to-one"
+    }
     out$description <- switch(
       rel_source(r),
       manual = "Added by hand in Table Relationship Explorer.",

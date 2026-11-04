@@ -209,7 +209,8 @@ test_that("the ERD model counts blank text as missing", {
   cols <- m$tables$orders$columns
   expect_true(cols$nullable[cols$name == "note"])
   expect_equal(cols$n_blank[cols$name == "note"], 1L)
-  expect_false(cols$unique[cols$name == "note"])
+  # Unique on the values present: the blank is missing, not a repeat
+  expect_true(cols$unique[cols$name == "note"])
   # The blank customer_id is a missing parent, so the parent is optional
   expect_equal(m$rels[[1]]$parent_min, "zero")
 })

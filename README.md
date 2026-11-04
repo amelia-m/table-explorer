@@ -282,7 +282,9 @@ use crow's-foot notation:
   ERD tab's SVG/PNG download.
 - **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
   `id`, then the table's own `<entity>_id`, then other key-named columns),
-  composite keys when detected.
+  composite keys when detected. `UK` marks a unique key-named column, or one
+  that a link points at; unique, as for the child end above, means the values
+  present are distinct, so a `UK` column may have blank or NULL values.
 - **Provenance**: inferred links are labelled with their confidence
   (`customer_id → customer_id (inferred 87%)`); declared, manual and
   confirmed ones are not. DBML colours inferred refs grey.

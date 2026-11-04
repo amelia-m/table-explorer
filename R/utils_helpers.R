@@ -148,6 +148,15 @@ n_distinct_present <- function(x) {
   sum(!is.na(u) & !is_blank_text(u))
 }
 
+# TRUE when the values present are all distinct, like a UNIQUE column that
+# allows NULLs (and data-dict's unique): missing values are not repeats.
+# FALSE when no value is present.
+#' @noRd
+unique_present <- function(x) {
+  n <- n_present(x)
+  n > 0 && n_distinct_present(x) == n
+}
+
 # TRUE when a text or factor column holds a blank value. Key tests call it
 # on the few columns that already pass "no NA, all distinct".
 #' @noRd
