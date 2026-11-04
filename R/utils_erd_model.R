@@ -9,8 +9,8 @@
 # view read this model so every output shows the same thing.
 #
 # Cardinality is inferred from a data snapshot:
-#   child_max  "one" when the FK column is unique in the child (1:1),
-#              otherwise "many"
+#   child_max  "one" when the FK column's present values are unique in the
+#              child (1:1), otherwise "many"; missing values are set aside
 #   parent_min "zero" when the FK column has NULLs (optional parent),
 #              otherwise "one"
 # Blank text ("" or whitespace only) counts as missing throughout, the same

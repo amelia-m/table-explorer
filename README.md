@@ -261,7 +261,8 @@ use crow's-foot notation:
 
 - **Parent end**: `||` exactly one (FK never NULL) or `|o` zero-or-one
   (nullable FK). **Child end**: `o{` zero-or-many or `o|` zero-or-one
-  (FK unique in the child, i.e. 1:1). The child minimum is always zero:
+  (FK values unique in the child, i.e. 1:1; blank and NULL values are set
+  aside, as in a UNIQUE column that allows NULLs). The child minimum is always zero:
   a data snapshot can't prove every parent has a child.
 - **Line**: always solid (`--`) in Mermaid. Mermaid draws each crow's-foot
   marker's centre line with the relationship line itself, so dashed (`..`)
