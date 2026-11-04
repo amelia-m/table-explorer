@@ -679,6 +679,7 @@ mod_upload_server <- function(
       if (!is.null(dictionary_rv)) {
         dictionary_rv(privacy_reset(dictionary_rv(), nm))
       }
+      forget_unusual_blanks(nm)
       showNotification(paste0("Removed: ", nm), type = "message", duration = 3)
     })
 
@@ -700,6 +701,7 @@ mod_upload_server <- function(
       if (!is.null(dictionary_rv)) {
         dictionary_rv(privacy_reset(dictionary_rv()))
       }
+      forget_unusual_blanks()
       showNotification("All tables cleared.", type = "message", duration = 3)
     })
 

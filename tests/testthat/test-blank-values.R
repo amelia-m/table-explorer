@@ -315,3 +315,31 @@ test_that("the load notice names columns blank only through non-standard spaces"
   # Ordinary blanks alone give no notice
   expect_null(unusual_blank_notice(list(a = tables$a["q"])))
 })
+
+test_that("the blank-value warning names tables not yet dismissed (stacked one per load)", {
+  odd <- function() data.frame(p = c(" ", "x"), stringsAsFactors = FALSE)
+  clean <- data.frame(p = c("y", "x"), stringsAsFactors = FALSE)
+  session <- shiny::MockShinySession$new()
+  # Module code passes a scoped session; the list must be the app's own
+  module <- session$makeScope("upload")
+  shiny::withReactiveDomain(module, {
+    notify_unusual_blanks(list(a = odd()))
+    msg <- notify_unusual_blanks(list(b = odd()))
+  })
+  expect_match(msg, "(a.p, b.p)", fixed = TRUE)
+  # Closed: the next warning names only what came after
+  shiny::withReactiveDomain(session, forget_unusual_blanks())
+  msg <- shiny::withReactiveDomain(
+    module,
+    notify_unusual_blanks(list(c = odd()))
+  )
+  expect_match(msg, "(c.p)", fixed = TRUE)
+  # A table loaded again without such values, or removed, leaves it
+  shiny::withReactiveDomain(module, {
+    notify_unusual_blanks(list(d = odd()))
+    notify_unusual_blanks(list(c = clean))
+    msg <- forget_unusual_blanks("e")
+  })
+  expect_match(msg, "(d.p)", fixed = TRUE)
+  expect_null(shiny::withReactiveDomain(module, forget_unusual_blanks("d")))
+})

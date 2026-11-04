@@ -162,13 +162,20 @@ unusual_blank_counts <- function(df, store = FALSE) {
   counts[counts > 0]
 }
 
-# The load notice for unusual_blank_counts(): one message for a named list
-# of tables, or NULL when no column has such values. It runs on newly
-# loaded tables, so it is what fills the blank-count cache.
+# unusual_blank_counts() for each table of a named list, kept for every
+# table, so a table loaded again without such values replaces its entry. It
+# runs on newly loaded tables, so it is what fills the blank-count cache.
 #' @noRd
-unusual_blank_notice <- function(tables, max_cols = 5) {
-  found <- unlist(lapply(names(tables), function(t) {
-    cnt <- unusual_blank_counts(tables[[t]], store = TRUE)
+unusual_blank_found <- function(tables) {
+  lapply(tables, unusual_blank_counts, store = TRUE)
+}
+
+# The load notice for unusual_blank_found(): one message, or NULL when no
+# column has such values
+#' @noRd
+unusual_blank_message <- function(found, max_cols = 5) {
+  found <- unlist(lapply(names(found), function(t) {
+    cnt <- found[[t]]
     if (length(cnt)) stats::setNames(cnt, paste0(t, ".", names(cnt)))
   }))
   if (length(found) == 0) {
@@ -190,20 +197,68 @@ unusual_blank_notice <- function(tables, max_cols = 5) {
   )
 }
 
-# Shows unusual_blank_notice() for newly loaded tables. Counting fills the
+#' @noRd
+unusual_blank_notice <- function(tables, max_cols = 5) {
+  unusual_blank_message(unusual_blank_found(tables), max_cols)
+}
+
+# The warning has one id, so a new load replaces it rather than stacking a
+# second one. app.js reports when it is closed, as the input
+# "unusual_blanks_dismissed".
+unusual_blanks_id <- "unusual-blanks"
+
+# Checks newly loaded tables and shows the warning. Counting fills the
 # blank-count cache, so detection and the ERD reuse it; on a large table
 # this pass takes seconds, hence the progress bar. The warning stays until
 # dismissed: these values look like text, and nothing else on screen says
-# they were counted as missing.
+# they were counted as missing. It names every table found since it was
+# last dismissed, kept in session$userData.
 #' @noRd
-notify_unusual_blanks <- function(tables) {
-  msg <- shiny::withProgress(
+notify_unusual_blanks <- function(
+  tables,
+  session = shiny::getDefaultReactiveDomain()
+) {
+  found <- shiny::withProgress(
     message = "Checking for blank values...",
     value = 0.5,
-    unusual_blank_notice(tables)
+    unusual_blank_found(tables),
+    session = session
   )
-  if (!is.null(msg)) {
-    shiny::showNotification(msg, type = "warning", duration = NULL)
+  pending <- session$userData$unusual_blanks
+  if (is.null(pending)) {
+    pending <- list()
+  }
+  pending[names(found)] <- found
+  show_unusual_blanks(pending, session)
+}
+
+# Drops tables from the warning: all of them when it is dismissed or every
+# table is replaced, or the ones removed from the app
+#' @noRd
+forget_unusual_blanks <- function(
+  tables = NULL,
+  session = shiny::getDefaultReactiveDomain()
+) {
+  pending <- session$userData$unusual_blanks
+  keep <- if (is.null(tables)) character() else setdiff(names(pending), tables)
+  show_unusual_blanks(pending[keep], session)
+}
+
+#' @noRd
+show_unusual_blanks <- function(pending, session) {
+  pending <- pending[lengths(pending) > 0]
+  session$userData$unusual_blanks <- pending
+  msg <- unusual_blank_message(pending)
+  if (is.null(msg)) {
+    shiny::removeNotification(unusual_blanks_id, session)
+  } else {
+    shiny::showNotification(
+      msg,
+      type = "warning",
+      duration = NULL,
+      id = unusual_blanks_id,
+      session = session
+    )
   }
   invisible(msg)
 }
