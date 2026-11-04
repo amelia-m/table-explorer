@@ -150,11 +150,19 @@ n_distinct_present <- function(x) {
 
 # TRUE when the values present are all distinct, like a UNIQUE column that
 # allows NULLs (and data-dict's unique): missing values are not repeats.
-# FALSE when no value is present.
+# FALSE when no value is present. Runs on every column of every ERD model,
+# so the blank-aware count, which tests each distinct value, comes last:
+# only blanks can make a repeat among non-NA values not count.
 #' @noRd
 unique_present <- function(x) {
   n <- n_present(x)
-  n > 0 && n_distinct_present(x) == n
+  if (n == 0) {
+    return(FALSE)
+  }
+  if (!anyDuplicated(x, incomparables = NA)) {
+    return(TRUE)
+  }
+  n_blank(x) > 0 && n_distinct_present(x) == n
 }
 
 # TRUE when a text or factor column holds a blank value. Key tests call it
@@ -212,8 +220,9 @@ unusual_blank_notice <- function(tables, max_cols = 5) {
 }
 
 # The warning has one id, so a new load replaces it rather than stacking a
-# second one. app.js reports when it is closed, as the input
-# "unusual_blanks_dismissed".
+# second one. Each one shown carries a version number; app.js reports the
+# version closed, as the input "unusual_blanks_dismissed", so tables found
+# while that message was on its way still get a warning.
 unusual_blanks_id <- "unusual-blanks"
 
 # Checks newly loaded tables and shows the warning. Counting fills the
@@ -221,11 +230,14 @@ unusual_blanks_id <- "unusual-blanks"
 # this pass takes seconds, hence the progress bar. The warning stays until
 # dismissed: these values look like text, and nothing else on screen says
 # they were counted as missing. It names every table found since it was
-# last dismissed, kept in session$userData.
+# last dismissed, kept in session$userData. replace = TRUE when the tables
+# replace every loaded one (a session restore): the old list goes, without
+# a remove message, which would fade out the warning just shown.
 #' @noRd
 notify_unusual_blanks <- function(
   tables,
-  session = shiny::getDefaultReactiveDomain()
+  session = shiny::getDefaultReactiveDomain(),
+  replace = FALSE
 ) {
   found <- shiny::withProgress(
     message = "Checking for blank values...",
@@ -233,7 +245,7 @@ notify_unusual_blanks <- function(
     unusual_blank_found(tables),
     session = session
   )
-  pending <- session$userData$unusual_blanks
+  pending <- if (replace) NULL else session$userData$unusual_blanks
   if (is.null(pending)) {
     pending <- list()
   }
@@ -241,8 +253,8 @@ notify_unusual_blanks <- function(
   show_unusual_blanks(pending, session)
 }
 
-# Drops tables from the warning: all of them when it is dismissed or every
-# table is replaced, or the ones removed from the app
+# Drops tables from the warning: all of them when every table is cleared,
+# or the ones removed from the app
 #' @noRd
 forget_unusual_blanks <- function(
   tables = NULL,
@@ -253,6 +265,25 @@ forget_unusual_blanks <- function(
   show_unusual_blanks(pending[keep], session)
 }
 
+# The warning was closed: drop the tables that the closed version named.
+# An unknown version (the app restarted under the page) drops them all.
+#' @noRd
+dismiss_unusual_blanks <- function(
+  version,
+  session = shiny::getDefaultReactiveDomain()
+) {
+  shown <- session$userData$unusual_blanks_shown
+  key <- as.character(version)
+  tables <- if (length(key) == 1 && key %in% names(shown)) shown[[key]]
+  later <- suppressWarnings(as.integer(names(shown))) > as.integer(version)
+  session$userData$unusual_blanks_shown <- shown[which(later)]
+  if (is.null(tables)) {
+    forget_unusual_blanks(session = session)
+  } else {
+    forget_unusual_blanks(tables, session)
+  }
+}
+
 #' @noRd
 show_unusual_blanks <- function(pending, session) {
   pending <- pending[lengths(pending) > 0]
@@ -261,8 +292,14 @@ show_unusual_blanks <- function(pending, session) {
   if (is.null(msg)) {
     shiny::removeNotification(unusual_blanks_id, session)
   } else {
+    v <- (session$userData$unusual_blanks_version %||% 0L) + 1L
+    session$userData$unusual_blanks_version <- v
+    shown <- session$userData$unusual_blanks_shown %||% list()
+    shown[[as.character(v)]] <- names(pending)
+    # Only a message still in flight matters, so a few versions are enough
+    session$userData$unusual_blanks_shown <- utils::tail(shown, 20)
     shiny::showNotification(
-      msg,
+      shiny::tags$span(`data-unusual-blanks` = v, msg),
       type = "warning",
       duration = NULL,
       id = unusual_blanks_id,

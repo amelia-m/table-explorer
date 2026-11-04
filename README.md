@@ -259,11 +259,7 @@ vendored in `inst/app/www/vendor/`.
 Mermaid, DBML and ELK exports share one model (`R/utils_erd_model.R`) and
 use crow's-foot notation:
 
-- **Parent end**: `||` exactly one (FK never NULL) or `|o` zero-or-one
-  (nullable FK). **Child end**: `o{` zero-or-many or `o|` zero-or-one
-  (FK values unique in the child, i.e. 1:1; blank and NULL values are set
-  aside, as in a UNIQUE column that allows NULLs). The child minimum is always zero:
-  a data snapshot can't prove every parent has a child.
+- **Parent end**: `||` exactly one (FK never NULL) or `|o` zero-or-one (nullable FK). **Child end**: `o{` zero-or-many or `o|` zero-or-one (FK values unique in the child, i.e. 1:1; blank and NULL values are set aside, as in a UNIQUE column that allows NULLs). The child minimum is always zero: a data snapshot can't prove every parent has a child.
 - **Line**: always solid (`--`) in Mermaid. Mermaid draws each crow's-foot
   marker's centre line with the relationship line itself, so dashed (`..`)
   lines make the bars and feet look broken and detached from the entity
@@ -280,11 +276,7 @@ use crow's-foot notation:
   sit 60-435 px apart and differ in width, and no spacing setting closes
   the gaps. For row-accurate diagrams use the ELK graph export or the
   ERD tab's SVG/PNG download.
-- **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic
-  `id`, then the table's own `<entity>_id`, then other key-named columns),
-  composite keys when detected. `UK` marks a unique key-named column, or one
-  that a link points at; unique, as for the child end above, means the values
-  present are distinct, so a `UK` column may have blank or NULL values.
+- **Keys**: `PK`, `FK`, `UK` markers; one primary key per table (a generic `id`, then the table's own `<entity>_id`, then other key-named columns), composite keys when detected. `UK` marks a unique key-named column, or one that a link points at; unique, as for the child end above, means the values present are distinct, so a `UK` column may have blank or NULL values. In data-dict exports, the FK of a one-to-one join is also marked `unique`.
 - **Provenance**: inferred links are labelled with their confidence
   (`customer_id → customer_id (inferred 87%)`); declared, manual and
   confirmed ones are not. DBML colours inferred refs grey.

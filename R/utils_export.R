@@ -1419,6 +1419,13 @@ generate_data_dict_yaml <- function(
       paste(r$from_table, r$from_col, sep = "|")
     }
   })))
+  # The FK of a one-to-one join is the join's other "one" side, so it
+  # carries unique too (spec S06), even when the model gives it no UK badge
+  one_cols <- unique(unlist(lapply(reviewed, function(r) {
+    if (identical(r$child_max, "one")) {
+      paste(r$from_table, r$from_col, sep = "|")
+    }
+  })))
 
   settings <- dict_settings(dictionary)
   examples_on <- !identical(settings$examples, "off")
@@ -1504,7 +1511,13 @@ generate_data_dict_yaml <- function(
       if (paste(t$name, cn, sep = "|") %in% fk_cols) "foreign_key",
       # nullable is NA for a table without rows: nothing is known
       if (!t$columns$pk[i] && isFALSE(t$columns$nullable[i])) "required",
-      if (!t$columns$pk[i] && isTRUE(t$columns$uk[i])) "unique"
+      if (
+        !t$columns$pk[i] &&
+          (isTRUE(t$columns$uk[i]) ||
+            paste(t$name, cn, sep = "|") %in% one_cols)
+      ) {
+        "unique"
+      }
     )
 
     needs_range <- type %in%
@@ -1629,8 +1642,8 @@ generate_data_dict_yaml <- function(
     if (isTRUE(r$self_ref)) {
       out$aliases <- aliases
     }
-    # As in the ERD, DBML and Mermaid. The spec's cardinality only
-    # describes the join; it does not need the FK to carry a constraint
+    # As in the ERD, DBML and Mermaid. The FK of a one-to-one join gets
+    # unique above, so both "one" sides carry a constraint (spec S06)
     out$cardinality <- if (identical(r$child_max, "one")) {
       "one-to-one"
     } else {

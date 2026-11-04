@@ -288,8 +288,7 @@ mod_export_server <- function(
         # As on upload: the notice's pass fills the blank-count cache, so
         # ERD redraws of restored large tables stay fast. The restore
         # replaces every table, so the warning starts over
-        forget_unusual_blanks()
-        notify_unusual_blanks(result$tables)
+        notify_unusual_blanks(result$tables, replace = TRUE)
       }
       if (length(result$manual_relationships) > 0) {
         manual_rels_rv(result$manual_relationships)

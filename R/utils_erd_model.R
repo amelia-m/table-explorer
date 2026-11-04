@@ -254,7 +254,8 @@ erd_model <- function(tables, rels, pk_map, composite_pk_map = NULL) {
     # so, since a database would store them as empty strings
     blanks <- vapply(cols, function(cn) n_blank(df[[cn]]), integer(1))
     # The same rule as child_max: unique on the values present, so a UK can
-    # have gaps, as a UNIQUE column can hold NULLs. A PK still has none
+    # have gaps, as a UNIQUE column can hold NULLs. A detected PK has none;
+    # a declared one may hold a blank (see above)
     is_unique <- vapply(cols, function(cn) unique_present(df[[cn]]), logical(1))
     columns <- data.frame(
       name = cols,

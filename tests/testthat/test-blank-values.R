@@ -329,7 +329,16 @@ test_that("the blank-value warning names tables not yet dismissed (stacked one p
   })
   expect_match(msg, "(a.p, b.p)", fixed = TRUE)
   # Closed: the next warning names only what came after
-  shiny::withReactiveDomain(session, forget_unusual_blanks())
+  v <- session$userData$unusual_blanks_version
+  shiny::withReactiveDomain(session, dismiss_unusual_blanks(v))
+  shiny::withReactiveDomain(module, notify_unusual_blanks(list(c = odd())))
+  # A load lands while the close of the warning naming c is on its way:
+  # the close drops c only, so the new table still gets its warning
+  v <- session$userData$unusual_blanks_version
+  shiny::withReactiveDomain(module, notify_unusual_blanks(list(x = odd())))
+  msg <- shiny::withReactiveDomain(session, dismiss_unusual_blanks(v))
+  expect_match(msg, "(x.p)", fixed = TRUE)
+  shiny::withReactiveDomain(session, forget_unusual_blanks("x"))
   msg <- shiny::withReactiveDomain(
     module,
     notify_unusual_blanks(list(c = odd()))
@@ -375,8 +384,15 @@ test_that("restoring a session shows the blank-value warning for its tables only
     {
       # A table from before the restore, which replaces every table
       session$userData$unusual_blanks <- list(old = c(q = 1L))
+      # A remove before the new warning fades the new one out with it
+      removed <- 0L
+      local_mocked_bindings(
+        removeNotification = function(...) removed <<- removed + 1L,
+        .package = "shiny"
+      )
       session$setInputs(restore_session_file = list(datapath = f))
       expect_named(session$userData$unusual_blanks, "a")
+      expect_equal(removed, 0L)
     }
   )
 })

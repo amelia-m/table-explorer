@@ -1317,6 +1317,10 @@ test_that("a unique column with gaps is unique in the model and in data-dict (wa
   expect_equal(one$cardinality, "one-to-one")
   code <- dd_cols(doc$tables[[1]])$code
   expect_true("unique" %in% unlist(code$constraints))
+  # Both "one" sides carry a constraint (spec S06), though cust_code has no
+  # key name and so no UK badge
+  fk <- dd_cols(doc$tables[[2]])$cust_code
+  expect_true("unique" %in% unlist(fk$constraints))
 })
 
 test_that("data-dict import: one-to-many joins with aliases", {

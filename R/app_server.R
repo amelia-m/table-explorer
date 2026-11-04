@@ -40,7 +40,10 @@ app_server <- function(input, output, session) {
   shared_cache$handled_id <- NULL
 
   # The blank-value warning, once closed, names only tables found after
-  observeEvent(input$unusual_blanks_dismissed, forget_unusual_blanks())
+  observeEvent(
+    input$unusual_blanks_dismissed,
+    dismiss_unusual_blanks(input$unusual_blanks_dismissed)
+  )
 
   # ── Upload module (includes manual override section) ─────────
   upload_out <- mod_upload_server(
