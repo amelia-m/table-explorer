@@ -1017,9 +1017,11 @@ access_lookalike_notice <- function(tnames, path, notify_fn) {
       " named like Access system tables (MSys or USys): ",
       paste0("'", odd, "'", collapse = ", "),
       ". Access does not mark ",
-      if (length(odd) == 1L) "it" else "them",
-      " as system tables, so ",
-      if (length(odd) == 1L) "it is" else "they are",
+      if (length(odd) == 1L) {
+        "it as a system table, so it is"
+      } else {
+        "them as system tables, so they are"
+      },
       " kept as data."
     ))
   }

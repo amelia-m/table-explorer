@@ -396,6 +396,20 @@ test_that("relationships are read from a real .accdb with mdbtools", {
   )
 })
 
+test_that("the look-alike notice agrees in number for one table (was 'it as system tables')", {
+  msg <- NULL
+  access_lookalike_notice(
+    c("USysRibbons", "Orders"),
+    "f.mdb",
+    function(m) msg <<- m
+  )
+  expect_match(
+    msg,
+    "'USysRibbons'. Access does not mark it as a system table, so it is kept",
+    fixed = TRUE
+  )
+})
+
 skip_without_ucanaccess <- function() {
   skip_if_not_installed("RJDBC")
   skip_if_not_installed("rJava")
