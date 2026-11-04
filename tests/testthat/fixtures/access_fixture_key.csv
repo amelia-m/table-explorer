@@ -166,15 +166,15 @@
 "column","USystem Notes","u_system_notes","Body","body",,,,,,,,,,,,
 "table","~Draft Table","draft_table",,,1,"","yes",,,,,,,,,"negative case: a user table, name begins with a tilde"
 "column","~Draft Table","draft_table","DraftNo","draft_no",,,,,,,,,,,,
-"table","msys_lower","msys_lower",,,1,"","yes",,,,,,,,,"negative case: lower case, the filter is case sensitive"
+"table","msys_lower","msys_lower",,,1,"","yes",,,,,,,,,"negative case: lower case"
 "column","msys_lower","msys_lower","LowerNo","lower_no",,,,,,,,,,,,
 "table","Hidden Table","hidden_table",,,2,"","yes",,,,,,,,,"hidden, still the user's data"
 "column","Hidden Table","hidden_table","HiddenNo","hidden_no",,,,,,,,,,,,
 "column","Hidden Table","hidden_table","StatusID","status_id",,,,,,,,,,,,
-"table","USysRibbons","u_sys_ribbons",,,1,"","no",,,,,,,,,"USys prefix is Access's own convention for app tables"
+"table","USysRibbons","u_sys_ribbons",,,1,"","yes",,,,,,,,,"USys prefix is Access's own convention for app tables; kept, with a notice"
 "column","USysRibbons","u_sys_ribbons","RibbonName","ribbon_name",,,,,,,,,,,,
 "column","USysRibbons","u_sys_ribbons","RibbonXML","ribbon_xml",,,,,,,,,,,,
-"table","MSysUserMade","m_sys_user_made",,,1,"","no",,,,,,,,,"true MSys prefix, made through DAO"
+"table","MSysUserMade","m_sys_user_made",,,1,"","yes",,,,,,,,,"true MSys prefix, made through DAO, no system flag; kept, with a notice"
 "column","MSysUserMade","m_sys_user_made","MadeNo","made_no",,,,,,,,,,,,
 "table","Flagged System","flagged_system",,,1,"","no",,,,,,,,,"carries the system object flag"
 "column","Flagged System","flagged_system","FlagNo","flag_no",,,,,,,,,,,,

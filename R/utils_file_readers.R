@@ -88,11 +88,15 @@ read_table_file <- function(
 
       ".mdb" = ,
       ".accdb" = {
-        tbls <- read_access_db(path, notify_fn)
+        # One Jackcess open for the table list and the declared links. A
+        # promise, so it opens on first use: read_access_db() fetches the
+        # jars on a first upload
+        delayedAssign("catalog", access_catalog_jackcess(path))
+        tbls <- read_access_db(path, notify_fn, catalog$tables)
         list(
           tables = tbls,
           relationships = if (length(tbls) > 0) {
-            access_relationships(path, notify_fn)
+            access_relationships(path, notify_fn, catalog$relationships)
           } else {
             list()
           }
@@ -822,8 +826,13 @@ ensure_ucanaccess_jars <- function(jar_dir, notify_fn) {
 # with mdbtools' mdb-export; either way the rows go through
 # access_relationship_rels().
 
-access_relationships <- function(path, notify_fn = message) {
-  rows <- access_relationship_rows_jackcess(path)
+# rows: from access_relationship_rows_jackcess(), unless the caller has read
+# them already
+access_relationships <- function(
+  path,
+  notify_fn = message,
+  rows = access_relationship_rows_jackcess(path)
+) {
   if (is.null(rows)) {
     rows <- access_relationship_rows_mdbtools(path)
   }
@@ -845,11 +854,9 @@ access_relationship_rels <- function(rows) {
   if (is.null(rows) || nrow(rows) == 0) {
     return(list())
   }
-  rows <- rows[
-    !grepl("^MSys", rows$szObject) & !grepl("^MSys", rows$szReferencedObject),
-    ,
-    drop = FALSE
-  ]
+  # No name filter: a "^MSys" one dropped links to user tables such as
+  # "MSystem Parts", and no row joining two system tables was found in the
+  # fixtures or in a file made in Access itself
   lapply(seq_len(nrow(rows)), function(i) {
     grbit <- suppressWarnings(as.integer(rows$grbit[i]))
     if (is.na(grbit)) {
@@ -897,13 +904,15 @@ access_relationship_rows_mdbtools <- function(path) {
   )
 }
 
-access_relationship_rows_jackcess <- function(path) {
+# Opens the file read-only with Jackcess (in the UCanAccess jar set, via
+# rJava) and returns fn(db). NULL when Jackcess cannot be reached or the
+# file cannot be opened.
+with_jackcess_db <- function(path, fn) {
   if (!requireNamespace("rJava", quietly = TRUE)) {
     return(NULL)
   }
-  jar_dir <- access_jar_dir()
   jar_paths <- file.path(
-    jar_dir,
+    access_jar_dir(),
     vapply(ucanaccess_jars, `[[`, character(1), "file")
   )
   jar_paths <- jar_paths[file.exists(jar_paths)]
@@ -914,50 +923,118 @@ access_relationship_rows_jackcess <- function(path) {
     {
       rJava::.jinit()
       rJava::.jaddClassPath(jar_paths)
-      builder <- rJava::J("com.healthmarketscience.jackcess.DatabaseBuilder")
-      db <- builder$open(rJava::.jnew("java/io/File", normalizePath(path)))
+      builder <- rJava::.jnew(
+        "com/healthmarketscience/jackcess/DatabaseBuilder",
+        rJava::.jnew("java/io/File", normalizePath(path))
+      )
+      db <- builder$setReadOnly(TRUE)$open()
       on.exit(try(db$close(), silent = TRUE), add = TRUE)
-      rels <- db$getRelationships()
-      out <- list()
-      for (i in seq_len(rels$size()) - 1L) {
-        r <- rels$get(i)
-        # Jackcess names the parent ("one") side "from"
-        parent_cols <- r$getFromColumns()
-        child_cols <- r$getToColumns()
-        # Same bits as MSysRelationships.grbit: 1 = one-to-one, 2 = not enforced
-        flags <- as.integer(r$isOneToOne()) +
-          2L * as.integer(!r$hasReferentialIntegrity())
-        for (j in seq_len(child_cols$size()) - 1L) {
-          out[[length(out) + 1]] <- data.frame(
-            szRelationship = r$getName(),
-            grbit = flags,
-            icolumn = j,
-            szObject = r$getToTable()$getName(),
-            szColumn = child_cols$get(j)$getName(),
-            szReferencedObject = r$getFromTable()$getName(),
-            szReferencedColumn = parent_cols$get(j)$getName(),
-            stringsAsFactors = FALSE
-          )
-        }
-      }
-      if (length(out) == 0) {
-        out <- list(data.frame(
-          szRelationship = character(0),
-          grbit = integer(0),
-          icolumn = integer(0),
-          szObject = character(0),
-          szColumn = character(0),
-          szReferencedObject = character(0),
-          szReferencedColumn = character(0)
-        ))
-      }
-      do.call(rbind, out)
+      fn(db)
     },
     error = function(e) NULL
   )
 }
 
-read_access_db <- function(path, notify_fn = message) {
+jackcess_relationship_rows <- function(db) {
+  rels <- db$getRelationships()
+  out <- list()
+  for (i in seq_len(rels$size()) - 1L) {
+    r <- rels$get(i)
+    # Jackcess names the parent ("one") side "from"
+    parent_cols <- r$getFromColumns()
+    child_cols <- r$getToColumns()
+    # Same bits as MSysRelationships.grbit: 1 = one-to-one, 2 = not enforced
+    flags <- as.integer(r$isOneToOne()) +
+      2L * as.integer(!r$hasReferentialIntegrity())
+    for (j in seq_len(child_cols$size()) - 1L) {
+      out[[length(out) + 1]] <- data.frame(
+        szRelationship = r$getName(),
+        grbit = flags,
+        icolumn = j,
+        szObject = r$getToTable()$getName(),
+        szColumn = child_cols$get(j)$getName(),
+        szReferencedObject = r$getFromTable()$getName(),
+        szReferencedColumn = parent_cols$get(j)$getName(),
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  if (length(out) == 0) {
+    out <- list(data.frame(
+      szRelationship = character(0),
+      grbit = integer(0),
+      icolumn = integer(0),
+      szObject = character(0),
+      szColumn = character(0),
+      szReferencedObject = character(0),
+      szReferencedColumn = character(0)
+    ))
+  }
+  do.call(rbind, out)
+}
+
+# User tables as Jackcess sees them: Access's system flag decides, not the
+# name
+jackcess_table_names <- function(db) {
+  # Not $iterator(): rJava's reflection may not touch TreeMap's iterator
+  arr <- rJava::.jcall(db$getTableNames(), "[Ljava/lang/Object;", "toArray")
+  vapply(arr, function(o) rJava::.jcall(o, "S", "toString"), character(1))
+}
+
+access_relationship_rows_jackcess <- function(path) {
+  with_jackcess_db(path, jackcess_relationship_rows)
+}
+
+access_user_tables_jackcess <- function(path) {
+  with_jackcess_db(path, jackcess_table_names)
+}
+
+# Both in one open of the file. Either part is NULL when it cannot be read.
+access_catalog_jackcess <- function(path) {
+  with_jackcess_db(path, function(db) {
+    list(
+      tables = tryCatch(jackcess_table_names(db), error = function(e) NULL),
+      relationships = tryCatch(
+        jackcess_relationship_rows(db),
+        error = function(e) NULL
+      )
+    )
+  })
+}
+
+# Tables that load but whose names Access treats as its own (USys) or that
+# look like its system tables (MSys). They are user tables, so they stay;
+# the notice says why they are there.
+access_lookalike_notice <- function(tnames, path, notify_fn) {
+  odd <- tnames[grepl("^(MSys|USys)", tnames, ignore.case = TRUE)]
+  if (length(odd) > 0) {
+    notify_fn(paste0(
+      basename(path),
+      ": loaded ",
+      length(odd),
+      " table",
+      if (length(odd) == 1L) "" else "s",
+      " named like Access system tables (MSys or USys): ",
+      paste0("'", odd, "'", collapse = ", "),
+      ". Access does not mark ",
+      if (length(odd) == 1L) {
+        "it as a system table, so it is"
+      } else {
+        "them as system tables, so they are"
+      },
+      " kept as data."
+    ))
+  }
+}
+
+# jackcess_tables: from access_user_tables_jackcess(), unless the caller has
+# read them already. Only the UCanAccess route uses them, after it has
+# fetched the jars.
+read_access_db <- function(
+  path,
+  notify_fn = message,
+  jackcess_tables = access_user_tables_jackcess(path)
+) {
   # Strategy 1: RJDBC + UCanAccess (all platforms, needs Java)
   if (requireNamespace("RJDBC", quietly = TRUE)) {
     jar_dir <- access_jar_dir()
@@ -1003,8 +1080,31 @@ read_access_db <- function(path, notify_fn = message) {
             add = TRUE
           )
 
-          all_tables <- DBI::dbListTables(con)
-          user_tables <- all_tables[!grepl("^MSys|^USys|^~", all_tables)]
+          # UCanAccess already leaves out the tables Access flags as
+          # system, so no name filter: "^MSys|^USys|^~" also dropped user
+          # tables, without a word
+          user_tables <- DBI::dbListTables(con)
+          # UCanAccess neither lists nor opens a name starting with ~;
+          # Jackcess shows what it skipped
+          unlisted <- setdiff(jackcess_tables, user_tables)
+          if (length(unlisted) > 0) {
+            notify_fn(paste0(
+              basename(path),
+              ": could not read ",
+              length(unlisted),
+              " table",
+              if (length(unlisted) == 1L) "" else "s",
+              ", which the Access driver does not list: ",
+              paste0("'", unlisted, "'", collapse = ", "),
+              ".",
+              if (any(startsWith(unlisted, "~"))) {
+                paste0(
+                  " It cannot open names starting with ~, the prefix Access ",
+                  "uses for temporary objects."
+                )
+              }
+            ))
+          }
 
           tbls <- setNames(
             lapply(user_tables, function(tname) {
@@ -1025,7 +1125,9 @@ read_access_db <- function(path, notify_fn = message) {
             }),
             user_tables
           )
-          Filter(Negate(is.null), tbls)
+          tbls <- Filter(Negate(is.null), tbls)
+          access_lookalike_notice(names(tbls), path, notify_fn)
+          tbls
         },
         error = function(e) {
           notify_fn(paste0(
@@ -1067,7 +1169,9 @@ read_access_db <- function(path, notify_fn = message) {
             }),
             tnames
           )
-          Filter(Negate(is.null), tbls)
+          tbls <- Filter(Negate(is.null), tbls)
+          access_lookalike_notice(names(tbls), path, notify_fn)
+          tbls
         } else {
           NULL
         }
