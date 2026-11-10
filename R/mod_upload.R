@@ -124,6 +124,12 @@ mod_upload_server <- function(
     # A batch waiting on the hidden-sheet question: the files, the Excel
     # setting in force when they were added, and each workbook's hidden sheets
     pending_upload_rv <- reactiveVal(NULL)
+    # Counts popups, so each one's checkbox ids are new: Shiny keeps an old
+    # input's last value, which a reused id could hand to the next popup
+    hidden_round <- 0L
+    hidden_pick_id <- function(round, i) {
+      paste0("hidden_pick_", round, "_", i)
+    }
     ns <- session$ns
 
     # ---- Add files when fileInput fires ----
@@ -141,50 +147,59 @@ mod_upload_server <- function(
         .load_files(files, excel_types, list())
         return()
       }
+      hidden_round <<- hidden_round + 1L
       pending_upload_rv(list(
         files = files,
         excel_types = excel_types,
-        hidden = hidden
+        hidden = hidden,
+        round = hidden_round
       ))
-      .show_hidden_modal(files, hidden)
+      .show_hidden_modal(files, hidden, hidden_round)
     })
 
     # Hidden sheets per workbook in a batch, keyed by the file's row number
-    # (names can repeat); only workbooks that have any.
+    # (names can repeat); only workbooks that have any. A workbook whose
+    # hidden sheets cannot be told apart loads every sheet, and the upload
+    # says so, so nobody takes the absence of a popup as "none hidden":
+    # .xls is a binary format and .ods keeps visibility in its styles, so
+    # neither is inspected, and an .xlsx whose sheet list cannot be read
+    # (or whose check fails) is treated the same way.
     .find_hidden_sheets <- function(files) {
       out <- list()
-      if (!requireNamespace("readxl", quietly = TRUE)) {
-        return(out)
-      }
+      unknown <- character(0)
       for (i in seq_len(nrow(files))) {
         ext <- tolower(tools::file_ext(files$name[i]))
-        if (!ext %in% c("xlsx", "xlsm")) {
+        if (!ext %in% c("xlsx", "xlsm", "xls", "ods")) {
           next
         }
-        h <- tryCatch(
-          excel_hidden_sheets(files$datapath[i]),
-          error = function(e) character(0)
-        )
-        if (is.null(h)) {
-          # Loading goes ahead with every sheet; say the check did not run,
-          # so nobody takes the absence of a popup as "none hidden"
-          showNotification(
-            paste0(
-              "Could not tell whether '",
-              files$name[i],
-              "' has hidden sheets, so every sheet will load."
-            ),
-            type = "warning",
-            duration = 8
+        h <- if (ext %in% c("xlsx", "xlsm")) {
+          tryCatch(
+            excel_hidden_sheets(files$datapath[i]),
+            error = function(e) NULL
           )
+        }
+        if (is.null(h)) {
+          unknown <- c(unknown, files$name[i])
         } else if (length(h) > 0) {
           out[[as.character(i)]] <- h
         }
       }
+      if (length(unknown) > 0) {
+        showNotification(
+          paste0(
+            "Could not tell whether ",
+            paste0("'", unknown, "'", collapse = ", "),
+            if (length(unknown) == 1) " has" else " have",
+            " hidden sheets, so every sheet will load."
+          ),
+          type = "warning",
+          duration = 8
+        )
+      }
       out
     }
 
-    .show_hidden_modal <- function(files, hidden) {
+    .show_hidden_modal <- function(files, hidden, round) {
       pickers <- lapply(names(hidden), function(i) {
         h <- hidden[[i]]
         labels <- paste0(
@@ -198,7 +213,7 @@ mod_upload_server <- function(
         tagList(
           tags$strong(files$name[as.integer(i)]),
           checkboxGroupInput(
-            ns(paste0("hidden_pick_", i)),
+            ns(hidden_pick_id(round, i)),
             NULL,
             choices = stats::setNames(names(h), labels),
             selected = names(h)
@@ -215,6 +230,7 @@ mod_upload_server <- function(
         ),
         pickers,
         footer = tagList(
+          actionButton(ns("hidden_cancel"), "Cancel"),
           actionButton(ns("hidden_visible_only"), "Load visible sheets only"),
           actionButton(
             ns("hidden_confirm"),
@@ -226,30 +242,45 @@ mod_upload_server <- function(
       ))
     }
 
+    # pick(i, id): the hidden sheets to load from workbook row i, whose
+    # checkboxes have input id `id`. The sheets left out are passed to the
+    # reader by name, so it does not check visibility a second time.
     .resolve_hidden <- function(pick) {
       p <- pending_upload_rv()
       req(p)
       pending_upload_rv(NULL)
       removeModal()
-      choice <- lapply(names(p$hidden), pick)
-      names(choice) <- names(p$hidden)
-      .load_files(p$files, p$excel_types, choice)
+      skip <- lapply(names(p$hidden), function(i) {
+        setdiff(names(p$hidden[[i]]), pick(i, hidden_pick_id(p$round, i)))
+      })
+      names(skip) <- names(p$hidden)
+      .load_files(p$files, p$excel_types, skip)
     }
 
     observeEvent(input$hidden_confirm, {
-      .resolve_hidden(function(i) {
-        input[[paste0("hidden_pick_", i)]] %||% character(0)
-      })
+      .resolve_hidden(function(i, id) input[[id]])
     })
 
     observeEvent(input$hidden_visible_only, {
-      .resolve_hidden(function(i) character(0))
+      .resolve_hidden(function(i, id) character(0))
+    })
+
+    observeEvent(input$hidden_cancel, {
+      p <- pending_upload_rv()
+      req(p)
+      pending_upload_rv(NULL)
+      removeModal()
+      showNotification(
+        "Nothing was loaded from the files just added.",
+        type = "message",
+        duration = 4
+      )
     })
 
     # ---- Read a batch of files into shared state ----
-    # hidden_choice: per file row number, the hidden sheets to load; files
-    # not named in it load every sheet.
-    .load_files <- function(files, excel_types, hidden_choice) {
+    # skip_sheets: per file row number, the sheets not to load; files not
+    # named in it load every sheet.
+    .load_files <- function(files, excel_types, skip_sheets) {
       existing <- all_tables_rv()
       existing_meta <- table_meta_rv()
       n_files <- nrow(files)
@@ -274,15 +305,7 @@ mod_upload_server <- function(
                 fname,
                 notify_fn,
                 excel_types = excel_types,
-                # Not `%||%`: this package's version treats an empty vector
-                # as missing, which would turn "no hidden sheets" into "all"
-                include_hidden = if (
-                  as.character(i) %in% names(hidden_choice)
-                ) {
-                  hidden_choice[[as.character(i)]]
-                } else {
-                  TRUE
-                }
+                skip_sheets = skip_sheets[[as.character(i)]] %||% character(0)
               )
               raw_tbls <- result$tables
               if (length(result$relationships) > 0) {

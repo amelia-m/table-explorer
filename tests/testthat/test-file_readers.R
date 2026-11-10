@@ -693,13 +693,78 @@ test_that("upload waits for the hidden-sheet choice, then loads what was ticked"
       # Nothing is read until the user answers
       expect_length(all_tables(), 0L)
       expect_named(pending_upload_rv()$hidden[["1"]], c("R&D <old>", "Lookup"))
-      session$setInputs(hidden_pick_1 = "Lookup", hidden_confirm = 1)
+      session$setInputs(hidden_pick_1_1 = "Lookup", hidden_confirm = 1)
       expect_null(pending_upload_rv())
       expect_identical(
         unname(vapply(all_tables(), nrow, integer(1))),
         c(3L, 4L)
       )
     }
+  )
+})
+
+test_that("'Cancel' on the hidden-sheet popup loads nothing", {
+  path <- hidden_sheets_xlsx()
+  counts <- upload_hidden_and_answer(
+    path,
+    function(session) session$setInputs(hidden_cancel = 1)
+  )
+  expect_length(counts, 0L)
+})
+
+test_that("upload warns when a workbook's hidden sheets cannot be told, and loads it all", {
+  path <- hidden_sheets_xlsx()
+  msgs <- character(0)
+  local_mocked_bindings(
+    showNotification = function(ui, ...) msgs <<- c(msgs, as.character(ui))
+  )
+  # A failing check is "could not tell", never "none hidden"
+  local_mocked_bindings(
+    excel_hidden_sheets = function(path, ...) stop("unreadable")
+  )
+  counts <- upload_hidden_and_answer(path, function(session) NULL)
+  expect_identical(counts, c(3L, 2L, 4L))
+  expect_match(
+    msgs,
+    "Could not tell whether 'book.xlsx' has hidden sheets",
+    all = FALSE
+  )
+})
+
+test_that("upload warns that .xls hidden sheets cannot be checked", {
+  path <- hidden_sheets_xlsx()
+  msgs <- character(0)
+  local_mocked_bindings(
+    showNotification = function(ui, ...) msgs <<- c(msgs, as.character(ui))
+  )
+  shiny::testServer(
+    mod_upload_server,
+    args = list(
+      all_tables_rv = shiny::reactiveVal(list()),
+      rename_log_rv = shiny::reactiveVal(data.frame()),
+      schema_rels_rv = shiny::reactiveVal(list()),
+      table_meta_rv = shiny::reactiveVal(list()),
+      fk_cache = new.env()
+    ),
+    {
+      # Only the name decides the check; the file is not opened for it
+      session$setInputs(
+        excel_types = "sample",
+        data_files = data.frame(
+          name = "old.xls",
+          size = file.size(path),
+          type = "",
+          datapath = path,
+          stringsAsFactors = FALSE
+        )
+      )
+      expect_null(pending_upload_rv())
+    }
+  )
+  expect_match(
+    msgs,
+    "Could not tell whether 'old.xls' has hidden sheets",
+    all = FALSE
   )
 })
 

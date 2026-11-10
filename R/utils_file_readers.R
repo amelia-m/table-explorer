@@ -36,7 +36,8 @@ read_table_file <- function(
   name,
   notify_fn = message,
   excel_types = excel_type_guess_default,
-  include_hidden = TRUE
+  include_hidden = TRUE,
+  skip_sheets = character(0)
 ) {
   ext <- tolower(tools::file_ext(name))
   if (!startsWith(ext, ".")) {
@@ -72,7 +73,8 @@ read_table_file <- function(
         name,
         notify_fn,
         excel_types,
-        include_hidden = include_hidden
+        include_hidden = include_hidden,
+        skip_sheets = skip_sheets
       ),
 
       ".ods" = read_ods_file(path, name, notify_fn),
@@ -152,7 +154,7 @@ excel_max_rows <- 1048576L
 # "visible", "hidden" or "veryHidden" (hidden so that only VBA can show it
 # again). readxl lists every sheet whatever its state and cannot say which
 # are hidden. NULL when the file is not a zipped workbook (.xls) or the list
-# cannot be read, in which case callers treat every sheet as visible.
+# cannot be read, in which case callers load every sheet and say why.
 excel_sheet_visibility <- function(path) {
   tmp <- tempfile("xlsx_")
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
@@ -256,7 +258,8 @@ read_excel_file <- function(
   name,
   notify_fn,
   excel_types = excel_type_guess_default,
-  include_hidden = TRUE
+  include_hidden = TRUE,
+  skip_sheets = character(0)
 ) {
   excel_types <- match.arg(excel_types, excel_type_guesses)
   if (!requireNamespace("readxl", quietly = TRUE)) {
@@ -265,11 +268,15 @@ read_excel_file <- function(
     )
     return(list(tables = list()))
   }
-  sheets <- readxl::excel_sheets(path)
+  # skip_sheets: sheets not to load, by name, for a caller that has already
+  # read the workbook's visibility (the upload module) and need not read it
+  # again.
+  all_sheets <- readxl::excel_sheets(path)
+  sheets <- setdiff(all_sheets, skip_sheets)
   # include_hidden: TRUE loads every sheet, FALSE only visible ones, or a
   # character vector names the hidden sheets to load alongside the visible.
   if (!isTRUE(include_hidden)) {
-    hidden <- excel_hidden_sheets(path, sheets)
+    hidden <- excel_hidden_sheets(path, all_sheets)
     if (is.null(hidden)) {
       notify_fn(paste0(
         "Could not tell which sheets in '",
