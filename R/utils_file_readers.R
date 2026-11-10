@@ -35,7 +35,9 @@ read_table_file <- function(
   path,
   name,
   notify_fn = message,
-  excel_types = excel_type_guess_default
+  excel_types = excel_type_guess_default,
+  include_hidden = TRUE,
+  skip_sheets = character(0)
 ) {
   ext <- tolower(tools::file_ext(name))
   if (!startsWith(ext, ".")) {
@@ -66,7 +68,14 @@ read_table_file <- function(
 
       ".xlsx" = ,
       ".xls" = ,
-      ".xlsm" = read_excel_file(path, name, notify_fn, excel_types),
+      ".xlsm" = read_excel_file(
+        path,
+        name,
+        notify_fn,
+        excel_types,
+        include_hidden = include_hidden,
+        skip_sheets = skip_sheets
+      ),
 
       ".ods" = read_ods_file(path, name, notify_fn),
 
@@ -140,11 +149,117 @@ excel_guess_rows <- 1000L
 # warning, which this stays well under.
 excel_max_rows <- 1048576L
 
+# Each sheet's visibility, read from the workbook's own sheet list
+# (xl/workbook.xml), in workbook order: a named character vector of
+# "visible", "hidden" or "veryHidden" (hidden so that only VBA can show it
+# again). readxl lists every sheet whatever its state and cannot say which
+# are hidden. NULL when the file is not a zipped workbook (.xls) or the list
+# cannot be read, in which case callers load every sheet and say why.
+excel_sheet_visibility <- function(path) {
+  tmp <- tempfile("xlsx_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  wb_xml <- tryCatch(
+    suppressWarnings(utils::unzip(
+      path,
+      files = "xl/workbook.xml",
+      exdir = tmp
+    )),
+    error = function(e) character(0)
+  )
+  if (length(wb_xml) != 1 || !file.exists(wb_xml)) {
+    return(NULL)
+  }
+  xml <- paste(
+    readLines(wb_xml, warn = FALSE, encoding = "UTF-8"),
+    collapse = ""
+  )
+  parse_workbook_sheets(xml)
+}
+
+# The <sheet> entries of a workbook.xml string, as excel_sheet_visibility()
+# returns them, or NULL when there are none or one has no name. Regex, not an
+# XML parser, to avoid a dependency; so it accepts what writers are known to
+# vary: a namespace prefix on the element (`<x:sheet>`, from some .NET
+# writers), either quote style on attributes, and numeric character
+# references in names as well as the five named ones.
+parse_workbook_sheets <- function(xml) {
+  tags <- regmatches(
+    xml,
+    gregexpr("<(?:[A-Za-z_][\\w.-]*:)?sheet\\s[^>]*>", xml, perl = TRUE)
+  )[[1]]
+  if (length(tags) == 0) {
+    return(NULL)
+  }
+  attr_of <- function(tag, attr) {
+    pat <- paste0("\\s", attr, "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')")
+    m <- regmatches(tag, regexec(pat, tag, perl = TRUE))[[1]]
+    if (length(m) < 3) {
+      return(NA_character_)
+    }
+    if (nzchar(m[2]) || !nzchar(m[3])) m[2] else m[3]
+  }
+  nms <- xml_unescape(vapply(
+    tags,
+    attr_of,
+    character(1),
+    "name",
+    USE.NAMES = FALSE
+  ))
+  state <- vapply(tags, attr_of, character(1), "state", USE.NAMES = FALSE)
+  state[is.na(state)] <- "visible"
+  if (anyNA(nms)) {
+    return(NULL)
+  }
+  stats::setNames(state, nms)
+}
+
+# XML character references back to text: numeric (`&#38;`, `&#x26;`) first,
+# then the five named entities, `&amp;` last so `&amp;lt;` stays `&lt;`.
+xml_unescape <- function(x) {
+  m <- gregexpr("&#(x[0-9A-Fa-f]+|[0-9]+);", x, perl = TRUE)
+  regmatches(x, m) <- lapply(regmatches(x, m), function(ents) {
+    vapply(
+      ents,
+      function(e) {
+        code <- substr(e, 3, nchar(e) - 1)
+        n <- if (startsWith(code, "x")) {
+          strtoi(substring(code, 2), 16L)
+        } else {
+          strtoi(code, 10L)
+        }
+        intToUtf8(n)
+      },
+      character(1),
+      USE.NAMES = FALSE
+    )
+  })
+  x <- gsub("&lt;", "<", x, fixed = TRUE)
+  x <- gsub("&gt;", ">", x, fixed = TRUE)
+  x <- gsub("&quot;", "\"", x, fixed = TRUE)
+  x <- gsub("&apos;", "'", x, fixed = TRUE)
+  gsub("&amp;", "&", x, fixed = TRUE)
+}
+
+# The hidden sheets of a workbook, named by sheet with their state: an empty
+# vector when none are hidden, NULL when that cannot be told (an .xls file, an
+# unreadable sheet list, or names that do not match readxl's list exactly, so
+# a sheet is never mistaken for another). Callers say so on NULL rather than
+# treating it as "none hidden".
+excel_hidden_sheets <- function(path, sheets = readxl::excel_sheets(path)) {
+  vis <- excel_sheet_visibility(path)
+  if (is.null(vis) || !identical(names(vis), sheets)) {
+    return(NULL)
+  }
+  vis[vis != "visible"]
+}
+
 read_excel_file <- function(
   path,
   name,
   notify_fn,
-  excel_types = excel_type_guess_default
+  excel_types = excel_type_guess_default,
+  include_hidden = TRUE,
+  skip_sheets = character(0)
 ) {
   excel_types <- match.arg(excel_types, excel_type_guesses)
   if (!requireNamespace("readxl", quietly = TRUE)) {
@@ -153,7 +268,30 @@ read_excel_file <- function(
     )
     return(list(tables = list()))
   }
-  sheets <- readxl::excel_sheets(path)
+  # skip_sheets: sheets not to load, by name, for a caller that has already
+  # read the workbook's visibility (the upload module) and need not read it
+  # again.
+  all_sheets <- readxl::excel_sheets(path)
+  sheets <- setdiff(all_sheets, skip_sheets)
+  # include_hidden: TRUE loads every sheet, FALSE only visible ones, or a
+  # character vector names the hidden sheets to load alongside the visible.
+  if (!isTRUE(include_hidden)) {
+    hidden <- excel_hidden_sheets(path, all_sheets)
+    if (is.null(hidden)) {
+      notify_fn(paste0(
+        "Could not tell which sheets in '",
+        name,
+        "' are hidden, so every sheet was loaded."
+      ))
+    } else {
+      keep_hidden <- if (is.character(include_hidden)) {
+        include_hidden
+      } else {
+        character(0)
+      }
+      sheets <- setdiff(sheets, setdiff(names(hidden), keep_hidden))
+    }
+  }
   base <- tools::file_path_sans_ext(name)
   tbls <- list()
   for (s in sheets) {
