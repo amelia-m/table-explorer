@@ -394,6 +394,9 @@ mod_dictionary_server <- function(
           tags$td(q$reason[i]),
           tags$td(dict_format(v)),
           tags$td(length(unique(v[!is.na(v)]))),
+          # Filled on the server only once "Show example values" is ticked,
+          # so no value reaches the browser until the reviewer asks for it
+          tags$td(uiOutput(ns(paste0("rv_ex_", i)))),
           tags$td(radioButtons(
             ns(paste0("rv_", i)),
             NULL,
@@ -415,7 +418,14 @@ mod_dictionary_server <- function(
           class = "dict-hint",
           "These columns were flagged by their name or by what their values look like. ",
           "Private columns show no example values or value ranges in the dictionary ",
-          "and its exports. No values are shown here."
+          "and its exports. No values are shown here unless you ask for them below; ",
+          "that choice lasts until this window closes and is never saved or exported."
+        ),
+        # Off every time the window opens: it is created afresh with it
+        checkboxInput(
+          ns("review_show_examples"),
+          "Show example values to help decide",
+          value = FALSE
         ),
         div(
           class = "dict-review-scroll",
@@ -427,6 +437,7 @@ mod_dictionary_server <- function(
               tags$th("Why"),
               tags$th("Format"),
               tags$th("Unique"),
+              tags$th("Examples"),
               tags$th("Decision")
             )),
             tags$tbody(rows)
@@ -442,6 +453,22 @@ mod_dictionary_server <- function(
           )
         )
       ))
+      for (i in seq_len(nrow(q))) {
+        local({
+          k <- i
+          v <- tabs[[q$table[k]]][[q$column[k]]]
+          output[[paste0("rv_ex_", k)]] <- renderUI({
+            if (!isTRUE(input$review_show_examples)) {
+              return(tags$span(class = "dict-muted", "hidden"))
+            }
+            ex <- review_examples(v)
+            if (length(ex) == 0) {
+              return(tags$span(class = "dict-muted", "no values"))
+            }
+            tags$span(lapply(ex, function(x) tags$code(x)))
+          })
+        })
+      }
     })
 
     save_review <- function(states) {

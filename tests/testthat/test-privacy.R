@@ -351,3 +351,50 @@ test_that("choices that let values show follow the data: factors, overwrites", {
     "auto_unreviewed"
   )
 })
+
+test_that("review_examples gives the first few distinct values, trimmed", {
+  v <- c(NA, "a@x.io", "", "b@x.io", "a@x.io", strrep("y", 50), "c@x.io")
+  ex <- review_examples(v, n = 3L, max_chars = 10L)
+  # Row order, distinct, missing and blank values dropped
+  expect_identical(ex[1:2], c("a@x.io", "b@x.io"))
+  # A long value is cut to its first max_chars characters plus an ellipsis
+  expect_identical(ex[3], paste0(strrep("y", 10), "\u2026"))
+  expect_length(ex, 3L)
+  expect_identical(review_examples(c(NA, NA)), character(0))
+})
+
+test_that("the review window shows examples only when asked, and saves nothing", {
+  tabs <- list(
+    t = data.frame(
+      id = 1:3,
+      email = c("a@x.io", "b@x.io", "c@x.io"),
+      stringsAsFactors = FALSE
+    )
+  )
+  dict <- reactiveVal(list())
+  testServer(
+    mod_dictionary_server,
+    args = list(
+      tables_rv = reactive(tabs),
+      rels_rv = reactive(list()),
+      pk_map_rv = reactive(list(t = "id")),
+      composite_pk_map_rv = reactive(list(t = NULL)),
+      dictionary_rv = dict
+    ),
+    {
+      session$setInputs(table = "", show = "all")
+      expect_equal(queue_rv()$column, "email")
+      session$setInputs(review = 1)
+      cell <- function() paste(unlist(output$rv_ex_1), collapse = " ")
+      # Off by default: no value reaches the browser
+      expect_match(cell(), "hidden", fixed = TRUE)
+      expect_false(grepl("a@x.io", cell(), fixed = TRUE))
+      session$setInputs(review_show_examples = TRUE)
+      expect_match(cell(), "a@x.io", fixed = TRUE)
+      # Looking is not deciding: the dictionary is untouched
+      expect_equal(dict(), list())
+      session$setInputs(review_show_examples = FALSE)
+      expect_false(grepl("a@x.io", cell(), fixed = TRUE))
+    }
+  )
+})
