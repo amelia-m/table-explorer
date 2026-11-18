@@ -382,6 +382,52 @@ test_that("MSysRelationships rows become declared links, a table named like MSys
   expect_length(access_relationship_rels(msys_rows()[0, ]), 0)
 })
 
+test_that("mdbtools route drops MSysRelationships rows joining system tables (#75 review)", {
+  # Raw MSysRelationships can hold a link between two system tables, which
+  # the ^MSys name filter used to drop; mdb-tables -1 now decides instead
+  nav <- data.frame(
+    szRelationship = "nav",
+    grbit = 0L,
+    ccolumn = 1L,
+    icolumn = 0L,
+    szObject = "MSysNavPaneGroupToObjects",
+    szColumn = "GroupID",
+    szReferencedObject = "MSysNavPaneGroups",
+    szReferencedColumn = "Id",
+    stringsAsFactors = FALSE
+  )
+  csv <- utils::capture.output(
+    utils::write.csv(rbind(msys_rows(), nav), row.names = FALSE)
+  )
+  user_tables <- c(
+    "tbl Visits",
+    "tlk_services",
+    "tlk_sites",
+    "MSystem Parts",
+    "tlk_Region"
+  )
+  local_mocked_bindings(mdbtools_run = function(cmd, args) {
+    switch(cmd, "mdb-export" = csv, "mdb-tables" = user_tables)
+  })
+  rels <- access_relationship_rels(access_relationship_rows_mdbtools("x.mdb"))
+  expect_equal(
+    vapply(rels, rel_key, ""),
+    c(
+      "tbl_visits|service_id|tlk_services|id",
+      "tbl_visits|site_id|tlk_sites|id",
+      "m_system_parts|region_code|tlk_region|code"
+    )
+  )
+  # When mdb-tables cannot run, the user links are kept rather than lost
+  local_mocked_bindings(mdbtools_run = function(cmd, args) {
+    if (cmd == "mdb-export") csv else NULL
+  })
+  expect_length(
+    access_relationship_rels(access_relationship_rows_mdbtools("x.mdb")),
+    4
+  )
+})
+
 test_that("relationships are read from a real .accdb with mdbtools", {
   skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
   path <- test_path("fixtures", "declared_rels.accdb")

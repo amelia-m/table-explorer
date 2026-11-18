@@ -855,8 +855,9 @@ access_relationship_rels <- function(rows) {
     return(list())
   }
   # No name filter: a "^MSys" one dropped links to user tables such as
-  # "MSystem Parts", and no row joining two system tables was found in the
-  # fixtures or in a file made in Access itself
+  # "MSystem Parts". Rows joining Access's own system tables are left out by
+  # the readers, by Access's system flag: Jackcess's getRelationships() and,
+  # for mdbtools, the user-table list from `mdb-tables -1`
   lapply(seq_len(nrow(rows)), function(i) {
     grbit <- suppressWarnings(as.integer(rows$grbit[i]))
     if (is.na(grbit)) {
@@ -882,26 +883,47 @@ access_relationship_rels <- function(rows) {
   })
 }
 
-access_relationship_rows_mdbtools <- function(path) {
-  if (!nzchar(Sys.which("mdb-export"))) {
+# Standard output of an mdbtools command as lines, character(0) when it
+# printed nothing, NULL when the command is missing or fails
+mdbtools_run <- function(cmd, args) {
+  if (!nzchar(Sys.which(cmd))) {
     return(NULL)
   }
   out <- tryCatch(
-    suppressWarnings(system2(
-      "mdb-export",
-      c(shQuote(path), "MSysRelationships"),
-      stdout = TRUE,
-      stderr = FALSE
-    )),
+    suppressWarnings(system2(cmd, args, stdout = TRUE, stderr = FALSE)),
     error = function(e) NULL
   )
-  if (is.null(out) || length(out) == 0 || !is.null(attr(out, "status"))) {
+  if (is.null(out) || !is.null(attr(out, "status"))) {
     return(NULL)
   }
-  tryCatch(
+  sub("\r$", "", out)
+}
+
+access_relationship_rows_mdbtools <- function(path) {
+  out <- mdbtools_run("mdb-export", c(shQuote(path), "MSysRelationships"))
+  if (length(out) == 0) {
+    return(NULL)
+  }
+  rows <- tryCatch(
     utils::read.csv(text = out, stringsAsFactors = FALSE, check.names = FALSE),
     error = function(e) NULL
   )
+  if (is.null(rows)) {
+    return(NULL)
+  }
+  # mdb-export reads the raw table, which can also hold links between
+  # Access's own system tables (navigation pane groups, for one). Keep rows
+  # whose two tables are user tables: `mdb-tables -1` lists those by Access's
+  # system flag, not by name, as Jackcess's getRelationships() does. If it
+  # cannot run, keep every row rather than lose the user links.
+  user_tables <- mdbtools_run("mdb-tables", c("-1", shQuote(path)))
+  if (!is.null(user_tables)) {
+    keep <- rows$szObject %in%
+      user_tables &
+      rows$szReferencedObject %in% user_tables
+    rows <- rows[keep, , drop = FALSE]
+  }
+  rows
 }
 
 # Opens the file read-only with Jackcess (in the UCanAccess jar set, via
