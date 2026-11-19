@@ -353,36 +353,79 @@ test_that("detect_app_export recognises this app's CSV exports", {
 
 msys_rows <- function() {
   data.frame(
-    szRelationship = c("svc", "site", "sys"),
+    szRelationship = c("svc", "site", "part"),
     grbit = c(0L, 2L, 0L),
     ccolumn = 1L,
     icolumn = 0L,
-    szObject = c("tbl Visits", "tbl Visits", "MSysNavPaneGroups"),
-    szColumn = c("ServiceID", "SiteID", "GroupID"),
-    szReferencedObject = c(
-      "tlk_services",
-      "tlk_sites",
-      "MSysNavPaneGroupCategories"
-    ),
-    szReferencedColumn = c("ID", "ID", "Id"),
+    szObject = c("tbl Visits", "tbl Visits", "MSystem Parts"),
+    szColumn = c("ServiceID", "SiteID", "RegionCode"),
+    szReferencedObject = c("tlk_services", "tlk_sites", "tlk_Region"),
+    szReferencedColumn = c("ID", "ID", "Code"),
     stringsAsFactors = FALSE
   )
 }
 
-test_that("MSysRelationships rows become declared links with cleaned names", {
+test_that("MSysRelationships rows become declared links, a table named like MSys too", {
   rels <- access_relationship_rels(msys_rows())
-  expect_length(rels, 2)
+  # The third was lost to a ^MSys name filter: a user table named like one
   expect_equal(
     vapply(rels, rel_key, ""),
     c(
       "tbl_visits|service_id|tlk_services|id",
-      "tbl_visits|site_id|tlk_sites|id"
+      "tbl_visits|site_id|tlk_sites|id",
+      "m_system_parts|region_code|tlk_region|code"
     )
   )
   expect_true(all(vapply(rels, `[[`, "", "detected_by") == "schema"))
   expect_match(rels[[1]]$reasons, "integrity enforced")
   expect_match(rels[[2]]$reasons, "not enforced")
   expect_length(access_relationship_rels(msys_rows()[0, ]), 0)
+})
+
+test_that("mdbtools route drops MSysRelationships rows joining system tables (#75 review)", {
+  # Raw MSysRelationships can hold a link between two system tables, which
+  # the ^MSys name filter used to drop; mdb-tables -1 now decides instead
+  nav <- data.frame(
+    szRelationship = "nav",
+    grbit = 0L,
+    ccolumn = 1L,
+    icolumn = 0L,
+    szObject = "MSysNavPaneGroupToObjects",
+    szColumn = "GroupID",
+    szReferencedObject = "MSysNavPaneGroups",
+    szReferencedColumn = "Id",
+    stringsAsFactors = FALSE
+  )
+  csv <- utils::capture.output(
+    utils::write.csv(rbind(msys_rows(), nav), row.names = FALSE)
+  )
+  user_tables <- c(
+    "tbl Visits",
+    "tlk_services",
+    "tlk_sites",
+    "MSystem Parts",
+    "tlk_Region"
+  )
+  local_mocked_bindings(mdbtools_run = function(cmd, args) {
+    switch(cmd, "mdb-export" = csv, "mdb-tables" = user_tables)
+  })
+  rels <- access_relationship_rels(access_relationship_rows_mdbtools("x.mdb"))
+  expect_equal(
+    vapply(rels, rel_key, ""),
+    c(
+      "tbl_visits|service_id|tlk_services|id",
+      "tbl_visits|site_id|tlk_sites|id",
+      "m_system_parts|region_code|tlk_region|code"
+    )
+  )
+  # When mdb-tables cannot run, the user links are kept rather than lost
+  local_mocked_bindings(mdbtools_run = function(cmd, args) {
+    if (cmd == "mdb-export") csv else NULL
+  })
+  expect_length(
+    access_relationship_rels(access_relationship_rows_mdbtools("x.mdb")),
+    4
+  )
 })
 
 test_that("relationships are read from a real .accdb with mdbtools", {
@@ -396,6 +439,20 @@ test_that("relationships are read from a real .accdb with mdbtools", {
       "tbl_visits|service_id|tlk_services|id",
       "tbl_visits|site_id|tlk_sites|id"
     )
+  )
+})
+
+test_that("the look-alike notice agrees in number for one table (was 'it as system tables')", {
+  msg <- NULL
+  access_lookalike_notice(
+    c("USysRibbons", "Orders"),
+    "f.mdb",
+    function(m) msg <<- m
+  )
+  expect_match(
+    msg,
+    "'USysRibbons'. Access does not mark it as a system table, so it is kept",
+    fixed = TRUE
   )
 })
 
@@ -480,6 +537,25 @@ test_that("relationships are read from a real .mdb with Jackcess", {
   )
 })
 
+test_that("an Access upload opens the file with Jackcess once, not twice", {
+  skip_without_ucanaccess()
+  path <- access_copy("access_fixture.mdb")
+  real <- with_jackcess_db
+  opens <- 0L
+  local_mocked_bindings(with_jackcess_db = function(path, fn) {
+    opens <<- opens + 1L
+    real(path, fn)
+  })
+  notices <- character()
+  res <- read_table_file(path, basename(path), function(m) {
+    notices <<- c(notices, m)
+  })
+  expect_equal(opens, 1L)
+  # The one open still serves both the ~ table check and the declared links
+  expect_true(any(grepl("'~Draft Table'", notices, fixed = TRUE)))
+  expect_length(res$relationships, nrow(access_key("relationship")))
+})
+
 test_that("relationships are read from a real .mdb with mdbtools", {
   skip_if(!nzchar(Sys.which("mdb-export")), "mdbtools not installed")
   path <- access_copy("access_fixture.mdb")
@@ -494,16 +570,43 @@ test_that("a real .mdb loads its tables with the right row counts", {
   tbls <- read_access_db(access_copy("access_fixture.mdb"), function(...) NULL)
   want <- access_key("table")
   want <- want[want$expect_read == "yes", ]
-  # Known losses, on the open list in TODO.md: a BLOB column, and names that
-  # only look like system tables
-  lost <- c("Customer Photo", "MSystem Parts", "USystem Notes", "~Draft Table")
+  # Known losses, on the open list in TODO.md: a BLOB column, and a name
+  # UCanAccess cannot open. Tables named like MSys or USys used to be lost to
+  # a name filter; the key expects them
+  lost <- c("Customer Photo", "~Draft Table")
   want <- want[!want$table_raw %in% lost, ]
   expect_setequal(setdiff(want$table_raw, names(tbls)), character(0))
+  expect_false("Flagged System" %in% names(tbls))
   found <- intersect(want$table_raw, names(tbls))
   expect_equal(
     vapply(tbls[found], nrow, 1L),
     setNames(as.integer(want$rows), want$table_raw)[found]
   )
+})
+
+test_that("a real .mdb names the look-alike tables it keeps and the ~ table it skips", {
+  skip_without_ucanaccess()
+  # These went without a word under the old ^MSys|^USys|^~ filter
+  notices <- character()
+  read_access_db(access_copy("access_fixture.mdb"), function(m) {
+    notices <<- c(notices, m)
+  })
+  kept <- grep("named like Access system tables", notices, value = TRUE)
+  expect_length(kept, 1)
+  for (t in c(
+    "MSystem Parts",
+    "USystem Notes",
+    "USysRibbons",
+    "MSysUserMade",
+    "msys_lower"
+  )) {
+    expect_match(kept, paste0("'", t, "'"), fixed = TRUE)
+  }
+  skipped <- grep("does not list", notices, value = TRUE)
+  expect_length(skipped, 1)
+  expect_match(skipped, "'~Draft Table'", fixed = TRUE)
+  # A table Access flags as system is neither loaded nor named
+  expect_false(any(grepl("Flagged System", notices, fixed = TRUE)))
 })
 
 test_that("a real Jet 3 .mdb loads its tables", {
@@ -534,10 +637,15 @@ test_that("a real .mdb that cannot be opened gives no tables and a notice", {
   }
 })
 
-test_that("a real .mdb with a broken link keeps its local table", {
+test_that("a real .mdb with a broken link keeps its local table and names the link", {
   skip_without_ucanaccess()
-  tbls <- read_access_db(access_copy("trap_linked.mdb"), function(...) NULL)
+  notices <- character()
+  tbls <- read_access_db(access_copy("trap_linked.mdb"), function(m) {
+    notices <<- c(notices, m)
+  })
   expect_equal(nrow(tbls[["Local Table"]]), 1L)
+  # Used to vanish with only a Java console warning
+  expect_true(any(grepl("does not list: 'Linked Item'", notices, fixed = TRUE)))
 })
 
 test_that("a real .accdb keeps a table with a space in its name", {

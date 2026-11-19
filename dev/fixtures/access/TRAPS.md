@@ -2,7 +2,7 @@
 
 Each row is a trap: what it exercises, where it sits in the fixture, what should happen, and what each reader did.
 
-**These results are from one run, before T1 was fixed.** Rows that say "Lost to T1" or "Child lost to T1" describe that run: those tables load now, and `read_access_db()` returns 33 of 37 expected tables. Open bugs are in `TODO.md`. `run_readers.R` and the run logs named below are not committed, and neither are all the `trap_*` files: `build_all.ps1` builds them, and `tests/testthat/fixtures/README.md` lists the ones kept.
+**These results are from one run, before T1 was fixed.** Rows that say "Lost to T1" or "Child lost to T1" describe that run: those tables load now. Rows O1 to O6 and R17 were updated on 2026-11-03, after the name filters went: `read_access_db()` now returns 37 of 39 expected tables, missing `Customer Photo` (T2) and `~Draft Table` (O3). Open bugs are in `TODO.md`. `run_readers.R` and the run logs named below are not committed, and neither are all the `trap_*` files: `build_all.ps1` builds them, and `tests/testthat/fixtures/README.md` lists the ones kept.
 
 Measured 2026-10-30 and 31 with R 4.6.1, RJDBC 0.2.10, Java 21.0.12, UCanAccess 5.0.1, Jackcess 4.0.1, time zone America/Chicago.
 
@@ -47,7 +47,7 @@ Format column: both = same in `access_fixture.mdb` and `access_fixture.accdb`. A
 | ID | Trap | Exercises | Fixture | Format | Expected | UCanAccess | Jackcess | mdbtools | RODBC | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
 | T1 | Name needing quotes: spaces, `-`, `/`, apostrophe, non-ASCII after a space | `read_access_db`, every later step | 22 tables, e.g. `tlk Status` | both | Every table read | 25 of 37 expected tables missing, 22 of those for this reason: `SELECT * FROM Audit Log` sent unquoted | Unaffected | not run | ODBC reads all 39 | verified, app bug |
-| T2 | OLE Object | table load | Customer Photo.Photo | both | Table read, column skipped or marked | Lost to T1; hrn: `BLOB to String`, whole table lost. In the first build this column was in tblCustomer, and tblCustomer failed through the app itself | Unaffected | not run | ODBC reads | verified, app bug |
+| T2 | OLE Object | table load | Customer Photo.Photo | both | Table read, column skipped or marked | Lost to T1; hrn: `BLOB to String`, whole table lost. Rechecked 2026-11-03 after the T1 fix: still lost to `BLOB to String`, with a "Could not read table" notice. In the first build this column was in tblCustomer, and tblCustomer failed through the app itself | Unaffected | not run | ODBC reads | verified, app bug |
 | T3 | Yes/No, never Null | profile, PK skip of logicals | tblCustomer.Is Member, tlk Status.Is Active? | both | Logical | Character `TRUE`/`FALSE` | n/a | not run | not run | verified, app bug |
 | T4 | Currency | profile, dictionary range | tblCustomer.Balance, Number Traps.CurrV | both | Numeric, or text with no loss | Character, exact to 4 places; dictionary says `string`, `text`, no range | n/a | not run | not run | verified, app bug |
 | T5 | Decimal(28,4) past double precision | as T4 | Number Traps.DecV | both | Digits kept | Character, digits kept | n/a | not run | not run | verified |
@@ -93,12 +93,12 @@ Format column: both = same in `access_fixture.mdb` and `access_fixture.accdb`. A
 
 | ID | Trap | Exercises | Fixture | Format | Expected | UCanAccess | Jackcess | mdbtools | RODBC | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| O1 | Negative case: user table named like MSys | system filter | MSystem Parts, 2 rows | both | Stays | Dropped by `^MSys`, no notice; R17 dropped too | Row present | not run | ODBC offers it | verified, app bug |
-| O2 | Negative case: user table named like USys | system filter | USystem Notes, 1 row | both | Stays | Dropped by `^USys`, no notice | n/a | not run | ODBC offers it | verified, app bug |
-| O3 | Negative case: tilde name | system filter | ~Draft Table, 1 row | both | Stays | Dropped by `^~`, no notice | n/a | not run | ODBC offers it | verified, app bug if Amelia agrees the expectation |
-| O4 | Negative case: lower case | system filter | msys_lower, 1 row | both | Stays | Stays: the filter is case sensitive | n/a | not run | ODBC offers it | verified |
-| O5 | True MSys prefix made by a user | system filter | MSysUserMade | both | Dropped | Dropped | n/a | not run | ODBC offers it as a plain TABLE, so the RODBC path may keep it | verified |
-| O6 | USys convention table | system filter | USysRibbons | both | Dropped | Dropped | n/a | not run | ODBC offers it | verified |
+| O1 | Negative case: user table named like MSys | system filter | MSystem Parts, 2 rows | both | Stays, named in a notice | Stays, named in the look-alike notice (was dropped by `^MSys`, no notice; R17 too) | Row present; a user table | not run | ODBC offers it | verified, fixed 2026-11-03 |
+| O2 | Negative case: user table named like USys | system filter | USystem Notes, 1 row | both | Stays, named in a notice | Stays, named in the look-alike notice (was dropped by `^USys`) | A user table | not run | ODBC offers it | verified, fixed 2026-11-03 |
+| O3 | Negative case: tilde name | system filter | ~Draft Table, 1 row | both | Stays | Not listed by UCanAccess, and `SELECT` by name fails in its SQL converter; named in a "could not read" notice (was dropped by `^~`, no notice) | A user table, 1 row | not run | ODBC offers it | verified; reading it needs Jackcess rows, Amelia's call in `TODO.md` |
+| O4 | Negative case: lower case | system filter | msys_lower, 1 row | both | Stays | Stays, named in the look-alike notice, which ignores case | A user table | not run | ODBC offers it | verified |
+| O5 | True MSys prefix made by a user | system filter | MSysUserMade | both | Stays, named in a notice (Amelia, 2026-11-03) | Stays, named in the look-alike notice (was dropped) | A user table: no system flag | not run | ODBC offers it as a plain TABLE | verified |
+| O6 | USys convention table | system filter | USysRibbons | both | Stays, named in a notice (Amelia, 2026-11-03) | Stays, named in the look-alike notice (was dropped) | A user table | not run | ODBC offers it | verified |
 | O7 | Hidden table | listing | Hidden Table | both | Stays | Listed; lost to T1; hrn reads | R21 present | not run | ODBC reads | verified |
 | O8 | System-flagged table | listing | Flagged System | both | Dropped | Not listed by the driver | n/a | not run | ODBC types it SYSTEM TABLE | verified |
 | O9 | Saved select queries | listing, FK detection | qryActiveCustomers, qryUnion, qryCrosstab, qryWildIIf | both | Not loaded as tables, or marked | Four loaded as tables; 16 of 32 detected links touch one | n/a | not run | ODBC offers tables only | verified, app bug |
@@ -131,7 +131,7 @@ Each relationship is in `access_fixture_key.csv`. `grbit_native` is what `MSysRe
 | R14 | Parent has a unique index, no PK | declared | Legacy Use to Legacy Code | both | Declared | Both lost to T1; hrn keeps | 0 | not run | not run | verified |
 | R15 | Child has no PK, orphan 77777, Nulls | declared | Audit Log.CustomerID | both | grbit 2 | Child lost to T1 | 2 | not run | not run | verified |
 | R16 | GUID key | declared, detection | Device Log.DeviceGuid to Device | both | grbit 0 | Child lost to T1; hrn detects it | 0 | not run | not run | verified |
-| R17 | Child named like MSys | system filter | MSystem Parts.RegionCode | both | Kept | Dropped at `access_relationship_rels` | Row present | not run | not run | verified, app bug |
+| R17 | Child named like MSys | system filter | MSystem Parts.RegionCode | both | Kept | Kept (was dropped by `^MSys` in `access_relationship_rels`) | Row present | not run | not run | verified, fixed 2026-11-03 |
 | R18 | Child column collides | see N3 | Collide Cols.ITEM-CODE | both | `item_code_3` | `item_code` | Raw right | not run | not run | verified, app bug |
 | R19 | Child table collides | see N4 | Order-Detail.OrderNo | both | Own table | Attached to `order_detail` | Raw right | not run | not run | verified, app bug |
 | R20 | Left join flag, high bit | bit handling | Store.HomeWarehouse, orphan 9 | both | native 16777218 | Link right | 2 | not run | not run | verified |
